@@ -3,7 +3,7 @@ import pytest
 pytest.importorskip("spacelang._spacelang_cpp")
 
 from spacelang import Instr, OP, Program
-from spacelang.errors import RuntimeError as SpaceRuntimeError, SpaceError
+from spacelang.errors import JumpOutOfRange, RuntimeError as SpaceRuntimeError, SpaceError
 from spacelang.pyfront import compile_py
 from spacelang.vm_cpp import VM
 from spacelang.vm_py import VM as PythonVM
@@ -58,6 +58,23 @@ def test_native_vm_runs_conditional_jumps():
     )
     for vm_type in (PythonVM, VM):
         assert vm_type(jump_nonzero_program).run() == 1
+
+
+@pytest.mark.parametrize(
+    ("operation", "condition"),
+    [(OP.JZ, 1), (OP.JNZ, 0)],
+)
+def test_conditional_jumps_validate_targets_even_when_not_taken(operation, condition):
+    program = Program(
+        instrs=[
+            Instr(OP.PUSH_INT, [condition]),
+            Instr(operation, [999]),
+            Instr(OP.HALT),
+        ]
+    )
+    for vm_type in (PythonVM, VM):
+        with pytest.raises(JumpOutOfRange):
+            vm_type(program).run()
 
 
 @pytest.mark.parametrize(
