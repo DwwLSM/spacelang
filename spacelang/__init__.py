@@ -1,8 +1,10 @@
 """SpaceLang package."""
 
 from .asm import assemble
+from .compress import pack_bytes, pack_file, unpack_bytes, unpack_file
+from .decoder import decode
 from .disasm import disasm, disassemble
-from .encoder import decode, encode
+from .encoder import encode
 from .errors import (
     EncodingError,
     JumpOutOfRange,
@@ -18,7 +20,11 @@ from .errors import (
 )
 from .ir import Instr, OP, Program
 from .lexer import tokenize
+from .names import NameTable
 from .parser import parse
+from .peephole import optimize
+from .pyfront import compile_py
+from .quine import quine
 
 __all__ = [
     "EncodingError",
@@ -26,6 +32,7 @@ __all__ = [
     "JumpOutOfRange",
     "LexError",
     "OP",
+    "NameTable",
     "ParseError",
     "Program",
     "RuntimeError",
@@ -41,5 +48,12 @@ __all__ = [
     "disassemble",
     "encode",
     "parse",
+    "pack_bytes",
+    "pack_file",
+    "compile_py",
+    "optimize",
+    "quine",
     "tokenize",
+    "unpack_bytes",
+    "unpack_file",
 ]

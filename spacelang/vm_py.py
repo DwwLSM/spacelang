@@ -91,21 +91,24 @@ class VM:
         return None
 
     def _raise(self, exc: BaseException) -> None:
-        if not self.try_stack:
-            raise exc
-        active = self.try_stack[-1]
-        if active.get("finally_ip"):
-            active["exc"] = exc
-            active["stage"] = "finally"
-            self.ip = active["finally_ip"]
-            return
-        if active.get("catch_ip"):
-            active["exc"] = exc
-            active["stage"] = "catch"
-            self.ip = active["catch_ip"]
-            return
-        self.try_stack.pop()
-        self._raise(exc)
+        while self.try_stack:
+            active = self.try_stack[-1]
+            stage = active.get("stage")
+            del self.stack[int(active["stack_depth"]):]
+            while len(self.call_stack) > int(active["call_depth"]):
+                self.call_stack.pop()
+            if stage == "body" and active.get("catch_ip"):
+                active["exc"] = exc
+                active["stage"] = "catch"
+                self.ip = active["catch_ip"]
+                return
+            if stage in {"body", "catch"} and active.get("finally_ip"):
+                active["exc"] = exc
+                active["stage"] = "finally"
+                self.ip = active["finally_ip"]
+                return
+            self.try_stack.pop()
+        raise exc
 
     def _sequential_call(self, func_id: int, nargs: int, kwargs: dict[str, Any] | None = None) -> Any:
         args = []
@@ -124,6 +127,8 @@ class VM:
     def _try_end_handler(self, frame: dict[str, Any]) -> None:
         stage = frame.get("stage")
         if stage in {"body", "catch"}:
+            if stage == "catch":
+                frame["exc"] = None
             if frame.get("finally_ip"):
                 frame["stage"] = "finally"
                 frame["saved_ip"] = frame["end_ip"]
@@ -136,11 +141,32 @@ class VM:
             self.try_stack.pop()
             exc = frame.get("exc")
             if exc is not None:
-                raise exc
+                self._raise(exc)
+                return
             self.ip = frame["saved_ip"]
             return
 
     def run(self) -> Any:
+        while True:
+            try:
+                return self._run()
+            except Exception as exc:
+                runtime_exc = (
+                    exc
+                    if isinstance(exc, SpaceError)
+                    else RuntimeError(
+                        line=self.instrs[self.ip].line if 0 <= self.ip < len(self.instrs) else 0,
+                        ip=self.ip,
+                        msg=str(exc),
+                    )
+                )
+                if not self.try_stack:
+                    if runtime_exc is exc:
+                        raise
+                    raise runtime_exc from exc
+                self._raise(runtime_exc)
+
+    def _run(self) -> Any:
         while self.ip < len(self.instrs):
             instr = self.instrs[self.ip]
             op = OP(instr.op)
@@ -176,7 +202,9 @@ class VM:
 
             if op == OP.LOAD_GLOBAL:
                 name = self._name(int(args[0]))
-                self._push(self.globals_.get(name))
+                if name not in self.globals_:
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg=f"undefined global {name}")
+                self._push(self.globals_[name])
                 self.ip += 1
                 continue
 
@@ -367,8 +395,7 @@ class VM:
                     self._call_user_function(func_id, self._collect_args(nargs))
                     continue
                 result = self._sequential_call(func_id, nargs)
-                if result is not None:
-                    self._push(result)
+                self._push(result)
                 self.ip += 1
                 continue
 
@@ -376,15 +403,15 @@ class VM:
                 func_id = int(args[0])
                 npos = int(args[1])
                 nkw = int(args[2])
+                positional = []
+                for _ in range(npos):
+                    positional.append(self._pop("positional arg"))
+                positional.reverse()
                 kwargs = {}
                 for _ in range(nkw):
                     value = self._pop("keyword value")
                     name = self._pop("keyword name")
                     kwargs[self._name(int(name))] = value
-                positional = []
-                for _ in range(npos):
-                    positional.append(self._pop("positional arg"))
-                positional.reverse()
                 if func_id >= 10000:
                     raise TypeError(line=0, ip=self.ip, msg="CALL_KW is not supported for user functions")
                 func = ALL_BUILTINS.get(func_id)
@@ -415,7 +442,7 @@ class VM:
 
             if op == OP.JMP:
                 target = int(args[0])
-                if target < 0 or target > len(self.instrs):
+                if target < 0 or target >= len(self.instrs):
                     raise JumpOutOfRange(line=0, ip=self.ip, msg=f"jump target {target} out of range")
                 self.ip = target
                 continue
@@ -424,7 +451,7 @@ class VM:
                 target = int(args[0])
                 value = self._pop("condition")
                 if not value:
-                    if target < 0 or target > len(self.instrs):
+                    if target < 0 or target >= len(self.instrs):
                         raise JumpOutOfRange(line=0, ip=self.ip, msg=f"jump target {target} out of range")
                     self.ip = target
                 else:
@@ -435,7 +462,7 @@ class VM:
                 target = int(args[0])
                 value = self._pop("condition")
                 if bool(value):
-                    if target < 0 or target > len(self.instrs):
+                    if target < 0 or target >= len(self.instrs):
                         raise JumpOutOfRange(line=0, ip=self.ip, msg=f"jump target {target} out of range")
                     self.ip = target
                 else:
@@ -453,6 +480,9 @@ class VM:
             if op == OP.TRY:
                 catch_ip = int(args[0])
                 finally_ip = int(args[1])
+                for target in (catch_ip, finally_ip):
+                    if target != 0 and (target < 0 or target >= len(self.instrs)):
+                        raise JumpOutOfRange(line=instr.line, ip=self.ip, msg=f"try target {target} out of range")
                 end_ip = self.ip + 1
                 if self.program.try_table:
                     for try_ip, end, catch, finally_target in self.program.try_table:
@@ -466,6 +496,8 @@ class VM:
                     "saved_ip": end_ip,
                     "stage": "body",
                     "exc": None,
+                    "call_depth": len(self.call_stack),
+                    "stack_depth": len(self.stack),
                 })
                 self.ip += 1
                 continue

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import shlex
+import re
+
+from .encoder import encode
 from .errors import ParseError
 from .ir import Instr, OP, Program
+from .lexer import tokenize
+from .parser import parse
 
 MNEMONICS = {
     "NOP": OP.NOP,
@@ -89,26 +95,63 @@ def _register_name(names: dict[str, int], name: str) -> int:
     return next_id
 
 
+def _split_tokens(text: str) -> list[str]:
+    lexer = shlex.shlex(text, posix=False)
+    lexer.whitespace_split = True
+    lexer.commenters = "#;"
+    return list(lexer)
+
+
+def _annotated_line(raw: str, fallback: int) -> int:
+    match = re.search(r";\s*line=(\d+)\s+spaces=[0-9,]+\s*$", raw)
+    return int(match.group(1)) if match else fallback
+
+
 def assemble(src: str) -> Program:
     names: dict[str, int] = {}
     labels: dict[str, int] = {}
     instrs: list[Instr] = []
+    enddef_markers: list[tuple[int, int]] = []
     lines = src.splitlines()
 
     for line_no, raw in enumerate(lines, start=1):
+        tokens = _split_tokens(raw.strip())
+        if not tokens or tokens[0].lower() != ".name":
+            continue
+        if len(tokens) != 2 or "=" not in tokens[1]:
+            raise ParseError(line=line_no, ip=0, msg="invalid .name syntax; expected .name NAME=ID")
+        name, separator, raw_id = tokens[1].partition("=")
+        if not name or not separator:
+            raise ParseError(line=line_no, ip=0, msg="invalid .name syntax; expected .name NAME=ID")
+        name_id = _as_int(raw_id, line_no)
+        if name_id < 0 or name in names or name_id in names.values():
+            raise ParseError(line=line_no, ip=0, msg="duplicate or negative .name entry")
+        names[name] = name_id
+
+    for line_no, raw in enumerate(lines, start=1):
+        source_line = _annotated_line(raw, line_no)
         text = raw.strip()
-        if not text or text.startswith("#") or text.startswith(";"):
+        if not text:
             continue
-        if text.startswith(".label"):
-            parts = text.split(None, 1)
-            if len(parts) != 2:
+        tokens = _split_tokens(text)
+        if not tokens:
+            continue
+        directive = tokens[0].lower()
+        if directive == ".label":
+            if len(tokens) != 2:
                 raise ParseError(line=line_no, ip=0, msg="invalid label syntax")
-            labels[parts[1]] = len(instrs)
+            if tokens[1] in labels:
+                raise ParseError(line=line_no, ip=len(instrs), msg=f"duplicate label: {tokens[1]}")
+            labels[tokens[1]] = len(instrs)
             continue
-        if text == ".enddef":
+        if directive == ".name":
+            continue
+        if directive == ".enddef":
+            if len(tokens) != 1:
+                raise ParseError(line=line_no, ip=len(instrs), msg="invalid .enddef syntax")
+            enddef_markers.append((len(instrs), line_no))
             continue
 
-        tokens = text.split()
         mnemonic = tokens[0].upper()
         op = MNEMONICS.get(mnemonic)
         if op is None:
@@ -135,17 +178,19 @@ def assemble(src: str) -> Program:
                 raise ParseError(line=line_no, ip=0, msg="PUSH_STR requires a string literal")
             chars = args
             encoded = [len(chars)] + chars
-            instrs.append(Instr(OP.PUSH_STR, encoded, line=line_no))
-        elif op in {OP.CALL, OP.CALL_KW, OP.CALL_METHOD, OP.DEF} and len(args) == 2:
-            instrs.append(Instr(op, args, line=line_no))
+            instrs.append(Instr(OP.PUSH_STR, encoded, line=source_line))
+        elif op == OP.CALL_KW and len(args) == 3:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op in {OP.CALL, OP.CALL_METHOD, OP.DEF} and len(args) == 2:
+            instrs.append(Instr(op, args, line=source_line))
         elif op == OP.CALL_OBJ and len(args) == 1:
-            instrs.append(Instr(op, args, line=line_no))
+            instrs.append(Instr(op, args, line=source_line))
         elif op == OP.TRY and len(args) == 2:
-            instrs.append(Instr(op, args, line=line_no))
+            instrs.append(Instr(op, args, line=source_line))
         elif op in {OP.OP, OP.STACK, OP.IMPORT, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.INDEX, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.CONCAT, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.JMP, OP.JZ, OP.JNZ, OP.PUSH_INT} and len(args) == 1:
-            instrs.append(Instr(op, args, line=line_no))
+            instrs.append(Instr(op, args, line=source_line))
         elif op in {OP.NOP, OP.RET, OP.RAISE, OP.END_TRY, OP.SETUP_WITH, OP.HALT} and len(args) == 0:
-            instrs.append(Instr(op, [], line=line_no))
+            instrs.append(Instr(op, [], line=source_line))
         else:
             raise ParseError(line=line_no, ip=0, msg=f"invalid argument count for {mnemonic}")
 
@@ -156,8 +201,56 @@ def assemble(src: str) -> Program:
             elif isinstance(arg, str):
                 raise ParseError(line=instr.line, ip=0, msg=f"undefined label: {arg}")
 
-    program = Program(instrs=instrs, names=names, labels=labels)
-    return program
+    definitions = [idx for idx, instr in enumerate(instrs) if instr.op == OP.DEF]
+    valid_enddef_positions = set()
+    for position, def_ip in enumerate(definitions):
+        next_def = definitions[position + 1] if position + 1 < len(definitions) else len(instrs)
+        end_ip = next(
+            (idx for idx in range(def_ip + 1, next_def) if instrs[idx].op == OP.HALT),
+            next_def,
+        )
+        valid_enddef_positions.add(end_ip)
+    seen_enddefs: set[int] = set()
+    for marker_ip, line_no in enddef_markers:
+        if marker_ip not in valid_enddef_positions or marker_ip in seen_enddefs:
+            raise ParseError(line=line_no, ip=marker_ip, msg=".enddef does not match a DEF boundary")
+        seen_enddefs.add(marker_ip)
+
+    source_instrs = instrs
+    encoded_program = Program(instrs=source_instrs, names=names, labels=labels)
+    parsed = parse(tokenize(encode(encoded_program)))
+
+    parse_instrs = list(source_instrs)
+    if not parse_instrs or parse_instrs[-1].op != OP.HALT:
+        parse_instrs.append(Instr(OP.HALT))
+    definitions = [idx for idx, instr in enumerate(parse_instrs) if instr.op == OP.DEF]
+    implicit_returns: list[tuple[int, int]] = []
+    for position, def_ip in enumerate(definitions):
+        next_def = definitions[position + 1] if position + 1 < len(definitions) else len(parse_instrs)
+        halt_ip = next(
+            (idx for idx in range(def_ip + 1, next_def) if parse_instrs[idx].op == OP.HALT),
+            next_def,
+        )
+        if halt_ip == def_ip + 1 or parse_instrs[halt_ip - 1].op != OP.RET:
+            implicit_returns.append((halt_ip, parse_instrs[def_ip].line))
+
+    def remap(ip: int) -> int:
+        return ip + 2 * sum(position <= ip for position, _ in implicit_returns)
+
+    original_lines = {idx: instr.line for idx, instr in enumerate(parse_instrs)}
+    for old_ip, line in original_lines.items():
+        parsed.instrs[remap(old_ip)].line = line
+    for position, line in implicit_returns:
+        parsed.instrs[position + 2 * sum(previous < position for previous, _ in implicit_returns)].line = line
+        parsed.instrs[position + 2 * sum(previous < position for previous, _ in implicit_returns) + 1].line = line
+
+    return Program(
+        instrs=parsed.instrs,
+        names=names,
+        labels={name: remap(ip) for name, ip in labels.items()},
+        funcs=parsed.funcs,
+        try_table=parsed.try_table,
+    )
 
 
 __all__ = ["assemble", "MNEMONICS"]

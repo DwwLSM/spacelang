@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .encoder import _encode_zigzag
 from .ir import OP, Program
 
 OP_NAMES = {op.value: op.name for op in OP}
@@ -10,10 +11,22 @@ def _string_literal(value: list[int]) -> str:
     return '"' + text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n') + '"'
 
 
+def _encoded_values(instr) -> list[int]:
+    op = OP(instr.op)
+    if op == OP.PUSH_INT:
+        return [int(op), _encode_zigzag(int(instr.args[0]))]
+    if op == OP.PUSH_STR:
+        return [int(op), *(int(value) for value in instr.args)]
+    return [int(op), *(int(value) for value in instr.args)]
+
+
 def disassemble(program: Program) -> str:
     reverse_names = {index: name for name, index in program.names.items()}
     labels = {idx: name for name, idx in program.labels.items()}
-    lines: list[str] = []
+    lines: list[str] = [
+        f".name {name}={name_id}"
+        for name, name_id in sorted(program.names.items(), key=lambda item: item[1])
+    ]
 
     for idx, instr in enumerate(program.instrs):
         if idx in labels:
@@ -40,6 +53,8 @@ def disassemble(program: Program) -> str:
         line = f"{op_name}"
         if rendered:
             line += " " + " ".join(rendered)
+        spaces = ",".join(str(value) for value in _encoded_values(instr))
+        line += f" ; line={instr.line} spaces={spaces}"
         lines.append(line)
 
     return "\n".join(lines) + ("\n" if lines else "")

@@ -1,6 +1,7 @@
-from spacelang import OP, Program, SpaceError, TypeError
+from spacelang import OP, Program, SpaceError, TypeError, compile_py, pack_bytes, quine
 from spacelang.errors import EncodingError
 from spacelang.ir import Instr
+from spacelang.names import NameTable
 
 
 def test_import_and_ir_basics():
@@ -31,3 +32,14 @@ def test_program_dataclass_fields():
 def test_module_exports():
     assert SpaceError is not None
     assert EncodingError is not None
+    assert compile_py is not None
+    assert pack_bytes is not None
+    assert quine is not None
+
+
+def test_name_table_roundtrip_and_interning():
+    names = NameTable({"known": 4})
+    assert names.intern("known") == 4
+    assert names.intern("next") == 5
+    assert names.lookup(5) == "next"
+    assert NameTable.from_dict(names.to_dict()).to_dict() == names.to_dict()

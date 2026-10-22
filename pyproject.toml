@@ -1,6 +1,6 @@
 [build-system]
-requires = []
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "spacelang"
@@ -13,3 +13,8 @@ dependencies = []
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.scikit-build]
+wheel.packages = ["spacelang"]
+cmake.build-type = "Release"
+sdist.include = ["csrc/**", "CMakeLists.txt"]
