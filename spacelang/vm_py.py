@@ -449,10 +449,10 @@ class VM:
 
             if op == OP.JZ:
                 target = int(args[0])
+                if target < 0 or target >= len(self.instrs):
+                    raise JumpOutOfRange(line=0, ip=self.ip, msg=f"jump target {target} out of range")
                 value = self._pop("condition")
                 if not value:
-                    if target < 0 or target >= len(self.instrs):
-                        raise JumpOutOfRange(line=0, ip=self.ip, msg=f"jump target {target} out of range")
                     self.ip = target
                 else:
                     self.ip += 1
@@ -460,10 +460,10 @@ class VM:
 
             if op == OP.JNZ:
                 target = int(args[0])
+                if target < 0 or target >= len(self.instrs):
+                    raise JumpOutOfRange(line=0, ip=self.ip, msg=f"jump target {target} out of range")
                 value = self._pop("condition")
                 if bool(value):
-                    if target < 0 or target >= len(self.instrs):
-                        raise JumpOutOfRange(line=0, ip=self.ip, msg=f"jump target {target} out of range")
                     self.ip = target
                 else:
                     self.ip += 1

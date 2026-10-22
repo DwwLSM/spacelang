@@ -175,7 +175,11 @@ VM::VM(pybind11::object program) {
     instrs_.reserve(source.size());
     for (const auto item : source) {
         Instr instr;
-        instr.op = item.attr("op").cast<std::uint8_t>();
+        const auto opcode = item.attr("op").cast<std::int64_t>();
+        if (opcode < 0 || opcode >= 30) {
+            throw pybind11::value_error("invalid native VM opcode");
+        }
+        instr.op = static_cast<std::uint8_t>(opcode);
         instr.line = item.attr("line").cast<std::int32_t>();
         const auto args = item.attr("args").cast<pybind11::sequence>();
         instr.args.reserve(static_cast<std::size_t>(args.size()));
@@ -183,14 +187,13 @@ VM::VM(pybind11::object program) {
             instr.args.push_back(args[index].cast<std::int64_t>());
         }
         const std::size_t expected[] = {
-            0, 2, 3, 1, 1, 1, 1, 1, instr.args.empty() ? 0 : instr.args[0] < 0
-                ? 0
-                : static_cast<std::size_t>(instr.args[0]) + 1,
-            1, 1, 1, 2, 1, 1, 1, 1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0,
+            0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1, 1, 2, 0, 1,
+            1, 1, 1, 1, 1, 0, 2, 0, 0, 0,
         };
         if (instr.op >= 30
             || (instr.op == PUSH_STR
-                ? (instr.args.empty() || instr.args[0] > 1000 || instr.args.size() != expected[instr.op])
+                ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
+                    || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
                 : instr.args.size() != expected[instr.op])) {
             throw pybind11::value_error("invalid native VM instruction shape");
         }
@@ -764,14 +767,14 @@ pybind11::object VM::run() {
             op_jz:
             op_jnz:
 #endif
-                const bool condition = pop("condition").truthy();
-                const bool jump = instr.op == JZ ? !condition : condition;
-                if (jump && (instr.args[0] < 0 || instr.args[0] >= static_cast<std::int64_t>(instrs_.size()))) {
+                if (instr.args[0] < 0 || instr.args[0] >= static_cast<std::int64_t>(instrs_.size())) {
                     raise_space_error(
                         "JumpOutOfRange",
                         "jump target " + std::to_string(instr.args[0]) + " out of range"
                     );
                 }
+                const bool condition = pop("condition").truthy();
+                const bool jump = instr.op == JZ ? !condition : condition;
                 ip = jump ? instr.args[0] : ip + 1;
                 break;
             }
