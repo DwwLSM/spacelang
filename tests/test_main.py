@@ -5,6 +5,29 @@ from io import StringIO
 from spacelang.main import main
 
 
+def test_function_roundtrip_through_compiled_sp_file(tmp_path):
+    source = tmp_path / "function_program.py"
+    compiled = tmp_path / "function_program.sp"
+    source.write_text(
+        "def add(a, b):\n"
+        "    return a + b\n"
+        "\n"
+        "print(add(2, 3))\n"
+    )
+
+    assert main(["compile-py", str(source), str(compiled)]) == 0
+
+    output = StringIO()
+    with redirect_stdout(output):
+        assert main(["run", str(compiled)]) == 0
+    assert output.getvalue() == "5\n"
+
+    output = StringIO()
+    with redirect_stdout(output):
+        assert main(["run", str(compiled), "--engine", "cpp"]) == 0
+    assert output.getvalue() == "5\n"
+
+
 def test_compile_run_and_disassemble_commands(tmp_path):
     source = tmp_path / "program.py"
     compiled = tmp_path / "program.sp"
@@ -41,6 +64,23 @@ def test_pack_and_run_compressed_program(tmp_path):
     with redirect_stdout(output):
         main(["run", str(packed)])
     assert output.getvalue() == "packed\n"
+
+
+def test_compile_py_supports_augmented_assignment(tmp_path):
+    source = tmp_path / "augmented.py"
+    destination = tmp_path / "augmented.sp"
+    source.write_text(
+        "sum_value = 0\n"
+        "for i in range(5):\n"
+        "    sum_value += i * 2\n"
+        "print(sum_value)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    output = StringIO()
+    with redirect_stdout(output):
+        assert main(["run", str(destination)]) == 0
+    assert output.getvalue() == "20\n"
 
 
 def test_compile_py_can_write_compressed_output(tmp_path):

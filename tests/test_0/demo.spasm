@@ -1,0 +1,133 @@
+.name sqrt=0
+.name sep=1
+.name append=2
+.name sum=3
+.name __spacelang_temp_6=4
+.name __spacelang_temp_7=5
+.name i=6
+.name __const0=7
+.name __const1=8
+PUSH_INT 0 ; line=1 spaces=7,0
+STORE_GLOBAL __const0 ; line=3 spaces=10,7
+PUSH_INT 1 ; line=5 spaces=7,2
+STORE_GLOBAL __const1 ; line=7 spaces=10,8
+IMPORT 0 ; line=9 spaces=4,0
+GET_ATTR sqrt ; line=11 spaces=11,0
+STORE_GLOBAL sqrt ; line=13 spaces=10,0
+DEF 10000 1 ; line=15 spaces=17,10000,1
+PUSH_INT 10 ; line=18 spaces=7,20
+CALL 8 1 ; line=20 spaces=1,8,1
+STORE_LOCAL 3 ; line=23 spaces=21,3
+LOAD_GLOBAL __const0 ; line=25 spaces=9,7
+STORE_LOCAL 4 ; line=27 spaces=21,4
+LOAD_LOCAL 4 ; line=29 spaces=20,4
+LOAD_LOCAL 3 ; line=31 spaces=20,3
+CALL 2 1 ; line=33 spaces=1,2,1
+OP 7 ; line=36 spaces=5,7
+JZ 39 ; line=38 spaces=23,39
+LOAD_LOCAL 3 ; line=40 spaces=20,3
+LOAD_LOCAL 4 ; line=42 spaces=20,4
+INDEX 0 ; line=44 spaces=13,0
+STORE_LOCAL 1 ; line=46 spaces=21,1
+LOAD_GLOBAL __const1 ; line=48 spaces=9,8
+PUSH_STR " ,  " ; line=50 spaces=8,4,32,44,32,32
+PUSH_STR "Hello: " ; line=56 spaces=8,7,72,101,108,108,111,58,32
+LOAD_LOCAL 1 ; line=65 spaces=20,1
+CALL 5 1 ; line=67 spaces=1,5,1
+PUSH_STR ", " ; line=70 spaces=8,2,44,32
+LOAD_LOCAL 0 ; line=74 spaces=20,0
+CALL 5 1 ; line=76 spaces=1,5,1
+CONCAT 4 ; line=79 spaces=16,4
+LOAD_GLOBAL __const1 ; line=81 spaces=9,8
+CALL_KW 0 2 1 ; line=83 spaces=2,0,2,1
+STACK 3 ; line=87 spaces=6,3
+LOAD_LOCAL 4 ; line=89 spaces=20,4
+LOAD_GLOBAL __const1 ; line=91 spaces=9,8
+OP 1 ; line=93 spaces=5,1
+STORE_LOCAL 4 ; line=95 spaces=21,4
+JMP 13 ; line=97 spaces=22,13
+PUSH_INT 5 ; line=99 spaces=7,10
+CALL 8 1 ; line=101 spaces=1,8,1
+STORE_LOCAL 5 ; line=104 spaces=21,5
+LOAD_GLOBAL __const0 ; line=106 spaces=9,7
+STORE_LOCAL 6 ; line=108 spaces=21,6
+BUILD_LIST 0 ; line=110 spaces=14,0
+STORE_LOCAL 7 ; line=112 spaces=21,7
+LOAD_LOCAL 6 ; line=114 spaces=20,6
+LOAD_LOCAL 5 ; line=116 spaces=20,5
+CALL 2 1 ; line=118 spaces=1,2,1
+OP 7 ; line=121 spaces=5,7
+JZ 64 ; line=123 spaces=23,64
+LOAD_LOCAL 5 ; line=125 spaces=20,5
+LOAD_LOCAL 6 ; line=127 spaces=20,6
+INDEX 0 ; line=129 spaces=13,0
+STORE_LOCAL 8 ; line=131 spaces=21,8
+LOAD_LOCAL 7 ; line=133 spaces=20,7
+LOAD_LOCAL 8 ; line=135 spaces=20,8
+CALL_METHOD append sep ; line=137 spaces=12,2,1
+STACK 3 ; line=140 spaces=6,3
+LOAD_LOCAL 6 ; line=142 spaces=20,6
+LOAD_GLOBAL __const1 ; line=144 spaces=9,8
+OP 1 ; line=146 spaces=5,1
+STORE_LOCAL 6 ; line=148 spaces=21,6
+JMP 46 ; line=150 spaces=22,46
+LOAD_LOCAL 7 ; line=152 spaces=20,7
+STORE_LOCAL 2 ; line=154 spaces=21,2
+LOAD_GLOBAL __const0 ; line=156 spaces=9,7
+RET ; line=158 spaces=18
+PUSH_STR "test" ; line=159 spaces=8,4,116,101,115,116
+CALL 10000 1 ; line=165 spaces=1,10000,1
+STACK 3 ; line=168 spaces=6,3
+LOAD_GLOBAL __const0 ; line=170 spaces=9,7
+STORE_GLOBAL sum ; line=172 spaces=10,3
+PUSH_INT 2 ; line=174 spaces=7,4
+PUSH_INT 2 ; line=176 spaces=7,4
+OP 3 ; line=178 spaces=5,3
+PUSH_INT 2 ; line=180 spaces=7,4
+OP 3 ; line=182 spaces=5,3
+PUSH_INT 2 ; line=184 spaces=7,4
+OP 3 ; line=186 spaces=5,3
+PUSH_INT 2 ; line=188 spaces=7,4
+OP 3 ; line=190 spaces=5,3
+PUSH_INT 5 ; line=192 spaces=7,10
+OP 3 ; line=194 spaces=5,3
+PUSH_INT 5 ; line=196 spaces=7,10
+OP 3 ; line=198 spaces=5,3
+PUSH_INT 5 ; line=200 spaces=7,10
+OP 3 ; line=202 spaces=5,3
+PUSH_INT 5 ; line=204 spaces=7,10
+OP 3 ; line=206 spaces=5,3
+PUSH_INT 5 ; line=208 spaces=7,10
+OP 3 ; line=210 spaces=5,3
+CALL 8 1 ; line=212 spaces=1,8,1
+STORE_GLOBAL __spacelang_temp_6 ; line=215 spaces=10,4
+LOAD_GLOBAL __const0 ; line=217 spaces=9,7
+STORE_GLOBAL __spacelang_temp_7 ; line=219 spaces=10,5
+LOAD_GLOBAL __spacelang_temp_7 ; line=221 spaces=9,5
+LOAD_GLOBAL __spacelang_temp_6 ; line=223 spaces=9,4
+CALL 2 1 ; line=225 spaces=1,2,1
+OP 7 ; line=228 spaces=5,7
+JZ 120 ; line=230 spaces=23,120
+LOAD_GLOBAL __spacelang_temp_6 ; line=232 spaces=9,4
+LOAD_GLOBAL __spacelang_temp_7 ; line=234 spaces=9,5
+INDEX 0 ; line=236 spaces=13,0
+STORE_GLOBAL i ; line=238 spaces=10,6
+LOAD_GLOBAL sum ; line=240 spaces=9,3
+LOAD_GLOBAL sqrt ; line=242 spaces=9,0
+LOAD_GLOBAL i ; line=244 spaces=9,6
+CALL_OBJ 1 ; line=246 spaces=3,1
+LOAD_GLOBAL sqrt ; line=248 spaces=9,0
+PUSH_INT 2 ; line=250 spaces=7,4
+CALL_OBJ 1 ; line=252 spaces=3,1
+OP 3 ; line=254 spaces=5,3
+OP 1 ; line=256 spaces=5,1
+STORE_GLOBAL sum ; line=258 spaces=10,3
+LOAD_GLOBAL __spacelang_temp_7 ; line=260 spaces=9,5
+LOAD_GLOBAL __const1 ; line=262 spaces=9,8
+OP 1 ; line=264 spaces=5,1
+STORE_GLOBAL __spacelang_temp_7 ; line=266 spaces=10,5
+JMP 96 ; line=268 spaces=22,96
+LOAD_GLOBAL sum ; line=270 spaces=9,3
+CALL 0 1 ; line=272 spaces=1,0,1
+STACK 3 ; line=275 spaces=6,3
+HALT ; line=277 spaces=29

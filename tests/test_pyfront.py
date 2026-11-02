@@ -48,6 +48,11 @@ def test_pyfront_while_and_if():
     assert run_source(src) == "1\n"
 
 
+def test_pyfront_conditional_expression_selects_one_branch():
+    source = "print(7 if True else 1 / 0)\nprint(1 if False else 9)"
+    assert run_source(source) == "7\n9\n"
+
+
 def test_pyfront_for_range_and_sequence_indexing():
     src = textwrap.dedent("""
     for i in range(2, 8, 2):

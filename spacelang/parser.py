@@ -99,12 +99,13 @@ def parse(token_stream) -> Program:
             if def_position + 1 < len(definition_indices)
             else len(instrs)
         )
-        halt_ip = next(
-            (idx for idx in range(def_ip + 1, next_def_ip) if instrs[idx].op == OP.HALT),
-            next_def_ip,
-        )
-        if halt_ip == def_ip + 1 or instrs[halt_ip - 1].op != OP.RET:
-            implicit_returns.append(halt_ip)
+        last_ret_ip = -1
+        for idx in range(def_ip + 1, next_def_ip):
+            if instrs[idx].op == OP.RET:
+                last_ret_ip = idx
+            elif instrs[idx].op == OP.HALT and last_ret_ip == -1:
+                implicit_returns.append(idx)
+                break
 
     for insertion_ip in reversed(implicit_returns):
         for instr in instrs:
@@ -136,11 +137,18 @@ def parse(token_stream) -> Program:
             if def_position + 1 < len(definition_indices)
             else len(instrs)
         )
-        halt_ip = next(
-            (idx for idx in range(def_ip + 1, end_ip) if instrs[idx].op == OP.HALT),
-            end_ip,
-        )
-        funcs[func_id] = (def_ip + 1, halt_ip)
+        last_ret_ip = -1
+        for idx in range(def_ip + 1, end_ip):
+            if instrs[idx].op == OP.RET:
+                last_ret_ip = idx
+        if last_ret_ip != -1:
+            end_ip = last_ret_ip + 1
+        else:
+            for idx in range(def_ip + 1, end_ip):
+                if instrs[idx].op == OP.HALT:
+                    end_ip = idx
+                    break
+        funcs[func_id] = (def_ip + 1, end_ip)
 
     try_table: list[tuple[int, int, int, int]] = []
     pending_tries: list[list[int]] = []

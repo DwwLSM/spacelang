@@ -220,29 +220,28 @@ def assemble(src: str) -> Program:
     encoded_program = Program(instrs=source_instrs, names=names, labels=labels)
     parsed = parse(tokenize(encode(encoded_program)))
 
-    parse_instrs = list(source_instrs)
-    if not parse_instrs or parse_instrs[-1].op != OP.HALT:
-        parse_instrs.append(Instr(OP.HALT))
-    definitions = [idx for idx, instr in enumerate(parse_instrs) if instr.op == OP.DEF]
     implicit_returns: list[tuple[int, int]] = []
     for position, def_ip in enumerate(definitions):
-        next_def = definitions[position + 1] if position + 1 < len(definitions) else len(parse_instrs)
-        halt_ip = next(
-            (idx for idx in range(def_ip + 1, next_def) if parse_instrs[idx].op == OP.HALT),
-            next_def,
-        )
-        if halt_ip == def_ip + 1 or parse_instrs[halt_ip - 1].op != OP.RET:
-            implicit_returns.append((halt_ip, parse_instrs[def_ip].line))
+        next_def = definitions[position + 1] if position + 1 < len(definitions) else len(source_instrs)
+        last_ret_ip = -1
+        for idx in range(def_ip + 1, next_def):
+            if source_instrs[idx].op == OP.RET:
+                last_ret_ip = idx
+            elif source_instrs[idx].op == OP.HALT and last_ret_ip == -1:
+                implicit_returns.append((idx, source_instrs[def_ip].line))
+                break
 
     def remap(ip: int) -> int:
         return ip + 2 * sum(position <= ip for position, _ in implicit_returns)
 
-    original_lines = {idx: instr.line for idx, instr in enumerate(parse_instrs)}
+    original_lines = {idx: instr.line for idx, instr in enumerate(source_instrs)}
     for old_ip, line in original_lines.items():
-        parsed.instrs[remap(old_ip)].line = line
+        if remap(old_ip) < len(parsed.instrs):
+            parsed.instrs[remap(old_ip)].line = line
     for position, line in implicit_returns:
-        parsed.instrs[position + 2 * sum(previous < position for previous, _ in implicit_returns)].line = line
-        parsed.instrs[position + 2 * sum(previous < position for previous, _ in implicit_returns) + 1].line = line
+        insertion_ip = remap(position)
+        parsed.instrs[insertion_ip].line = line
+        parsed.instrs[insertion_ip + 1].line = line
 
     return Program(
         instrs=parsed.instrs,

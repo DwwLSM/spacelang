@@ -88,6 +88,18 @@ def fib(n):
 
 result = fib({args.n})
 """
+    source = f"""
+
+from math import sqrt
+sum = 0
+for i in range(100000):
+    sum = sqrt(sum) if sum > 20000000 else sqrt(i) * sqrt(3) * 2 + sum
+    
+result = sum    
+    
+"""
+
+
     durations = benchmark_engines(source, repeats=args.repeat, warmup=args.warmup)
     baseline = durations["CPython"]
     for name, duration in durations.items():
