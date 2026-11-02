@@ -168,6 +168,19 @@ class PyFront(ast.NodeVisitor):
             self._load_name(node.id, getattr(node, "lineno", 0))
             return
 
+        if isinstance(node, ast.IfExp):
+            line = getattr(node, "lineno", 0)
+            else_label = f"ifexp_else_{len(self.instrs)}"
+            end_label = f"ifexp_end_{len(self.instrs)}"
+            self._compile_expr(node.test)
+            _emit(self.instrs, OP.JZ, else_label, line=line)
+            self._compile_expr(node.body)
+            _emit(self.instrs, OP.JMP, end_label, line=line)
+            self._emit_label(else_label)
+            self._compile_expr(node.orelse)
+            self._emit_label(end_label)
+            return
+
         if isinstance(node, ast.Assign):
             self._compile_expr(node.value)
             if len(node.targets) != 1:
@@ -177,6 +190,25 @@ class PyFront(ast.NodeVisitor):
                 self._store_name(target.id, getattr(node, "lineno", 0))
             else:
                 raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="unsupported assignment target")
+            return
+
+        if isinstance(node, ast.AugAssign):
+            if not isinstance(node.target, ast.Name):
+                raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="augmented assignment target must be a name")
+            op_map = {
+                ast.Add: 1,
+                ast.Sub: 2,
+                ast.Mult: 3,
+                ast.Div: 4,
+                ast.Mod: 5,
+            }
+            op = op_map.get(type(node.op))
+            if op is None:
+                raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported augmented assignment op: {type(node.op).__name__}")
+            self._load_name(node.target.id, getattr(node, "lineno", 0))
+            self._compile_expr(node.value)
+            _emit(self.instrs, OP.OP, op, line=getattr(node, "lineno", 0))
+            self._store_name(node.target.id, getattr(node, "lineno", 0))
             return
 
         if isinstance(node, ast.Expr):
@@ -542,7 +574,21 @@ class PyFront(ast.NodeVisitor):
         self._load_name(result_name, line)
 
     def _compile_stmt(self, node: ast.AST) -> None:
-        if isinstance(node, (ast.Assign, ast.Expr, ast.Return, ast.If, ast.While, ast.For, ast.Import, ast.ImportFrom, ast.Pass)):
+        if isinstance(
+            node,
+            (
+                ast.Assign,
+                ast.AugAssign,
+                ast.Expr,
+                ast.Return,
+                ast.If,
+                ast.While,
+                ast.For,
+                ast.Import,
+                ast.ImportFrom,
+                ast.Pass,
+            ),
+        ):
             self._compile_expr(node)
             return
         if isinstance(node, ast.FunctionDef):

@@ -1,6 +1,7 @@
 #include "vm.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <string>
 #include <stdexcept>
@@ -85,40 +86,57 @@ bool checked_multiply(std::int64_t left, std::int64_t right, std::int64_t& resul
     return true;
 }
 
-Value numeric_binary(std::int64_t op, const Value& left, const Value& right) {
+bool try_numeric_binary_fast(std::int64_t op, const Value& left, const Value& right, Value& result) {
     if (left.tag == Value::Tag::INT && right.tag == Value::Tag::INT) {
-        std::int64_t result = 0;
+        std::int64_t integer_result = 0;
         switch (op) {
             case 1:
-                if (checked_add(left.data.i, right.data.i, result)) {
-                    return Value(result);
+                if (checked_add(left.data.i, right.data.i, integer_result)) {
+                    result = Value(integer_result);
+                    return true;
                 }
                 break;
             case 2:
-                if (checked_subtract(left.data.i, right.data.i, result)) {
-                    return Value(result);
+                if (checked_subtract(left.data.i, right.data.i, integer_result)) {
+                    result = Value(integer_result);
+                    return true;
                 }
                 break;
             case 3:
-                if (checked_multiply(left.data.i, right.data.i, result)) {
-                    return Value(result);
+                if (checked_multiply(left.data.i, right.data.i, integer_result)) {
+                    result = Value(integer_result);
+                    return true;
                 }
                 break;
             case 6:
-                return Value(left.data.i == right.data.i);
+                result = Value(left.data.i == right.data.i);
+                return true;
             case 7:
-                return Value(left.data.i < right.data.i);
+                result = Value(left.data.i < right.data.i);
+                return true;
             case 8:
-                return Value(left.data.i > right.data.i);
+                result = Value(left.data.i > right.data.i);
+                return true;
             case 9:
-                return Value(left.data.i != right.data.i);
+                result = Value(left.data.i != right.data.i);
+                return true;
             case 10:
-                return Value(left.data.i <= right.data.i);
+                result = Value(left.data.i <= right.data.i);
+                return true;
             case 11:
-                return Value(left.data.i >= right.data.i);
+                result = Value(left.data.i >= right.data.i);
+                return true;
             default:
                 break;
         }
+    }
+    return false;
+}
+
+Value numeric_binary(std::int64_t op, const Value& left, const Value& right) {
+    Value fast_result;
+    if (try_numeric_binary_fast(op, left, right, fast_result)) {
+        return fast_result;
     }
 
     const auto left_object = left.to_python();
@@ -465,13 +483,12 @@ pybind11::object VM::run() {
                         if (function == funcs_.end()) {
                             raise_space_error("UndefinedFunc", "undefined user function " + std::to_string(func_id));
                         }
-                        std::vector<Value> arguments;
-                        for (std::int64_t index = 0; index < positional_count; ++index) {
-                            arguments.push_back(pop("function argument"));
+                        Frame frame{func_id, ip + 1, {}, {}};
+                        frame.locals.resize(static_cast<std::size_t>(positional_count));
+                        frame.initialized.assign(frame.locals.size(), true);
+                        for (std::int64_t index = positional_count - 1; index >= 0; --index) {
+                            frame.locals[static_cast<std::size_t>(index)] = pop("function argument");
                         }
-                        std::reverse(arguments.begin(), arguments.end());
-                        Frame frame{func_id, ip + 1, std::move(arguments), {}};
-                        frame.initialized.resize(frame.locals.size(), true);
                         call_stack_.push_back(std::move(frame));
                         ip = function->second.first;
                         break;
@@ -773,7 +790,13 @@ pybind11::object VM::run() {
                         "jump target " + std::to_string(instr.args[0]) + " out of range"
                     );
                 }
-                const bool condition = pop("condition").truthy();
+                const Value condition_value = pop("condition");
+                bool condition = false;
+                if (condition_value.tag == Value::Tag::INT) {
+                    condition = condition_value.data.i != 0;
+                } else {
+                    condition = condition_value.truthy();
+                }
                 const bool jump = instr.op == JZ ? !condition : condition;
                 ip = jump ? instr.args[0] : ip + 1;
                 break;

@@ -113,9 +113,10 @@ def test_sp_quine_shifts_names_jumps_and_functions(tmp_path):
     names = json.loads(destination.with_suffix(".names.json").read_text())
     transformed.names = names
     offset = len(_HOOK_INSTRS)
-    assert transformed.funcs[10000] == (offset + 1, offset + 10)
+    assert transformed.funcs[10000] == (offset + 1, offset + 3)
     assert transformed.instrs[offset + 3].op == OP.LOAD_GLOBAL
     assert transformed.instrs[offset + 3].args == [0]
+    assert transformed.instrs[offset + 6].args == [offset + 7]
 
 
 def test_sp_quine_preserves_keyword_name_ids_and_zero_try_targets(tmp_path):

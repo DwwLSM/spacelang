@@ -1,0 +1,18 @@
+{
+  "__file__": 0,
+  "os": 1,
+  "path": 2,
+  "__quine_source": 3,
+  "__quine_root": 4,
+  "__quine_extension": 5,
+  "__quine_output": 6,
+  "__quine_file": 7,
+  "__quine_data": 8,
+  "__quine_sidecar_source": 9,
+  "__quine_sidecar_output": 10,
+  "__quine_sidecar_data": 11,
+  "splitext": 12,
+  "read": 13,
+  "write": 14,
+  "close": 15
+}
