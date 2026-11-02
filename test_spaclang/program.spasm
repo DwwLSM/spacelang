@@ -1,0 +1,11 @@
+DEF 10000 2 ; line=1 spaces=17,10000,2
+LOAD_LOCAL 0 ; line=4 spaces=20,0
+LOAD_LOCAL 1 ; line=6 spaces=20,1
+OP 1 ; line=8 spaces=5,1
+RET ; line=10 spaces=18
+PUSH_INT 2 ; line=11 spaces=7,4
+PUSH_INT 3 ; line=13 spaces=7,6
+CALL 10000 2 ; line=15 spaces=1,10000,2
+CALL 0 1 ; line=18 spaces=1,0,1
+STACK 3 ; line=21 spaces=6,3
+HALT ; line=23 spaces=29
