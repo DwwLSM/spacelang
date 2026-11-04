@@ -16,18 +16,19 @@ programs.
 
 ## Install
 
-Clone the repository and install it in editable mode:
+Install the package from a checkout:
 
 ```bash
 git clone https://github.com/DwwLSM/spacelang.git
 cd spacelang
-python -m pip install -e .
+python -m pip install .
 ```
 
-For development, install pytest as well:
+For development, install the package with its test dependencies in editable
+mode:
 
 ```bash
-python -m pip install pytest
+python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
@@ -101,12 +102,18 @@ The command-line interface supports Python compilation, assembly,
 disassembly, execution with the reference VM, and `.sp`/`.spz` compression:
 
 ```bash
-python -m spacelang.main compile-py example.py example.sp
+spacelang compile-py example.py example.sp
+spacelang run example.sp
+spacelang run example.sp --engine cpp
+spacelang disasm example.sp
+spacelang pack example.sp
+spacelang run example.spz
+```
+
+The module form remains available when invoking the source checkout directly:
+
+```bash
 python -m spacelang.main run example.sp
-python -m spacelang.main run example.sp --engine cpp
-python -m spacelang.main disasm example.sp
-python -m spacelang.main pack example.sp
-python -m spacelang.main run example.spz
 ```
 
 Compilation enables the safe peephole optimizations and integer constant pool
