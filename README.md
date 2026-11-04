@@ -185,3 +185,25 @@ python -m pytest
 
 The tests cover the current IR, encoding/parser, assembler/disassembler, VM,
 Python-subset frontend, and native/reference differential behavior.
+
+## Render the introduction animation
+
+The Manim scene source is in `scene.py`. Install the optional animation
+dependency (and Manim's required system packages; see the
+[Manim installation guide](https://docs.manim.community/en/stable/installation.html)):
+
+```bash
+python -m pip install -e ".[animation]"
+```
+
+Render an English version with subtitles:
+
+```bash
+manim -ql scene.py SpacelangIntroEnglishWithSubtitle
+```
+
+Use `SpacelangIntroChineseWithSubtitle`,
+`SpacelangIntroEnglishWithoutSubtitle`, or
+`SpacelangIntroChineseWithoutSubtitle` for the other variants. Manim writes
+rendered videos and its generated assets under `media/`; these are ignored by
+Git and can be recreated from `scene.py`.
