@@ -237,6 +237,167 @@ class SpacelangIntroWithSubtitle(Scene):
             subtitle,
         )
 
+    def show_large_integer_demo(self):
+        title = Text(
+            self.localized("大整数：别堆 10 万个空格", "Large Integers: Don't Count 100,000 Spaces"),
+            font_size=28,
+            color=TEXT,
+        ).to_edge(UP, buff=0.35)
+        self.play(FadeIn(title), run_time=0.8)
+
+        panel_width = 4.05
+        panel_height = 4.55
+
+        def make_panel(label, center, color):
+            frame = RoundedRectangle(
+                corner_radius=0.08,
+                width=panel_width,
+                height=panel_height,
+                stroke_color=color,
+                fill_color="#0B171C",
+                fill_opacity=1,
+            ).move_to(center)
+            header = Rectangle(
+                width=panel_width - 0.02,
+                height=0.48,
+                stroke_width=0,
+                fill_color="#172A30",
+                fill_opacity=1,
+            ).move_to(frame.get_top() + DOWN * 0.24)
+            header_text = Text(
+                label,
+                font="DejaVu Sans Mono",
+                font_size=11,
+                color=MUTED,
+            ).move_to(header.get_center() + LEFT * 1.25)
+            return VGroup(frame, header, header_text), frame
+
+        raw_group, raw_panel = make_panel(
+            self.localized("直接编码", "DIRECT TOKEN"),
+            LEFT * 4.55 + UP * 0.05,
+            ALERT,
+        )
+        factor_group, factor_panel = make_panel(
+            "--compress-source",
+            UP * 0.05,
+            GOLD,
+        )
+        stack_group, stack_panel = make_panel(
+            self.localized("运行时栈", "VM STACK"),
+            RIGHT * 4.55 + UP * 0.05,
+            GREEN,
+        )
+
+        raw_rows = VGroup(
+            Text("print(100000)", font="DejaVu Sans Mono", font_size=11, color=TEXT),
+            Text("PUSH_INT 100000", font="DejaVu Sans Mono", font_size=11, color=TEXT),
+            Text(
+                self.localized("参数: 200,000 个空格", "argument: 200,000 spaces"),
+                font="Noto Sans Mono CJK SC",
+                font_size=10,
+                color=TEXT,
+            ),
+            Text("· × 200,000", font="DejaVu Sans Mono", font_size=15, color=ALERT),
+            Text(
+                self.localized("单 token 上限: 65,535", "per-token limit: 65,535"),
+                font="Noto Sans Mono CJK SC",
+                font_size=10,
+                color=ALERT,
+            ),
+        ).arrange(DOWN, buff=0.22)
+        raw_rows.move_to(raw_panel.get_center() + DOWN * 0.05)
+
+        factor_rows = VGroup(
+            Text("100000 = 2^5 * 5^5", font="DejaVu Sans Mono", font_size=12, color=GOLD),
+            Text("PUSH_INT 2", font="DejaVu Sans Mono", font_size=11, color=TEXT),
+            Text("(PUSH_INT 2; OP 3) x 4", font="DejaVu Sans Mono", font_size=10, color=TEXT),
+            Text("(PUSH_INT 5; OP 3) x 5", font="DejaVu Sans Mono", font_size=10, color=TEXT),
+            Text(
+                self.localized("OP 3 = 乘法", "OP 3 = multiply"),
+                font="Noto Sans Mono CJK SC",
+                font_size=10,
+                color=MUTED,
+            ),
+        ).arrange(DOWN, aligned_edge=LEFT, buff=0.22)
+        factor_rows.move_to(factor_panel.get_center() + DOWN * 0.02)
+
+        stack_state = Text("[]", font="DejaVu Sans Mono", font_size=25, color=GREEN)
+        stack_state.move_to(stack_panel.get_center() + UP * 0.25)
+        stdout_text = Text(
+            "stdout: 100000",
+            font="DejaVu Sans Mono",
+            font_size=12,
+            color=GREEN,
+        ).move_to(stack_panel.get_center() + DOWN * 0.75)
+        stdout_text.set_opacity(0)
+        command = Text(
+            "spacelang compile-py large.py large.sp --compress-source  &&  spacelang run large.sp",
+            font="DejaVu Sans Mono",
+            font_size=9,
+            color=MUTED,
+        ).move_to(DOWN * 2.58)
+
+        self.play(
+            FadeIn(raw_group),
+            FadeIn(factor_group),
+            FadeIn(stack_group),
+            FadeIn(raw_rows[0]),
+            FadeIn(raw_rows[1]),
+            FadeIn(stack_state),
+            FadeIn(command),
+            run_time=1.0,
+        )
+        self.play(
+            FadeIn(VGroup(*raw_rows[2:])),
+            Indicate(raw_rows[3], color=ALERT),
+            run_time=1.0,
+        )
+        self.play(Write(factor_rows[0]), run_time=0.8)
+        self.play(FadeIn(VGroup(*factor_rows[1:])), run_time=1.0)
+        for value, highlight in (
+            ("[2]", factor_rows[1]),
+            ("[32]", factor_rows[2]),
+            ("[160]", factor_rows[3]),
+            ("[800]", factor_rows[3]),
+            ("[4,000]", factor_rows[3]),
+            ("[20,000]", factor_rows[3]),
+            ("[100,000]", factor_rows[3]),
+        ):
+            self.play(
+                Indicate(highlight, color=GOLD),
+                Transform(
+                    stack_state,
+                    Text(value, font="DejaVu Sans Mono", font_size=25, color=GREEN).move_to(stack_state),
+                ),
+                run_time=0.45,
+            )
+        self.play(stdout_text.animate.set_opacity(1), run_time=0.5)
+        subtitle = self.caption(
+            "100000 需要 200000 个空格，超过单 token 上限 65535。\n"
+            "--compress-source 用小因数和乘法重建。",
+            "100000 needs 200000 spaces, beyond the 65535 token limit.\n"
+            "--compress-source rebuilds it from small factors and multiplies.",
+        )
+        self.play(FadeIn(subtitle), run_time=0.8)
+        self.wait(4.0)
+        self.play(
+            FadeOut(
+                VGroup(
+                    title,
+                    raw_group,
+                    factor_group,
+                    stack_group,
+                    raw_rows,
+                    factor_rows,
+                    stack_state,
+                    stdout_text,
+                    command,
+                    subtitle,
+                )
+            ),
+            run_time=0.8,
+        )
+
     def file_icon(self, label, color):
         frame = RoundedRectangle(
             corner_radius=0.08,
@@ -709,6 +870,7 @@ class SpacelangIntroWithSubtitle(Scene):
         )
         real_program_scene = self.show_real_program_demo(empty_program_scene)
         self.play(FadeOut(real_program_scene), run_time=1.0)
+        self.show_large_integer_demo()
 
         # ===== Phase 4 =====
         phase_four_title = Text(

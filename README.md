@@ -73,6 +73,77 @@ exceptions in source code, generators, nested or filtered comprehensions,
 keyword arguments to user functions, and general iterator protocols are not implemented.
 Unsupported syntax raises an error rather than being silently compiled.
 
+## Run a `.sp` program
+
+Write assembly mnemonics to a `.spasm` file, assemble it into the whitespace-only
+`.sp` format, then run it with the reference VM:
+
+`example.spasm`:
+
+```text
+PUSH_INT 2
+PUSH_INT 3
+OP 1
+CALL 0 1
+STACK 3
+HALT
+```
+
+Run these commands from an installed checkout:
+
+```bash
+spacelang asm example.spasm example.sp
+spacelang disasm example.sp
+spacelang run example.sp
+```
+
+The program prints `5`. `CALL 0 1` calls the `print` builtin; `STACK 3`
+drops the builtin's return value. To use the source checkout without installing
+the command, invoke the CLI as `python -m spacelang.main run example.sp`.
+
+## How whitespace becomes instructions
+
+A `.sp` file is a stream of integer tokens written as spaces and newlines. The
+number of spaces before each newline is one token's value; the newline ends that
+token. The parser reads the first token as an opcode, then consumes the number
+of argument tokens required by that opcode. For example, `PUSH_INT 2` is encoded
+as the tokens `7` (the `PUSH_INT` opcode) and `4` (zig-zag encoded integer 2).
+`OP 1` is the tokens `5` (`OP`) and `1` (addition). The VM executes the resulting
+instructions; spaces are not executed one at a time.
+
+For the example above, the token values are:
+
+| Assembly | Space-count tokens |
+| --- | --- |
+| `PUSH_INT 2` | `7, 4` |
+| `PUSH_INT 3` | `7, 6` |
+| `OP 1` | `5, 1` |
+| `CALL 0 1` | `1, 0, 1` |
+| `STACK 3` | `6, 3` |
+| `HALT` | `29` |
+
+Each individual token is limited to 65,535 spaces. A direct `PUSH_INT 100000`
+would require an argument token of 200,000 spaces because positive integers use
+zig-zag encoding, so it cannot be encoded as one token. For a Python-subset
+source constant, use `--compress-source`; for `100000`, the compiler can factor
+it into smaller constants and multiplication instructions:
+
+`large.py`:
+
+```python
+print(100000)
+```
+
+```bash
+spacelang compile-py large.py large.sp --compress-source
+spacelang run large.sp
+```
+
+This prints `100000`. `--compress-source` makes the integer representable using
+multiple small tokens; it does not mean that one very long run of spaces is
+executed. `.spz` is a separate gzip-compressed container for an already encoded
+`.sp` program.
+
 ## Create a self-copying program
 
 For Python files, `quine` writes a new file with a small hook that copies that
