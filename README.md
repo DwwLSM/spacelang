@@ -122,6 +122,78 @@ For the example above, the token values are:
 | `STACK 3` | `6, 3` |
 | `HALT` | `29` |
 
+## Space instruction table
+
+Every `.sp` token is the count of spaces before a newline. The first token of
+each instruction is its opcode ID; the following tokens are its arguments.
+`PUSH_INT` uses zig-zag encoding for its integer argument. `PUSH_STR` is
+followed by a length and then one code-point token per character. Name IDs refer
+to the program's name table. The `.name`, `.label`, and `.enddef` forms are
+assembler directives, not VM opcodes.
+
+| ID | Mnemonic | Arguments in `.spasm` | Reference VM effect |
+| ---: | --- | --- | --- |
+| 0 | `NOP` | none | Do nothing. |
+| 1 | `CALL` | `func_id, nargs` | Call a builtin or user function with positional arguments. A builtin's result is pushed. |
+| 2 | `CALL_KW` | `func_id, npos, nkw` | Call a builtin with positional and keyword arguments; user functions are not supported here. |
+| 3 | `CALL_OBJ` | `nargs` | Pop a callable and its positional arguments, call it, and push the result. |
+| 4 | `IMPORT` | `module_id` | Import a supported module and push it. |
+| 5 | `OP` | `operation_id` | Pop two operands, apply the selected binary operation, and push the result. |
+| 6 | `STACK` | `stack_operation_id` | Apply a stack manipulation operation. |
+| 7 | `PUSH_INT` | `integer` | Push an integer; its argument token is zig-zag encoded. |
+| 8 | `PUSH_STR` | `length, codepoint...` | Push a string from the specified number of code points. |
+| 9 | `LOAD_GLOBAL` | `name_id` | Push a global value; an undefined name raises an error. |
+| 10 | `STORE_GLOBAL` | `name_id` | Pop a value and store it as a global. |
+| 11 | `GET_ATTR` | `name_id` | Pop an object and push the named attribute. |
+| 12 | `CALL_METHOD` | `name_id, nargs` | Pop a receiver and arguments, call the named method, and push its result. |
+| 13 | `INDEX` | `reserved` | Pop a key and container, then push `container[key]`; the argument is currently ignored. |
+| 14 | `BUILD_LIST` | `count` | Pop `count` values and push a list in their original order. |
+| 15 | `BUILD_TUPLE` | `count` | Pop `count` values and push a tuple in their original order. |
+| 16 | `CONCAT` | `count` | Pop and concatenate `count` homogeneous strings, bytes, lists, or tuples. |
+| 17 | `DEF` | `func_id, nargs` | Mark a function entry; execution skips its body when reached in normal flow. |
+| 18 | `RET` | none | Return the top stack value from the current function. |
+| 19 | `LOAD_ARG` | `index` | Push a function argument by slot index. |
+| 20 | `LOAD_LOCAL` | `slot` | Push a local variable by slot index. |
+| 21 | `STORE_LOCAL` | `slot` | Pop and store a local variable by slot index. |
+| 22 | `JMP` | `target_ip` | Jump to an instruction index. |
+| 23 | `JZ` | `target_ip` | Pop a condition; jump if it is false. |
+| 24 | `JNZ` | `target_ip` | Pop a condition; jump if it is true. |
+| 25 | `RAISE` | none | Pop an exception value and raise it through the active handler, if any. |
+| 26 | `TRY` | `catch_ip, finally_ip` | Begin a protected region; `0` means that the corresponding handler is absent. |
+| 27 | `END_TRY` | none | Close a try/catch/finally region and continue its control flow. |
+| 28 | `SETUP_WITH` | none | Pop a value onto the VM's with-stack; this alone does not implement Python's full `with` protocol. |
+| 29 | `HALT` | none | Stop execution; if the stack is non-empty, pop its top as the run result. |
+
+`OP` operation IDs:
+
+| ID | Operation |
+| ---: | --- |
+| 1 | Addition (`left + right`) |
+| 2 | Subtraction (`left - right`) |
+| 3 | Multiplication (`left * right`) |
+| 4 | True division (`left / right`) |
+| 5 | Modulo (`left % right`) |
+| 6 | Equal (`left == right`) |
+| 7 | Less than (`left < right`) |
+| 8 | Greater than (`left > right`) |
+| 9 | Not equal (`left != right`) |
+| 10 | Less than or equal (`left <= right`) |
+| 11 | Greater than or equal (`left >= right`) |
+
+`STACK` operation IDs (`top` means the rightmost stack value):
+
+| ID | Operation | Effect |
+| ---: | --- | --- |
+| 1 | `DUP` | Duplicate the top value. |
+| 2 | `SWAP` | Swap the top two values. |
+| 3 | `DROP` | Remove the top value. |
+| 4 | `OVER` | Copy the second value to the top. |
+| 5 | `ROT` | Rotate the top three values from `[a, b, c]` to `[b, c, a]`. |
+
+`IMPORT` module IDs are `0=math`, `1=random`, `2=os`, `3=re`, and `4=sys`.
+Jump targets and name IDs are zero-based. Function IDs of `10000` or greater
+identify user-defined functions in the reference VM.
+
 Each individual token is limited to 65,535 spaces. A direct `PUSH_INT 100000`
 would require an argument token of 200,000 spaces because positive integers use
 zig-zag encoding, so it cannot be encoded as one token. For a Python-subset
