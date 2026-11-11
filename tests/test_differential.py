@@ -28,6 +28,10 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "def outer(base):\n    def combine(left, right=3, suffix=\"!\"):\n        return base + left + right\n    return combine(left=2, suffix=\"?\", right=4)\nprint(outer(10))",
         "def factorial():\n    def calculate(value, result=1):\n        if value < 2:\n            return result\n        return calculate(value=value - 1, result=result * value)\n    return calculate(value=5)\nprint(factorial())",
         "def make_adder(base):\n    def add(value, extra=2): return base + value + extra\n    return add\nfn = make_adder(5)\nprint(fn(extra=4, value=3))",
+        "def make_formatter(prefix):\n    def format_value(value, *, suffix, mark='!'): return prefix + str(value) + suffix + mark\n    return format_value\nformat_value = make_formatter('<')\nprint(format_value(3, suffix='>', mark='?'), format_value(4, suffix=']'))",
+        "def make_formatter(prefix):\n    def format_value(value=3, *, mark='!', suffix, end='.'): return prefix + str(value) + mark + suffix + end\n    return format_value\nformat_value = make_formatter('<')\nprint(format_value(suffix=']'))",
+        "def format_value(value, *, prefix, suffix='!'): return prefix + str(value) + suffix\nprint(format_value(3, prefix='v='), format_value(4, suffix='?', prefix='x='))",
+        "def outer():\n    def inner(value, *, suffix): return str(value) + suffix\n    return inner(2, suffix='!')\nprint(outer())",
         "counter = 4\ndef update():\n    global counter\n    counter = counter + 1\n    return counter\nprint(update(), counter)",
         "item = 9\ndef values():\n    result = [item for item in [1, 2]]\n    empty = None\n    return item, empty\nprint(values())",
         "def empty():\n    return None\nprint(empty(), None)",
@@ -97,6 +101,28 @@ def test_python_and_cpp_engines_validate_saved_closure_keywords(call, message):
     source = (
         "def outer():\n"
         "    def inner(value): return value\n"
+        "    return inner\n"
+        "fn = outer()\n"
+        f"{call}\n"
+    )
+    program = compile_py(source)
+
+    for vm_type in (PythonVM, CppVM):
+        with pytest.raises(SpaceError, match=message):
+            vm_type(program).run()
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [
+        ("fn(1, 'x')", "expected at most 1 positional arguments"),
+        ("fn(1)", "missing required argument 'suffix'"),
+    ],
+)
+def test_python_and_cpp_engines_validate_saved_closure_keyword_only_arguments(call, message):
+    source = (
+        "def outer():\n"
+        "    def inner(value, *, suffix): return value\n"
         "    return inner\n"
         "fn = outer()\n"
         f"{call}\n"

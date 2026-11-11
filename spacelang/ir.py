@@ -49,6 +49,7 @@ class OP(IntEnum):
     LOAD_DEREF = 39
     CALL_OBJ_KW = 40
     MAKE_CLOSURE_SIG = 41
+    MAKE_CLOSURE_KWONLY = 42
 
 
 @dataclass(slots=True)

@@ -270,7 +270,6 @@ def test_pyfront_user_functions_support_defaults_and_keyword_arguments():
     [
         "def f(*args): return 0",
         "def f(a, /): return a",
-        "def f(*, value): return value",
         "def f(**kwargs): return 0",
     ],
 )
@@ -401,6 +400,54 @@ def test_pyfront_saved_closures_validate_keyword_bindings(call, message):
     source = f"def outer():\n    def inner(value): return value\n    return inner\nfn = outer()\n{call}"
     with pytest.raises(SpaceError, match=message):
         run_source(source)
+
+
+def test_pyfront_keyword_only_parameters_on_top_level_functions():
+    source = textwrap.dedent("""
+    def format_value(value, *, prefix, suffix="!"):
+        return prefix + str(value) + suffix
+
+    print(format_value(3, prefix="v="), format_value(4, suffix="?", prefix="x="))
+    """)
+    assert run_source(source) == "v=3! x=4?\n"
+
+
+def test_pyfront_saved_closures_support_keyword_only_parameters():
+    source = textwrap.dedent("""
+    def make_renderer(prefix):
+        def render(value=3, *, marker="!", suffix, end="."):
+            return prefix + str(value) + marker + suffix + end
+        return render
+
+    render = make_renderer("<")
+    print(render(3, suffix=">", marker="?"), render(4, suffix="]"), render(suffix=")"))
+    """)
+    assert run_source(source) == "<3?>. <4!]. <3!).\n"
+
+
+def test_pyfront_nested_function_direct_call_accepts_keyword_only_arguments():
+    source = textwrap.dedent("""
+    def outer():
+        def inner(value, *, suffix):
+            return str(value) + suffix
+        return inner(2, suffix="!")
+
+    print(outer())
+    """)
+    assert run_source(source) == "2!\n"
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        ("def f(*, name): return name\nf('x')", "too many positional arguments"),
+        ("def f(*, name): return name\nf()", "missing required argument 'name'"),
+        ("def f(value, *, name): return name\nf(1, name=2, value=3)", "multiple values for argument 'value'"),
+    ],
+)
+def test_pyfront_keyword_only_parameter_binding_errors(source, message):
+    with pytest.raises(ParseError, match=message):
+        compile_py(source)
 
 
 def test_pyfront_supports_simple_f_strings_and_list_comprehensions():

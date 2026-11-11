@@ -85,8 +85,13 @@ class _LoopContext:
 
 @dataclass
 class _FunctionSignature:
-    parameter_names: list[str]
+    positional_names: list[str]
+    keyword_only_names: list[str]
     defaults: dict[str, ast.expr]
+
+    @property
+    def parameter_names(self) -> list[str]:
+        return [*self.positional_names, *self.keyword_only_names]
 
 
 class PyFront(ast.NodeVisitor):
@@ -815,18 +820,23 @@ class PyFront(ast.NodeVisitor):
         if (
             node.args.posonlyargs
             or node.args.vararg is not None
-            or node.args.kwonlyargs
             or node.args.kwarg is not None
-            or node.args.kw_defaults
         ):
             raise ParseError(
                 line=getattr(node, "lineno", 0),
                 ip=0,
-                msg="functions support positional arguments only",
+                msg="positional-only parameters, *args, and **kwargs are unsupported",
             )
-        parameter_names = [arg.arg for arg in node.args.args]
-        required_count = len(parameter_names) - len(node.args.defaults)
-        defaults = dict(zip(parameter_names[required_count:], node.args.defaults))
+        positional_names = [arg.arg for arg in node.args.args]
+        keyword_only_names = [arg.arg for arg in node.args.kwonlyargs]
+        parameter_names = [*positional_names, *keyword_only_names]
+        required_count = len(positional_names) - len(node.args.defaults)
+        defaults = dict(zip(positional_names[required_count:], node.args.defaults))
+        defaults.update(
+            (name, default)
+            for name, default in zip(keyword_only_names, node.args.kw_defaults)
+            if default is not None
+        )
         if any(not self._is_supported_default(value) for value in defaults.values()):
             raise ParseError(
                 line=getattr(node, "lineno", 0),
@@ -844,8 +854,12 @@ class PyFront(ast.NodeVisitor):
             self.function_id_by_node[id(node)] = func_id
         if not nested:
             self.function_ids[node.name] = func_id
-            self.function_signatures[node.name] = _FunctionSignature(parameter_names, defaults)
-        _emit(self.instrs, OP.DEF, func_id, len(node.args.args), line=getattr(node, "lineno", 0))
+            self.function_signatures[node.name] = _FunctionSignature(
+                positional_names,
+                keyword_only_names,
+                defaults,
+            )
+        _emit(self.instrs, OP.DEF, func_id, len(parameter_names), line=getattr(node, "lineno", 0))
         start_ip = len(self.instrs)
         self.funcs[func_id] = (start_ip, start_ip)
 
@@ -854,7 +868,7 @@ class PyFront(ast.NodeVisitor):
             scope = self._build_function_scope(node, [])
 
         local_scope: dict[str, int] = {}
-        for idx, arg in enumerate(node.args.args):
+        for idx, arg in enumerate([*node.args.args, *node.args.kwonlyargs]):
             local_scope[arg.arg] = idx
         collector = _LocalNameCollector()
         for stmt in node.body:
@@ -923,20 +937,45 @@ class PyFront(ast.NodeVisitor):
                     ip=0,
                     msg=f"cannot capture enclosing name {name!r}",
                 )
-        parameter_names = [arg.arg for arg in node.args.args]
-        required_count = len(parameter_names) - len(node.args.defaults)
-        default_names = parameter_names[required_count:]
+        positional_names = [arg.arg for arg in node.args.args]
+        keyword_only_names = [arg.arg for arg in node.args.kwonlyargs]
+        parameter_names = [*positional_names, *keyword_only_names]
+        required_count = len(positional_names) - len(node.args.defaults)
+        positional_default_names = positional_names[required_count:]
+        keyword_only_defaults = [
+            (name, default)
+            for name, default in zip(keyword_only_names, node.args.kw_defaults)
+            if default is not None
+        ]
         for name in parameter_names:
             _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
         for default in node.args.defaults:
             self._compile_expr(default)
+        for name, default in keyword_only_defaults:
+            _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
+            self._compile_expr(default)
+        closure_op = OP.MAKE_CLOSURE_KWONLY if keyword_only_names else OP.MAKE_CLOSURE_SIG
+        closure_args = (
+            (
+                func_id,
+                len(scope.free_names),
+                len(positional_names),
+                len(keyword_only_names),
+                len(node.args.defaults),
+                len(keyword_only_defaults),
+            )
+            if keyword_only_names
+            else (
+                func_id,
+                len(scope.free_names),
+                len(parameter_names),
+                len(node.args.defaults),
+            )
+        )
         _emit(
             self.instrs,
-            OP.MAKE_CLOSURE_SIG,
-            func_id,
-            len(scope.free_names),
-            len(parameter_names),
-            len(default_names),
+            closure_op,
+            *closure_args,
             line=line,
         )
         self._store_name(node.name, line)
@@ -948,17 +987,23 @@ class PyFront(ast.NodeVisitor):
         function: ast.FunctionDef,
     ) -> None:
         line = getattr(node, "lineno", 0)
-        parameter_names = [arg.arg for arg in function.args.args]
-        required_count = len(parameter_names) - len(function.args.defaults)
-        defaults = dict(zip(parameter_names[required_count:], function.args.defaults))
-        if len(node.args) > len(parameter_names):
+        positional_names = [arg.arg for arg in function.args.args]
+        keyword_only_names = [arg.arg for arg in function.args.kwonlyargs]
+        parameter_names = [*positional_names, *keyword_only_names]
+        required_count = len(positional_names) - len(function.args.defaults)
+        defaults = dict(zip(positional_names[required_count:], function.args.defaults))
+        defaults.update(
+            (name, default)
+            for name, default in zip(keyword_only_names, function.args.kw_defaults)
+            if default is not None
+        )
+        if len(node.args) > len(positional_names):
             raise ParseError(line=line, ip=0, msg=f"too many positional arguments for {function.name}")
         if any(isinstance(arg, ast.Starred) for arg in node.args):
             raise ParseError(line=line, ip=0, msg="expanded positional arguments are unsupported")
 
-        bound: dict[str, str] = {}
-        ordered_values = list(node.args)
-        ordered_names = parameter_names[:len(node.args)]
+        provided_names = set(positional_names[:len(node.args)])
+        ordered_names = positional_names[:len(node.args)]
         keyword_names: set[str] = set()
         for keyword in node.keywords:
             if keyword.arg is None:
@@ -973,27 +1018,23 @@ class PyFront(ast.NodeVisitor):
                 raise ParseError(line=line, ip=0, msg=f"multiple values for argument {keyword.arg!r}")
             keyword_names.add(keyword.arg)
             ordered_names.append(keyword.arg)
-            ordered_values.append(keyword.value)
 
-        self._load_name(function.name, line)
-        for parameter_name, value in zip(ordered_names, ordered_values):
-            temp_name = self._new_temp_name()
-            self._compile_expr(value)
-            self._store_name(temp_name, line)
-            bound[parameter_name] = temp_name
+        provided_names.update(keyword_names)
 
         for parameter_name in parameter_names:
-            if parameter_name in bound:
-                self._load_name(bound[parameter_name], line)
-            elif parameter_name in defaults:
-                self._compile_expr(defaults[parameter_name])
-            else:
+            if parameter_name not in provided_names and parameter_name not in defaults:
                 raise ParseError(
                     line=line,
                     ip=0,
                     msg=f"missing required argument {parameter_name!r} for {function.name}",
                 )
-        _emit(self.instrs, OP.CALL_OBJ, len(parameter_names), line=line)
+        self._load_name(function.name, line)
+        for argument in node.args:
+            self._compile_expr(argument)
+        for keyword in node.keywords:
+            _emit(self.instrs, OP.PUSH_INT, self._name_id(keyword.arg), line=line)
+            self._compile_expr(keyword.value)
+        _emit(self.instrs, OP.CALL_OBJ_KW, len(node.args), len(node.keywords), line=line)
 
     def _is_supported_default(self, node: ast.expr) -> bool:
         if isinstance(node, ast.Constant):
@@ -1007,10 +1048,12 @@ class PyFront(ast.NodeVisitor):
     def _compile_user_function_call(self, node: ast.Call, name: str) -> None:
         line = getattr(node, "lineno", 0)
         signature = self.function_signatures[name]
+        positional_names = signature.positional_names
+        keyword_only_names = signature.keyword_only_names
         parameter_names = signature.parameter_names
         bound: dict[str, str] = {}
-        provided_names = parameter_names[:len(node.args)]
-        if len(node.args) > len(parameter_names):
+        provided_names = positional_names[:len(node.args)]
+        if len(node.args) > len(positional_names):
             raise ParseError(line=line, ip=0, msg=f"too many positional arguments for {name}")
         if any(isinstance(arg, ast.Starred) for arg in node.args):
             raise ParseError(line=line, ip=0, msg="expanded positional arguments are unsupported")
@@ -1025,20 +1068,6 @@ class PyFront(ast.NodeVisitor):
                 raise ParseError(line=line, ip=0, msg=f"multiple values for argument {keyword.arg!r}")
             keyword_names.add(keyword.arg)
 
-        if not node.keywords:
-            for value in node.args:
-                self._compile_expr(value)
-            for parameter_name in parameter_names[len(node.args):]:
-                if parameter_name not in signature.defaults:
-                    raise ParseError(
-                        line=line,
-                        ip=0,
-                        msg=f"missing required argument {parameter_name!r} for {name}",
-                    )
-                self._compile_expr(signature.defaults[parameter_name])
-            _emit(self.instrs, OP.CALL, self.function_ids[name], len(parameter_names), line=line)
-            return
-
         ordered_values = [*node.args, *(keyword.value for keyword in node.keywords)]
         ordered_names = [*provided_names, *(keyword.arg for keyword in node.keywords)]
         for parameter_name, value in zip(ordered_names, ordered_values):
@@ -1049,15 +1078,20 @@ class PyFront(ast.NodeVisitor):
 
         for parameter_name in parameter_names:
             if parameter_name in bound:
-                self._load_name(bound[parameter_name], line)
+                continue
             elif parameter_name in signature.defaults:
-                self._compile_expr(signature.defaults[parameter_name])
+                continue
             else:
                 raise ParseError(
                     line=line,
                     ip=0,
                     msg=f"missing required argument {parameter_name!r} for {name}",
                 )
+        for parameter_name in parameter_names:
+            if parameter_name in bound:
+                self._load_name(bound[parameter_name], line)
+            elif parameter_name in signature.defaults:
+                self._compile_expr(signature.defaults[parameter_name])
         _emit(self.instrs, OP.CALL, self.function_ids[name], len(parameter_names), line=line)
 
     def compile(self) -> Program:
@@ -1076,11 +1110,19 @@ class PyFront(ast.NodeVisitor):
                 scope = self._build_function_scope(stmt, [])
                 assign_function_ids(scope)
                 self.function_ids[stmt.name] = self.function_id_by_node[id(stmt)]
-                parameter_names = [arg.arg for arg in stmt.args.args]
-                required_count = len(parameter_names) - len(stmt.args.defaults)
+                positional_names = [arg.arg for arg in stmt.args.args]
+                keyword_only_names = [arg.arg for arg in stmt.args.kwonlyargs]
+                required_count = len(positional_names) - len(stmt.args.defaults)
+                defaults = dict(zip(positional_names[required_count:], stmt.args.defaults))
+                defaults.update(
+                    (name, default)
+                    for name, default in zip(keyword_only_names, stmt.args.kw_defaults)
+                    if default is not None
+                )
                 self.function_signatures[stmt.name] = _FunctionSignature(
-                    parameter_names,
-                    dict(zip(parameter_names[required_count:], stmt.args.defaults)),
+                    positional_names,
+                    keyword_only_names,
+                    defaults,
                 )
         for stmt in self._module.body:
             self._compile_stmt(stmt)

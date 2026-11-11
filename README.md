@@ -76,16 +76,16 @@ supported.
 
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, dictionary and set comprehensions,
-starred arguments, keyword-only parameters, slice assignment, and async syntax
-are not implemented. Nested function defaults must be immutable literals.
+`*args`/`**kwargs` parameters and argument unpacking, slice assignment, and
+async syntax are not implemented. Function defaults must be immutable literals.
 Keyword arguments work for top-level functions, builtins, and dynamic
 SpaceLang closures; methods do not accept keyword arguments. Expressions
 currently do not support floating-point literals, dictionaries, sets, slicing,
 membership or identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
-and `%`. Functions use positional parameters; required and optional positional
-parameters are supported for top-level and nested functions. Defaults must be
-immutable literals. Positional and keyword arguments are supported for direct
-calls to known top-level functions. Builtin keyword arguments are supported
+and `%`. Top-level and nested functions support required and optional positional
+parameters and keyword-only parameters. Defaults must be immutable literals.
+Positional and keyword arguments are supported for direct calls to known
+top-level functions. Builtin keyword arguments are supported
 where the target builtin accepts them. Functions use statically determined
 local variables; `global` declarations and lexical closures with `nonlocal`
 updates are supported.
@@ -193,6 +193,7 @@ assembler directives, not VM opcodes.
 | 39 | `LOAD_DEREF` | `closure_index` | Push a captured cell reference from the current closure. |
 | 40 | `CALL_OBJ_KW` | `positional_count, keyword_count` | Call a dynamic callable with positional and named arguments. |
 | 41 | `MAKE_CLOSURE_SIG` | `func_id, cell_count, arg_count, default_count` | Pop captured cells and signature metadata, then push a closure. |
+| 42 | `MAKE_CLOSURE_KWONLY` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count` | Create a closure with positional and keyword-only parameter metadata. |
 
 `OP` operation IDs:
 

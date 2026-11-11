@@ -56,6 +56,7 @@ enum Opcode : std::uint8_t {
     LOAD_DEREF = 39,
     CALL_OBJ_KW = 40,
     MAKE_CLOSURE_SIG = 41,
+    MAKE_CLOSURE_KWONLY = 42,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -206,7 +207,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 42) {
+        if (opcode < 0 || opcode >= 43) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -219,9 +220,9 @@ VM::VM(pybind11::object program) {
         const std::size_t expected[] = {
             0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
             1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
-            1, 0, 1, 0, 3, 1, 1, 1, 2, 4,
+            1, 0, 1, 0, 3, 1, 1, 1, 2, 4, 6,
         };
-        if (instr.op >= 42
+        if (instr.op >= 43
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -408,7 +409,7 @@ pybind11::object VM::run() {
             &&op_store_attr, &&op_store_index, &&op_unpack_sequence,
             &&op_push_none, &&op_make_closure, &&op_cellify,
             &&op_load_cell_ref, &&op_load_deref, &&op_call_obj_kw,
-            &&op_make_closure_sig,
+            &&op_make_closure_sig, &&op_make_closure_kwonly,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -604,11 +605,13 @@ pybind11::object VM::run() {
                             break;
                         }
                         const auto parameter_names = parameter_names_value.cast<pybind11::list>();
+                        const auto positional_parameter_count =
+                            callable.attr("positional_count").cast<std::int64_t>();
                         const auto defaults = callable.attr("defaults").cast<pybind11::dict>();
-                        if (positional_values.size() > static_cast<std::size_t>(parameter_names.size())) {
+                        if (positional_values.size() > static_cast<std::size_t>(positional_parameter_count)) {
                             raise_space_error(
                                 "TypeError",
-                                "expected at most " + std::to_string(parameter_names.size())
+                                "expected at most " + std::to_string(positional_parameter_count)
                                     + " positional arguments, got " + std::to_string(positional_values.size()),
                                 instr.line
                             );
@@ -1032,10 +1035,12 @@ pybind11::object VM::run() {
             }
             case MAKE_CLOSURE:
             case MAKE_CLOSURE_SIG:
+            case MAKE_CLOSURE_KWONLY:
             {
 #if defined(__GNUC__) || defined(__clang__)
             op_make_closure:
             op_make_closure_sig:
+            op_make_closure_kwonly:
 #endif
                 const auto func_id = instr.args[0];
                 if (funcs_.find(func_id) == funcs_.end()) {
@@ -1049,6 +1054,49 @@ pybind11::object VM::run() {
                     }
                     const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
                     stack_.push_back(Value::from_python(closure_type(func_id, cells, instr.args[2])));
+                    ++ip;
+                    break;
+                }
+                if (instr.op == MAKE_CLOSURE_KWONLY) {
+                    const auto positional_count = static_cast<std::size_t>(instr.args[2]);
+                    const auto keyword_only_count = static_cast<std::size_t>(instr.args[3]);
+                    const auto positional_default_count = static_cast<std::size_t>(instr.args[4]);
+                    const auto keyword_default_count = static_cast<std::size_t>(instr.args[5]);
+                    if (positional_default_count > positional_count) {
+                        raise_space_error("RuntimeError", "closure positional defaults exceed parameter count", instr.line);
+                    }
+                    std::vector<std::pair<std::int64_t, pybind11::object>> keyword_defaults(keyword_default_count);
+                    for (std::size_t index = keyword_default_count; index > 0; --index) {
+                        auto value = pop("keyword-only default value").to_python();
+                        const auto name_id = pop("keyword-only default name").to_python().cast<std::int64_t>();
+                        keyword_defaults[index - 1] = {name_id, value};
+                    }
+                    std::vector<pybind11::object> positional_defaults(positional_default_count);
+                    for (std::size_t index = positional_default_count; index > 0; --index) {
+                        positional_defaults[index - 1] = pop("closure default").to_python();
+                    }
+                    pybind11::list parameter_names(positional_count + keyword_only_count);
+                    for (std::size_t index = static_cast<std::size_t>(parameter_names.size()); index > 0; --index) {
+                        const auto name_id = pop("closure parameter name").to_python().cast<std::int64_t>();
+                        parameter_names[index - 1] = pybind11::str(name(name_id));
+                    }
+                    pybind11::dict defaults;
+                    for (std::size_t index = 0; index < positional_default_count; ++index) {
+                        const auto parameter_index = positional_count - positional_default_count + index;
+                        defaults[pybind11::reinterpret_borrow<pybind11::object>(parameter_names[parameter_index])] =
+                            positional_defaults[index];
+                    }
+                    for (const auto& entry : keyword_defaults) {
+                        defaults[pybind11::str(name(entry.first))] = entry.second;
+                    }
+                    pybind11::list cells(cell_count);
+                    for (std::size_t index = cell_count; index > 0; --index) {
+                        cells[index - 1] = pop("closure cell").to_python();
+                    }
+                    const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
+                    stack_.push_back(
+                        Value::from_python(closure_type(func_id, cells, parameter_names, defaults, positional_count))
+                    );
                     ++ip;
                     break;
                 }
