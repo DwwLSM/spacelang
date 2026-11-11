@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 pytest.importorskip("spacelang._spacelang_cpp")
@@ -58,6 +60,35 @@ def test_native_vm_runs_conditional_jumps():
     )
     for vm_type in (PythonVM, VM):
         assert vm_type(jump_nonzero_program).run() == 1
+
+
+def test_native_and_reference_vms_iterate_python_iterables():
+    program = compile_py(
+        "result = []\n"
+        "for value in [1, 2, 3]:\n"
+        "    if value == 2:\n"
+        "        continue\n"
+        "    result.append(value)\n"
+        "print(result)\n"
+    )
+    for vm_type in (PythonVM, VM):
+        vm = vm_type(program)
+        vm.run()
+        assert vm.globals_["result"] == [1, 3]
+
+
+def test_native_and_reference_vms_support_assignment_targets():
+    program = compile_py(
+        "box.value += 2\n"
+        "items[0], items[1] = items[1], items[0]\n"
+    )
+    for vm_type in (PythonVM, VM):
+        vm = vm_type(program)
+        vm.globals_["box"] = SimpleNamespace(value=3)
+        vm.globals_["items"] = [1, 2]
+        vm.run()
+        assert vm.globals_["box"].value == 5
+        assert vm.globals_["items"] == [2, 1]
 
 
 @pytest.mark.parametrize(

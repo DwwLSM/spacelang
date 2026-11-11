@@ -63,14 +63,29 @@ Output:
 4
 ```
 
-The current frontend handles basic integer, boolean, and string constants,
-arithmetic, comparisons, boolean expressions, calls, assignments, supported
-imports, `if`/`else`, `while`, simple positional functions, and `for` loops
-over `range(...)`. Sequence indexing is supported for indexable values.
+The current frontend handles integer, boolean, string, and `None` constants,
+basic arithmetic and comparisons, boolean expressions, calls, assignment to
+names, attributes and indexes, unpacking assignments, supported augmented
+assignments, supported imports, `if`/`else`, `while`, `break`/`continue`, simple
+positional functions, and `for` loops over Python iterables. The reference and
+native VMs share iterator bytecode for lists, tuples, strings, `range(...)`, and
+other Python iterable objects. Sequence indexing and simple single-clause,
+unfiltered list comprehensions are supported.
 
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, nested or filtered comprehensions,
-keyword arguments to user functions, and general iterator protocols are not implemented.
+starred arguments, keyword-only parameters, slice assignment, and async syntax
+are not implemented. Expressions currently do not support
+floating-point literals, dictionaries, sets, slicing, membership or identity
+comparisons, or operators beyond `+`, `-`, `*`, `/`, and `%`. Functions must be
+top-level and use positional parameters; required and optional positional
+parameters are supported. Defaults must be immutable literals and are emitted
+at direct user-function call sites. Positional and keyword arguments are
+supported for direct calls to known user functions. Builtin keyword arguments
+are supported where the target builtin accepts them; methods and dynamically
+called objects do not accept keyword arguments. Functions use statically
+determined local variables; `global` declarations are supported, but closures,
+`nonlocal`, and nested functions are not.
 Unsupported syntax raises an error rather than being silently compiled.
 
 ## Run a `.sp` program
@@ -163,6 +178,12 @@ assembler directives, not VM opcodes.
 | 27 | `END_TRY` | none | Close a try/catch/finally region and continue its control flow. |
 | 28 | `SETUP_WITH` | none | Pop a value onto the VM's with-stack; this alone does not implement Python's full `with` protocol. |
 | 29 | `HALT` | none | Stop execution; if the stack is non-empty, pop its top as the run result. |
+| 30 | `GET_ITER` | none | Pop an iterable and push its iterator. |
+| 31 | `FOR_ITER` | `target_ip` | Advance the iterator at the top of the stack and push its next value; on exhaustion, pop it and jump to `target_ip`. |
+| 32 | `STORE_ATTR` | `name_id` | Pop an object and value, then assign the value to the named attribute. |
+| 33 | `STORE_INDEX` | none | Pop a key, container, and value, then assign `container[key] = value`. |
+| 34 | `UNPACK_SEQUENCE` | `count` | Unpack exactly `count` values from an iterable onto the stack. |
+| 35 | `PUSH_NONE` | none | Push Python's `None` value. |
 
 `OP` operation IDs:
 

@@ -183,7 +183,7 @@ def test_quine_hook_has_no_halt_def_or_out_of_range_jump():
     assert all(
         int(instr.args[0]) < len(_HOOK_INSTRS)
         for instr in _HOOK_INSTRS
-        if instr.op in {OP.JMP, OP.JZ, OP.JNZ}
+        if instr.op in {OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER}
     )
 
 

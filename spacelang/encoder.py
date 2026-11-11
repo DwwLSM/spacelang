@@ -60,6 +60,12 @@ def encode(program: Program) -> str:
             OP.END_TRY: 0,
             OP.SETUP_WITH: 0,
             OP.HALT: 0,
+            OP.GET_ITER: 0,
+            OP.FOR_ITER: 1,
+            OP.STORE_ATTR: 1,
+            OP.STORE_INDEX: 0,
+            OP.UNPACK_SEQUENCE: 1,
+            OP.PUSH_NONE: 0,
         }
         if op != OP.PUSH_STR and len(instr.args) != expected_args[op]:
             raise EncodingError(line=instr.line, ip=ip, msg=f"invalid argument count for {op.name}")

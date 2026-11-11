@@ -144,7 +144,7 @@ def _load_name_table(src: Path, referenced_ids: set[int]) -> dict[str, int]:
 
 
 def _referenced_name_ids(program: Program) -> set[int]:
-    name_ops = {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.CALL_METHOD}
+    name_ops = {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.CALL_METHOD}
     return {
         int(instr.args[0])
         for instr in program.instrs
@@ -154,8 +154,8 @@ def _referenced_name_ids(program: Program) -> set[int]:
 
 def _shift_program(program: Program, instruction_offset: int, name_offset: int) -> list[Instr]:
     shifted: list[Instr] = []
-    name_ops = {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.CALL_METHOD}
-    jump_ops = {OP.JMP, OP.JZ, OP.JNZ}
+    name_ops = {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.CALL_METHOD}
+    jump_ops = {OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER}
     for instr in program.instrs:
         args = list(instr.args)
         if instr.op in name_ops:
@@ -193,7 +193,7 @@ def _space_quine(src: Path, dst: Path, data: bytes) -> None:
             instr.op,
             [
                 int(arg) + name_offset
-                if instr.op in {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.CALL_METHOD}
+                if instr.op in {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.CALL_METHOD}
                 and index == 0
                 else arg
                 for index, arg in enumerate(instr.args)

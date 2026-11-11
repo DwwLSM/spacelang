@@ -44,6 +44,12 @@ enum Opcode : std::uint8_t {
     END_TRY = 27,
     SETUP_WITH = 28,
     HALT = 29,
+    GET_ITER = 30,
+    FOR_ITER = 31,
+    STORE_ATTR = 32,
+    STORE_INDEX = 33,
+    UNPACK_SEQUENCE = 34,
+    PUSH_NONE = 35,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -194,7 +200,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 30) {
+        if (opcode < 0 || opcode >= 36) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -205,10 +211,11 @@ VM::VM(pybind11::object program) {
             instr.args.push_back(args[index].cast<std::int64_t>());
         }
         const std::size_t expected[] = {
-            0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1, 1, 2, 0, 1,
-            1, 1, 1, 1, 1, 0, 2, 0, 0, 0,
+            0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
+            1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
+            1, 0, 1, 0,
         };
-        if (instr.op >= 30
+        if (instr.op >= 36
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -391,7 +398,9 @@ pybind11::object VM::run() {
             &&op_index, &&op_build_list, &&op_build_tuple, &&op_concat, &&op_def,
             &&op_ret, &&op_load_arg, &&op_load_local, &&op_store_local, &&op_jmp,
             &&op_jz, &&op_jnz, &&op_raise, &&op_try, &&op_end_try,
-            &&op_setup_with, &&op_halt,
+            &&op_setup_with, &&op_halt, &&op_get_iter, &&op_for_iter,
+            &&op_store_attr, &&op_store_index, &&op_unpack_sequence,
+            &&op_push_none,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -543,6 +552,118 @@ pybind11::object VM::run() {
                 ++ip;
                 break;
             }
+            case STORE_ATTR: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_store_attr:
+#endif
+                const auto object = pop("attribute object").to_python();
+                const auto value = pop("attribute value").to_python();
+                if (PyObject_SetAttrString(object.ptr(), name(instr.args[0]).c_str(), value.ptr()) < 0) {
+                    throw pybind11::error_already_set();
+                }
+                ++ip;
+                break;
+            }
+            case STORE_INDEX: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_store_index:
+#endif
+                const auto key = pop("index key").to_python();
+                const auto object = pop("index object").to_python();
+                const auto value = pop("index value").to_python();
+                if (PyObject_SetItem(object.ptr(), key.ptr(), value.ptr()) < 0) {
+                    throw pybind11::error_already_set();
+                }
+                ++ip;
+                break;
+            }
+            case UNPACK_SEQUENCE: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_unpack_sequence:
+#endif
+                const auto count = instr.args[0];
+                const auto iterable = pop("unpack value").to_python();
+                PyObject* iterator = PyObject_GetIter(iterable.ptr());
+                if (iterator == nullptr) {
+                    throw pybind11::error_already_set();
+                }
+                auto owned_iterator = pybind11::reinterpret_steal<pybind11::object>(iterator);
+                std::vector<pybind11::object> values;
+                values.reserve(static_cast<std::size_t>(count));
+                for (std::int64_t index = 0; index < count; ++index) {
+                    PyObject* item = PyIter_Next(owned_iterator.ptr());
+                    if (item == nullptr) {
+                        if (PyErr_Occurred()) {
+                            throw pybind11::error_already_set();
+                        }
+                        raise_space_error(
+                            "RuntimeError",
+                            "not enough values to unpack (expected " + std::to_string(count)
+                                + ", got " + std::to_string(values.size()) + ")",
+                            instr.line
+                        );
+                    }
+                    values.push_back(pybind11::reinterpret_steal<pybind11::object>(item));
+                }
+                PyObject* extra = PyIter_Next(owned_iterator.ptr());
+                if (extra != nullptr) {
+                    Py_DECREF(extra);
+                    raise_space_error(
+                        "RuntimeError",
+                        "too many values to unpack (expected " + std::to_string(count) + ")",
+                        instr.line
+                    );
+                }
+                if (PyErr_Occurred()) {
+                    throw pybind11::error_already_set();
+                }
+                for (auto value = values.rbegin(); value != values.rend(); ++value) {
+                    stack_.push_back(Value::from_python(*value));
+                }
+                ++ip;
+                break;
+            }
+            case GET_ITER: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_get_iter:
+#endif
+                const auto iterable = pop("iterable").to_python();
+                PyObject* iterator = PyObject_GetIter(iterable.ptr());
+                if (iterator == nullptr) {
+                    throw pybind11::error_already_set();
+                }
+                stack_.push_back(Value::from_python(pybind11::reinterpret_steal<pybind11::object>(iterator)));
+                ++ip;
+                break;
+            }
+            case FOR_ITER: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_for_iter:
+#endif
+                const auto target = instr.args[0];
+                if (target < 0 || target >= static_cast<std::int64_t>(instrs_.size())) {
+                    raise_space_error(
+                        "JumpOutOfRange",
+                        "jump target " + std::to_string(target) + " out of range",
+                        instr.line
+                    );
+                }
+                if (stack_.empty()) {
+                    raise_space_error("StackUnderflow", "stack underflow while iterating", instr.line);
+                }
+                PyObject* item = PyIter_Next(stack_.back().to_python().ptr());
+                if (item == nullptr) {
+                    if (PyErr_Occurred()) {
+                        throw pybind11::error_already_set();
+                    }
+                    stack_.pop_back();
+                    ip = target;
+                } else {
+                    stack_.push_back(Value::from_python(pybind11::reinterpret_steal<pybind11::object>(item)));
+                    ++ip;
+                }
+                break;
+            }
             case BUILD_LIST:
             case BUILD_TUPLE: {
 #if defined(__GNUC__) || defined(__clang__)
@@ -658,7 +779,7 @@ pybind11::object VM::run() {
                     || !frame.initialized[static_cast<std::size_t>(slot)]) {
                     const auto message = std::string(instr.op == LOAD_ARG ? "undefined arg slot " : "undefined local slot ")
                         + std::to_string(slot);
-                    raise_space_error("UndefinedName", message);
+                    raise_space_error("UndefinedName", message, instr.line);
                 }
                 stack_.push_back(frame.locals[static_cast<std::size_t>(slot)]);
                 ++ip;
@@ -701,6 +822,13 @@ pybind11::object VM::run() {
             op_push_int:
 #endif
                 stack_.emplace_back(instr.args[0]);
+                ++ip;
+                break;
+            case PUSH_NONE:
+#if defined(__GNUC__) || defined(__clang__)
+            op_push_none:
+#endif
+                stack_.emplace_back();
                 ++ip;
                 break;
             case OP: {

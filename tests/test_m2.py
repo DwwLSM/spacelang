@@ -64,6 +64,41 @@ def test_assemble_call_kw_operands():
     assert program.instrs[0].args == [0, 2, 1]
 
 
+def test_assemble_and_disassemble_iterator_branch():
+    program = assemble(
+        """
+        PUSH_STR "ab"
+        GET_ITER
+        .label loop
+        FOR_ITER done
+        STACK 3
+        JMP loop
+        .label done
+        HALT
+        """
+    )
+    assert (program.instrs[2].op, program.instrs[2].args) == (OP.FOR_ITER, [5])
+    restored = assemble(disasm(program))
+    assert [(instr.op, instr.args) for instr in restored.instrs] == [
+        (instr.op, instr.args) for instr in program.instrs
+    ]
+
+
+def test_assemble_and_disassemble_assignment_opcodes():
+    program = assemble(
+        """
+        STORE_ATTR value
+        STORE_INDEX
+        UNPACK_SEQUENCE 2
+        PUSH_NONE
+        HALT
+        """
+    )
+    assert [(instr.op, instr.args) for instr in assemble(disasm(program)).instrs] == [
+        (instr.op, instr.args) for instr in program.instrs
+    ]
+
+
 def test_assembler_supports_quoted_strings_inline_comments_and_name_declarations():
     program = assemble(
         """

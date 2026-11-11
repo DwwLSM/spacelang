@@ -43,6 +43,18 @@ def test_dead_code_after_jump_is_removed_and_target_remapped():
     assert VM(optimized).run() == 7
 
 
+def test_iterator_loop_targets_survive_optimization():
+    program = compile_py(
+        "result = 0\n"
+        "for value in [1, 2, 3]:\n"
+        "    result = result + value\n"
+    )
+    optimized = optimize(program, constant_pool=False)
+    vm = VM(optimized)
+    vm.run()
+    assert vm.globals_["result"] == 6
+
+
 def test_constant_pool_emits_each_repeated_integer_once():
     optimized = optimize(compile_py("print(10000)\nprint(10000)"))
     assert sum(instr.op == OP.PUSH_INT and instr.args == [10000] for instr in optimized.instrs) == 1
