@@ -272,7 +272,7 @@ def test_pyfront_user_functions_support_defaults_and_keyword_arguments():
         "def f(a, /): return a",
         "def f(*, value): return value",
         "def f(**kwargs): return 0",
-        "def outer():\n    def inner(): return 1\n    return inner()",
+        "def outer():\n    def inner(value=1): return value\n    return inner()",
     ],
 )
 def test_pyfront_rejects_unsupported_function_forms(source):
@@ -294,6 +294,55 @@ def test_pyfront_rejects_unsupported_function_forms(source):
 def test_pyfront_rejects_invalid_user_function_bindings(source):
     with pytest.raises(ParseError):
         compile_py(source)
+
+
+def test_pyfront_nested_functions_capture_and_update_enclosing_locals():
+    source = textwrap.dedent("""
+    def make_counter(start):
+        value = start
+        def increment():
+            nonlocal value
+            value = value + 1
+            return value
+        return increment
+
+    counter = make_counter(4)
+    print(counter(), counter())
+    """)
+    assert run_source(source) == "5 6\n"
+
+
+def test_pyfront_nested_function_closures_forward_cells_and_recurse():
+    source = textwrap.dedent("""
+    def make_factorial(limit):
+        def wrapper():
+            def factorial(value):
+                if value < 2:
+                    return 1
+                return value * factorial(value - 1)
+            return factorial(limit)
+        return wrapper
+
+    factorial = make_factorial(5)
+    print(factorial())
+    """)
+    assert run_source(source) == "120\n"
+
+
+def test_pyfront_nested_functions_without_captured_variables():
+    source = "def outer():\n    def inner(value): return value + 1\n    return inner\nf = outer()\nprint(f(4))"
+    assert run_source(source) == "5\n"
+
+
+def test_pyfront_rejects_nonlocal_without_enclosing_binding():
+    with pytest.raises(ParseError, match="no binding for nonlocal"):
+        compile_py("def invalid():\n    nonlocal missing")
+
+
+def test_pyfront_nested_function_calls_validate_argument_count():
+    source = "def outer():\n    def inner(value): return value\n    return inner()\nouter()"
+    with pytest.raises(SpaceError, match="expected 1 positional arguments, got 0"):
+        run_source(source)
 
 
 def test_pyfront_supports_simple_f_strings_and_list_comprehensions():

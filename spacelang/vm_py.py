@@ -20,12 +20,26 @@ from .ir import Instr, OP, Program
 from .modules import do_import
 
 
+class Cell:
+    def __init__(self, value: Any = None, initialized: bool = False):
+        self.value = value
+        self.initialized = initialized
+
+
+class Closure:
+    def __init__(self, func_id: int, cells: list[Cell], arg_count: int):
+        self.func_id = func_id
+        self.cells = cells
+        self.arg_count = arg_count
+
+
 @dataclass
 class Frame:
     func_id: int
     return_ip: int
     locals: list[Any] = field(default_factory=list)
     initialized: list[bool] = field(default_factory=list)
+    closure_cells: list[Cell] = field(default_factory=list)
 
 
 class VM:
@@ -56,12 +70,19 @@ class VM:
     def _push(self, value: Any) -> None:
         self.stack.append(value)
 
-    def _push_frame(self, func_id: int, args: list[Any], return_ip: int) -> None:
+    def _push_frame(
+        self,
+        func_id: int,
+        args: list[Any],
+        return_ip: int,
+        closure_cells: list[Cell] | None = None,
+    ) -> None:
         frame = Frame(
             func_id=func_id,
             return_ip=return_ip,
             locals=list(args),
             initialized=[True] * len(args),
+            closure_cells=closure_cells or [],
         )
         self.call_stack.append(frame)
 
@@ -244,7 +265,12 @@ class VM:
                 slot = int(args[0])
                 if slot < 0 or slot >= len(frame.locals) or not frame.initialized[slot]:
                     raise UndefinedName(line=instr.line, ip=self.ip, msg=f"undefined local slot {slot}")
-                self._push(frame.locals[slot])
+                value = frame.locals[slot]
+                if isinstance(value, Cell):
+                    if not value.initialized:
+                        raise UndefinedName(line=instr.line, ip=self.ip, msg=f"undefined local slot {slot}")
+                    value = value.value
+                self._push(value)
                 self.ip += 1
                 continue
 
@@ -257,8 +283,49 @@ class VM:
                 while len(frame.locals) <= slot:
                     frame.locals.append(None)
                     frame.initialized.append(False)
-                frame.locals[slot] = value
+                if isinstance(frame.locals[slot], Cell):
+                    frame.locals[slot].value = value
+                    frame.locals[slot].initialized = True
+                    frame.initialized[slot] = True
+                else:
+                    frame.locals[slot] = value
+                    frame.initialized[slot] = True
+                self.ip += 1
+                continue
+
+            if op == OP.CELLIFY:
+                frame = self._current_frame()
+                if frame is None:
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg="CELLIFY outside function")
+                slot = int(args[0])
+                while len(frame.locals) <= slot:
+                    frame.locals.append(None)
+                    frame.initialized.append(False)
+                if not isinstance(frame.locals[slot], Cell):
+                    frame.locals[slot] = Cell(frame.locals[slot], frame.initialized[slot])
                 frame.initialized[slot] = True
+                self.ip += 1
+                continue
+
+            if op == OP.LOAD_CELL_REF:
+                frame = self._current_frame()
+                if frame is None:
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg="LOAD_CELL_REF outside function")
+                slot = int(args[0])
+                if slot >= len(frame.locals) or not isinstance(frame.locals[slot], Cell):
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg=f"local slot {slot} is not a cell")
+                self._push(frame.locals[slot])
+                self.ip += 1
+                continue
+
+            if op == OP.LOAD_DEREF:
+                frame = self._current_frame()
+                if frame is None:
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg="LOAD_DEREF outside function")
+                index = int(args[0])
+                if index >= len(frame.closure_cells):
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg=f"undefined closure cell {index}")
+                self._push(frame.closure_cells[index])
                 self.ip += 1
                 continue
 
@@ -452,8 +519,42 @@ class VM:
                     args_list.append(self._pop("call arg"))
                 args_list.reverse()
                 callable_obj = self._pop("callable")
+                if isinstance(callable_obj, Closure):
+                    if callable_obj.func_id not in self.funcs:
+                        raise UndefinedFunc(
+                            line=instr.line,
+                            ip=self.ip,
+                            msg=f"undefined user function {callable_obj.func_id}",
+                        )
+                    expected_args = callable_obj.arg_count
+                    if len(args_list) != expected_args:
+                        raise TypeError(
+                            line=instr.line,
+                            ip=self.ip,
+                            msg=f"expected {expected_args} positional arguments, got {len(args_list)}",
+                        )
+                    self._push_frame(
+                        callable_obj.func_id,
+                        args_list,
+                        self.ip + 1,
+                        callable_obj.cells,
+                    )
+                    self.ip = self.funcs[callable_obj.func_id][0]
+                    continue
                 result = callable_obj(*args_list)
                 self._push(result)
+                self.ip += 1
+                continue
+
+            if op == OP.MAKE_CLOSURE:
+                func_id = int(args[0])
+                count = int(args[1])
+                arg_count = int(args[2])
+                cells = [self._pop("closure cell") for _ in range(count)]
+                cells.reverse()
+                if func_id not in self.funcs:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
+                self._push(Closure(func_id, cells, arg_count))
                 self.ip += 1
                 continue
 

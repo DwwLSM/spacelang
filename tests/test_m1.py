@@ -71,6 +71,10 @@ def test_iterator_opcodes_roundtrip():
         Instr(OP.PUSH_NONE),
         Instr(OP.STORE_ATTR, [0]),
         Instr(OP.STORE_INDEX),
+        Instr(OP.MAKE_CLOSURE, [10000, 2, 3]),
+        Instr(OP.CELLIFY, [3]),
+        Instr(OP.LOAD_CELL_REF, [4]),
+        Instr(OP.LOAD_DEREF, [5]),
         Instr(OP.HALT),
     ])
     encoded = encode(program)
@@ -82,6 +86,10 @@ def test_iterator_opcodes_roundtrip():
         (OP.PUSH_NONE, []),
         (OP.STORE_ATTR, [0]),
         (OP.STORE_INDEX, []),
+        (OP.MAKE_CLOSURE, [10000, 2, 3]),
+        (OP.CELLIFY, [3]),
+        (OP.LOAD_CELL_REF, [4]),
+        (OP.LOAD_DEREF, [5]),
         (OP.HALT, []),
     ]
 

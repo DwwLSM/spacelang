@@ -50,6 +50,10 @@ enum Opcode : std::uint8_t {
     STORE_INDEX = 33,
     UNPACK_SEQUENCE = 34,
     PUSH_NONE = 35,
+    MAKE_CLOSURE = 36,
+    CELLIFY = 37,
+    LOAD_CELL_REF = 38,
+    LOAD_DEREF = 39,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -200,7 +204,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 36) {
+        if (opcode < 0 || opcode >= 40) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -213,9 +217,9 @@ VM::VM(pybind11::object program) {
         const std::size_t expected[] = {
             0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
             1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
-            1, 0, 1, 0,
+            1, 0, 1, 0, 3, 1, 1, 1,
         };
-        if (instr.op >= 36
+        if (instr.op >= 40
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -400,7 +404,8 @@ pybind11::object VM::run() {
             &&op_jz, &&op_jnz, &&op_raise, &&op_try, &&op_end_try,
             &&op_setup_with, &&op_halt, &&op_get_iter, &&op_for_iter,
             &&op_store_attr, &&op_store_index, &&op_unpack_sequence,
-            &&op_push_none,
+            &&op_push_none, &&op_make_closure, &&op_cellify,
+            &&op_load_cell_ref, &&op_load_deref,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -524,6 +529,42 @@ pybind11::object VM::run() {
                 }
                 if (instr.op == CALL_OBJ) {
                     callable = pop("callable").to_python();
+                    const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
+                    if (pybind11::isinstance(callable, closure_type)) {
+                        const auto func_id_value = callable.attr("func_id").cast<std::int64_t>();
+                        const auto function = funcs_.find(func_id_value);
+                        if (function == funcs_.end()) {
+                            raise_space_error(
+                                "UndefinedFunc",
+                                "undefined user function " + std::to_string(func_id_value)
+                            );
+                        }
+                        const auto expected_args = callable.attr("arg_count").cast<std::int64_t>();
+                        if (positional_values.size() != static_cast<std::size_t>(expected_args)) {
+                            raise_space_error(
+                                "TypeError",
+                                "expected " + std::to_string(expected_args)
+                                    + " positional arguments, got "
+                                    + std::to_string(positional_values.size()),
+                                instr.line
+                            );
+                        }
+                        Frame frame{
+                            func_id_value,
+                            ip + 1,
+                            {},
+                            {},
+                            callable.attr("cells").cast<pybind11::list>(),
+                        };
+                        frame.locals.resize(positional_values.size());
+                        frame.initialized.assign(frame.locals.size(), true);
+                        for (std::size_t index = 0; index < positional_values.size(); ++index) {
+                            frame.locals[index] = Value::from_python(positional_values[index]);
+                        }
+                        call_stack_.push_back(std::move(frame));
+                        ip = function->second.first;
+                        break;
+                    }
                 } else if (instr.op == CALL_METHOD) {
                     callable = pop("method object").to_python().attr(name(instr.args[0]).c_str());
                 }
@@ -781,7 +822,20 @@ pybind11::object VM::run() {
                         + std::to_string(slot);
                     raise_space_error("UndefinedName", message, instr.line);
                 }
-                stack_.push_back(frame.locals[static_cast<std::size_t>(slot)]);
+                const auto& local = frame.locals[static_cast<std::size_t>(slot)];
+                if (instr.op == LOAD_LOCAL) {
+                    const auto value = local.to_python();
+                    const auto cell_type = pybind11::module_::import("spacelang.vm_py").attr("Cell");
+                    if (pybind11::isinstance(value, cell_type)) {
+                        if (!value.attr("initialized").cast<bool>()) {
+                            raise_space_error("UndefinedName", "undefined local slot " + std::to_string(slot), instr.line);
+                        }
+                        stack_.push_back(Value::from_python(value.attr("value")));
+                        ++ip;
+                        break;
+                    }
+                }
+                stack_.push_back(local);
                 ++ip;
                 break;
             }
@@ -798,8 +852,101 @@ pybind11::object VM::run() {
                     frame.locals.resize(slot + 1);
                     frame.initialized.resize(slot + 1, false);
                 }
-                frame.locals[slot] = pop("local value");
+                auto value = pop("local value");
+                if (frame.initialized[slot]) {
+                    const auto local = frame.locals[slot].to_python();
+                    const auto cell_type = pybind11::module_::import("spacelang.vm_py").attr("Cell");
+                    if (pybind11::isinstance(local, cell_type)) {
+                        local.attr("value") = value.to_python();
+                        local.attr("initialized") = true;
+                        frame.initialized[slot] = true;
+                        ++ip;
+                        break;
+                    }
+                }
+                frame.locals[slot] = std::move(value);
                 frame.initialized[slot] = true;
+                ++ip;
+                break;
+            }
+            case CELLIFY: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_cellify:
+#endif
+                if (call_stack_.empty() || instr.args[0] < 0) {
+                    raise_space_error("UndefinedName", "CELLIFY outside function", instr.line);
+                }
+                auto& frame = call_stack_.back();
+                const auto slot = static_cast<std::size_t>(instr.args[0]);
+                if (frame.locals.size() <= slot) {
+                    frame.locals.resize(slot + 1);
+                    frame.initialized.resize(slot + 1, false);
+                }
+                const auto cell_type = pybind11::module_::import("spacelang.vm_py").attr("Cell");
+                if (!frame.initialized[slot]
+                    || !pybind11::isinstance(frame.locals[slot].to_python(), cell_type)) {
+                    const bool initialized = frame.initialized[slot];
+                    const auto value = initialized
+                        ? frame.locals[slot].to_python()
+                        : pybind11::none();
+                    frame.locals[slot] = Value::from_python(cell_type(value, initialized));
+                }
+                frame.initialized[slot] = true;
+                ++ip;
+                break;
+            }
+            case LOAD_CELL_REF: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_load_cell_ref:
+#endif
+                if (call_stack_.empty() || instr.args[0] < 0) {
+                    raise_space_error("UndefinedName", "LOAD_CELL_REF outside function", instr.line);
+                }
+                const auto slot = static_cast<std::size_t>(instr.args[0]);
+                const auto& frame = call_stack_.back();
+                if (slot >= frame.locals.size() || !frame.initialized[slot]) {
+                    raise_space_error("UndefinedName", "local slot is not a cell", instr.line);
+                }
+                const auto cell = frame.locals[slot].to_python();
+                const auto cell_type = pybind11::module_::import("spacelang.vm_py").attr("Cell");
+                if (!pybind11::isinstance(cell, cell_type)) {
+                    raise_space_error("UndefinedName", "local slot is not a cell", instr.line);
+                }
+                stack_.push_back(frame.locals[slot]);
+                ++ip;
+                break;
+            }
+            case LOAD_DEREF: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_load_deref:
+#endif
+                if (call_stack_.empty() || instr.args[0] < 0) {
+                    raise_space_error("UndefinedName", "LOAD_DEREF outside function", instr.line);
+                }
+                const auto index = static_cast<std::size_t>(instr.args[0]);
+                const auto& cells = call_stack_.back().closure_cells;
+                if (index >= static_cast<std::size_t>(cells.size())) {
+                    raise_space_error("UndefinedName", "undefined closure cell", instr.line);
+                }
+                stack_.push_back(Value::from_python(cells[index]));
+                ++ip;
+                break;
+            }
+            case MAKE_CLOSURE: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_make_closure:
+#endif
+                const auto func_id = instr.args[0];
+                if (funcs_.find(func_id) == funcs_.end()) {
+                    raise_space_error("UndefinedFunc", "undefined user function " + std::to_string(func_id), instr.line);
+                }
+                const auto count = static_cast<std::size_t>(instr.args[1]);
+                pybind11::list cells(count);
+                for (std::size_t index = count; index > 0; --index) {
+                    cells[index - 1] = pop("closure cell").to_python();
+                }
+                const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
+                stack_.push_back(Value::from_python(closure_type(func_id, cells, instr.args[2])));
                 ++ip;
                 break;
             }

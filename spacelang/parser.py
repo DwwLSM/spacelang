@@ -49,7 +49,7 @@ def parse(token_stream) -> Program:
         op_code = token_stream[i]
         op_line = token_lines[i]
         i += 1
-        if op_code not in range(36):
+        if op_code not in range(40):
             raise ParseError(line=op_line, ip=op_index, msg=f"unknown opcode {op_code}")
 
         op = OP(op_code)
@@ -59,6 +59,11 @@ def parse(token_stream) -> Program:
             npos, i = _parse_int_value(token_stream, i, op_line)
             nkw, i = _parse_int_value(token_stream, i, op_line)
             args = [func_id, npos, nkw]
+        elif op == OP.MAKE_CLOSURE:
+            func_id, i = _parse_int_value(token_stream, i, op_line)
+            nfree, i = _parse_int_value(token_stream, i, op_line)
+            nargs, i = _parse_int_value(token_stream, i, op_line)
+            args = [func_id, nfree, nargs]
         elif op in {OP.CALL, OP.CALL_METHOD, OP.DEF}:
             func_id, i = _parse_int_value(token_stream, i, op_line)
             nargs, i = _parse_int_value(token_stream, i, op_line)
@@ -66,7 +71,7 @@ def parse(token_stream) -> Program:
         elif op == OP.CALL_OBJ:
             nargs, i = _parse_int_value(token_stream, i, op_line)
             args = [nargs]
-        elif op in {OP.IMPORT, OP.OP, OP.STACK, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER, OP.INDEX, OP.UNPACK_SEQUENCE, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.CONCAT, OP.PUSH_INT, OP.PUSH_STR, OP.CALL, OP.CALL_KW, OP.CALL_METHOD, OP.DEF}:
+        elif op in {OP.IMPORT, OP.OP, OP.STACK, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.CELLIFY, OP.LOAD_CELL_REF, OP.LOAD_DEREF, OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER, OP.INDEX, OP.UNPACK_SEQUENCE, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.CONCAT, OP.PUSH_INT, OP.PUSH_STR, OP.CALL, OP.CALL_KW, OP.CALL_METHOD, OP.DEF, OP.MAKE_CLOSURE}:
             if op == OP.PUSH_INT:
                 value, i = _parse_int_value(token_stream, i, op_line)
                 args = [_decode_zigzag(value)]

@@ -43,6 +43,10 @@ class OP(IntEnum):
     STORE_INDEX = 33
     UNPACK_SEQUENCE = 34
     PUSH_NONE = 35
+    MAKE_CLOSURE = 36
+    CELLIFY = 37
+    LOAD_CELL_REF = 38
+    LOAD_DEREF = 39
 
 
 @dataclass(slots=True)

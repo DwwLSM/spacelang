@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import textwrap
 
 from .errors import ParseError
@@ -35,13 +35,26 @@ class _LocalNameCollector(ast.NodeVisitor):
     def __init__(self) -> None:
         self.names: list[str] = []
         self.global_names: set[str] = set()
+        self.nonlocal_names: set[str] = set()
+        self.loaded_names: set[str] = set()
+        self.nested_functions: list[ast.FunctionDef] = []
 
     def visit_Name(self, node: ast.Name) -> None:
         if isinstance(node.ctx, ast.Store) and node.id not in self.names:
             self.names.append(node.id)
+        elif isinstance(node.ctx, ast.Load):
+            self.loaded_names.add(node.id)
 
     def visit_Global(self, node: ast.Global) -> None:
         self.global_names.update(node.names)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        self.nonlocal_names.update(node.names)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        if node.name not in self.names:
+            self.names.append(node.name)
+        self.nested_functions.append(node)
 
     def visit_ListComp(self, node: ast.ListComp) -> None:
         self.visit(node.elt)
@@ -49,6 +62,18 @@ class _LocalNameCollector(ast.NodeVisitor):
             self.visit(generator.iter)
             for condition in generator.ifs:
                 self.visit(condition)
+
+
+@dataclass
+class _FunctionScope:
+    node: ast.FunctionDef
+    local_names: set[str]
+    global_names: set[str]
+    nonlocal_names: set[str]
+    loaded_names: set[str]
+    free_names: list[str] = field(default_factory=list)
+    captured_names: set[str] = field(default_factory=set)
+    children: list[_FunctionScope] = field(default_factory=list)
 
 
 @dataclass
@@ -76,8 +101,10 @@ class PyFront(ast.NodeVisitor):
         self.function_ids: dict[str, int] = {}
         self.function_signatures: dict[str, _FunctionSignature] = {}
         self.function_id_by_node: dict[int, int] = {}
+        self.function_scopes: dict[int, _FunctionScope] = {}
         self.next_func_id = 10000
         self.pending_labels: list[tuple[str, int]] = []
+        self.pending_nested_functions: list[ast.FunctionDef] = []
         self.next_temp_id = 0
         self.source_names: set[str] = set()
         self.name_overrides: list[dict[str, str]] = []
@@ -151,6 +178,80 @@ class PyFront(ast.NodeVisitor):
             _emit(self.instrs, OP.STORE_LOCAL, self.locals_stack[-1][name], line=line)
         else:
             _emit(self.instrs, OP.STORE_GLOBAL, self._name_id(name), line=line)
+
+    def _is_local_name(self, name: str) -> bool:
+        for overrides in reversed(self.name_overrides):
+            if name in overrides:
+                return True
+        return (
+            len(self.locals_stack) > 1
+            and name not in self.global_names_stack[-1]
+            and name in self.locals_stack[-1]
+        )
+
+    def _resolve_enclosing_name(
+        self,
+        name: str,
+        ancestors: list[_FunctionScope],
+    ) -> bool:
+        for scope in ancestors:
+            if name in scope.global_names:
+                return False
+            if name in scope.local_names or name in scope.free_names:
+                return True
+        return False
+
+    def _build_function_scope(
+        self,
+        node: ast.FunctionDef,
+        ancestors: list[_FunctionScope],
+    ) -> _FunctionScope:
+        collector = _LocalNameCollector()
+        for stmt in node.body:
+            collector.visit(stmt)
+        parameter_names = {arg.arg for arg in node.args.args}
+        conflicting = collector.global_names & collector.nonlocal_names
+        if conflicting:
+            name = sorted(conflicting)[0]
+            raise ParseError(line=node.lineno, ip=0, msg=f"name {name!r} is nonlocal and global")
+        local_names = (
+            parameter_names | set(collector.names)
+        ) - collector.global_names - collector.nonlocal_names
+        scope = _FunctionScope(
+            node=node,
+            local_names=local_names,
+            global_names=collector.global_names,
+            nonlocal_names=collector.nonlocal_names,
+            loaded_names=collector.loaded_names,
+        )
+        self.function_scopes[id(node)] = scope
+
+        candidates = collector.loaded_names | collector.nonlocal_names
+        for name in sorted(candidates):
+            if name in local_names or name in collector.global_names:
+                continue
+            if name in collector.nonlocal_names:
+                if not self._resolve_enclosing_name(name, ancestors):
+                    raise ParseError(
+                        line=node.lineno,
+                        ip=0,
+                        msg=f"no binding for nonlocal {name!r} found",
+                    )
+                scope.free_names.append(name)
+            elif self._resolve_enclosing_name(name, ancestors):
+                scope.free_names.append(name)
+
+        for child_node in collector.nested_functions:
+            child = self._build_function_scope(child_node, [scope, *ancestors])
+            scope.children.append(child)
+            for name in child.free_names:
+                if name in scope.local_names:
+                    scope.captured_names.add(name)
+                elif name not in scope.global_names and self._resolve_enclosing_name(name, ancestors):
+                    if name not in scope.free_names:
+                        scope.free_names.append(name)
+
+        return scope
 
     def _compile_expr(self, node: ast.AST) -> None:
         if isinstance(node, ast.Constant):
@@ -375,7 +476,8 @@ class PyFront(ast.NodeVisitor):
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
                 name = node.func.id
-                if name in BUILTIN_IDS:
+                local_callable = self._is_local_name(name)
+                if name in BUILTIN_IDS and not local_callable:
                     line = getattr(node, "lineno", 0)
                     if node.keywords:
                         for keyword in node.keywords:
@@ -398,7 +500,7 @@ class PyFront(ast.NodeVisitor):
                             self._compile_expr(arg)
                         _emit(self.instrs, OP.CALL, BUILTIN_IDS[name], len(node.args), line=line)
                     return
-                if name in self.function_ids:
+                if name in self.function_ids and not local_callable:
                     self._compile_user_function_call(node, name)
                     return
                 self._compile_expr(node.func)
@@ -531,6 +633,9 @@ class PyFront(ast.NodeVisitor):
         if isinstance(node, ast.Global):
             return
 
+        if isinstance(node, ast.Nonlocal):
+            return
+
         if isinstance(node, ast.Break):
             if not self.loop_stack:
                 raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="'break' outside loop")
@@ -655,6 +760,7 @@ class PyFront(ast.NodeVisitor):
                 ast.Import,
                 ast.ImportFrom,
                 ast.Global,
+                ast.Nonlocal,
                 ast.Pass,
                 ast.Break,
                 ast.Continue,
@@ -663,11 +769,20 @@ class PyFront(ast.NodeVisitor):
             self._compile_expr(node)
             return
         if isinstance(node, ast.FunctionDef):
-            self._compile_function(node)
+            if len(self.locals_stack) > 1:
+                self._compile_nested_function(node)
+            else:
+                self._compile_function(node)
             return
         raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported statement: {type(node).__name__}")
 
-    def _compile_function(self, node: ast.FunctionDef) -> None:
+    def _compile_function(self, node: ast.FunctionDef, *, nested: bool = False) -> None:
+        if nested and node.args.defaults:
+            raise ParseError(
+                line=getattr(node, "lineno", 0),
+                ip=0,
+                msg="nested functions do not support default arguments",
+            )
         if (
             node.args.posonlyargs
             or node.args.vararg is not None
@@ -690,22 +805,26 @@ class PyFront(ast.NodeVisitor):
                 msg="function defaults must be immutable literals",
             )
         if any(
-            isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            for stmt in node.body
-            for child in ast.walk(stmt)
+            isinstance(child, (ast.AsyncFunctionDef, ast.ClassDef))
+            for child in ast.walk(node)
         ):
-            raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="nested functions and classes are unsupported")
+            raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="async functions and classes are unsupported")
         func_id = self.function_id_by_node.get(id(node))
         if func_id is None:
             func_id = self._next_func_id()
             self.function_id_by_node[id(node)] = func_id
-        self.function_ids[node.name] = func_id
-        self.function_signatures[node.name] = _FunctionSignature(parameter_names, defaults)
-        start_ip = len(self.instrs)
+        if not nested:
+            self.function_ids[node.name] = func_id
+            self.function_signatures[node.name] = _FunctionSignature(parameter_names, defaults)
         _emit(self.instrs, OP.DEF, func_id, len(node.args.args), line=getattr(node, "lineno", 0))
         start_ip = len(self.instrs)
         self.funcs[func_id] = (start_ip, start_ip)
-        local_scope = {}
+
+        scope = self.function_scopes.get(id(node))
+        if scope is None:
+            scope = self._build_function_scope(node, [])
+
+        local_scope: dict[str, int] = {}
         for idx, arg in enumerate(node.args.args):
             local_scope[arg.arg] = idx
         collector = _LocalNameCollector()
@@ -720,11 +839,21 @@ class PyFront(ast.NodeVisitor):
                 msg=f"parameter {name!r} cannot be declared global",
             )
         for name in collector.names:
-            if name not in local_scope and name not in collector.global_names:
+            if name in scope.local_names and name not in local_scope:
+                local_scope[name] = len(local_scope)
+        for name in scope.free_names:
+            if name not in local_scope:
                 local_scope[name] = len(local_scope)
         enclosing_loops, self.loop_stack = self.loop_stack, []
         self.locals_stack.append(local_scope)
         self.global_names_stack.append(collector.global_names)
+
+        for name in sorted(scope.captured_names):
+            _emit(self.instrs, OP.CELLIFY, local_scope[name], line=node.lineno)
+        for index, name in enumerate(scope.free_names):
+            _emit(self.instrs, OP.LOAD_DEREF, index, line=node.lineno)
+            _emit(self.instrs, OP.STORE_LOCAL, local_scope[name], line=node.lineno)
+
         for stmt in node.body:
             self._compile_stmt(stmt)
         self.global_names_stack.pop()
@@ -734,6 +863,39 @@ class PyFront(ast.NodeVisitor):
         _emit(self.instrs, OP.PUSH_INT, 0, line=getattr(node, "lineno", 0))
         _emit(self.instrs, OP.RET, line=getattr(node, "lineno", 0))
         self.funcs[func_id] = (start_ip, len(self.instrs))
+
+    def _compile_nested_function(self, node: ast.FunctionDef) -> None:
+        line = getattr(node, "lineno", 0)
+        scope = self.function_scopes[id(node)]
+        func_id = self.function_id_by_node[id(node)]
+
+        for name in scope.free_names:
+            if (
+                name not in self.global_names_stack[-1]
+                and name in self.locals_stack[-1]
+            ):
+                _emit(
+                    self.instrs,
+                    OP.LOAD_CELL_REF,
+                    self.locals_stack[-1][name],
+                    line=line,
+                )
+            else:
+                raise ParseError(
+                    line=line,
+                    ip=0,
+                    msg=f"cannot capture enclosing name {name!r}",
+                )
+        _emit(
+            self.instrs,
+            OP.MAKE_CLOSURE,
+            func_id,
+            len(scope.free_names),
+            len(node.args.args),
+            line=line,
+        )
+        self._store_name(node.name, line)
+        self.pending_nested_functions.append(node)
 
     def _is_supported_default(self, node: ast.expr) -> bool:
         if isinstance(node, ast.Constant):
@@ -804,11 +966,18 @@ class PyFront(ast.NodeVisitor):
         self.source_names = {
             node.id for node in ast.walk(self._module) if isinstance(node, ast.Name)
         }
+
+        def assign_function_ids(scope: _FunctionScope) -> None:
+            func_id = self._next_func_id()
+            self.function_id_by_node[id(scope.node)] = func_id
+            for child in scope.children:
+                assign_function_ids(child)
+
         for stmt in self._module.body:
             if isinstance(stmt, ast.FunctionDef):
-                func_id = self._next_func_id()
-                self.function_id_by_node[id(stmt)] = func_id
-                self.function_ids[stmt.name] = func_id
+                scope = self._build_function_scope(stmt, [])
+                assign_function_ids(scope)
+                self.function_ids[stmt.name] = self.function_id_by_node[id(stmt)]
                 parameter_names = [arg.arg for arg in stmt.args.args]
                 required_count = len(parameter_names) - len(stmt.args.defaults)
                 self.function_signatures[stmt.name] = _FunctionSignature(
@@ -818,6 +987,11 @@ class PyFront(ast.NodeVisitor):
         for stmt in self._module.body:
             self._compile_stmt(stmt)
         _emit(self.instrs, OP.HALT)
+        pending_index = 0
+        while pending_index < len(self.pending_nested_functions):
+            node = self.pending_nested_functions[pending_index]
+            pending_index += 1
+            self._compile_function(node, nested=True)
         self._resolve_labels()
         return Program(instrs=self.instrs, names=self.names, labels=self.labels, funcs=self.funcs, try_table=[])
 
