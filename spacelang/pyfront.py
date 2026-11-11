@@ -89,6 +89,7 @@ class _FunctionSignature:
     keyword_only_names: list[str]
     defaults: dict[str, ast.expr]
     vararg_name: str | None = None
+    kwarg_name: str | None = None
 
     @property
     def parameter_names(self) -> list[str]:
@@ -234,6 +235,8 @@ class PyFront(ast.NodeVisitor):
         }
         if node.args.vararg:
             parameter_names.add(node.args.vararg.arg)
+        if node.args.kwarg:
+            parameter_names.add(node.args.kwarg.arg)
         conflicting = collector.global_names & collector.nonlocal_names
         if conflicting:
             name = sorted(conflicting)[0]
@@ -822,14 +825,11 @@ class PyFront(ast.NodeVisitor):
         raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported statement: {type(node).__name__}")
 
     def _compile_function(self, node: ast.FunctionDef, *, nested: bool = False) -> None:
-        if (
-            node.args.posonlyargs
-            or node.args.kwarg is not None
-        ):
+        if node.args.posonlyargs:
             raise ParseError(
                 line=getattr(node, "lineno", 0),
                 ip=0,
-                msg="positional-only parameters and **kwargs are unsupported",
+                msg="positional-only parameters are unsupported",
             )
         positional_names = [arg.arg for arg in node.args.args]
         keyword_only_names = [arg.arg for arg in node.args.kwonlyargs]
@@ -863,10 +863,12 @@ class PyFront(ast.NodeVisitor):
                 keyword_only_names,
                 defaults,
                 node.args.vararg.arg if node.args.vararg else None,
+                node.args.kwarg.arg if node.args.kwarg else None,
             )
         local_parameter_names = [
             *parameter_names,
             *([node.args.vararg.arg] if node.args.vararg else []),
+            *([node.args.kwarg.arg] if node.args.kwarg else []),
         ]
         _emit(self.instrs, OP.DEF, func_id, len(local_parameter_names), line=getattr(node, "lineno", 0))
         start_ip = len(self.instrs)
@@ -881,6 +883,8 @@ class PyFront(ast.NodeVisitor):
             local_scope[arg.arg] = idx
         if node.args.vararg:
             local_scope[node.args.vararg.arg] = len(local_scope)
+        if node.args.kwarg:
+            local_scope[node.args.kwarg.arg] = len(local_scope)
         collector = _LocalNameCollector()
         for stmt in node.body:
             collector.visit(stmt)
@@ -963,8 +967,11 @@ class PyFront(ast.NodeVisitor):
         for name, default in keyword_only_defaults:
             _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
             self._compile_expr(default)
-        if node.args.vararg:
-            _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.vararg.arg), line=line)
+        if node.args.vararg or node.args.kwarg:
+            if node.args.vararg:
+                _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.vararg.arg), line=line)
+            if node.args.kwarg:
+                _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.kwarg.arg), line=line)
             closure_op = OP.MAKE_CLOSURE_ARGS
             closure_args = (
                 func_id,
@@ -973,6 +980,8 @@ class PyFront(ast.NodeVisitor):
                 len(keyword_only_names),
                 len(node.args.defaults),
                 len(keyword_only_defaults),
+                int(node.args.vararg is not None),
+                int(node.args.kwarg is not None),
             )
         elif keyword_only_names:
             closure_op = OP.MAKE_CLOSURE_KWONLY
@@ -1028,7 +1037,7 @@ class PyFront(ast.NodeVisitor):
         for keyword in node.keywords:
             if keyword.arg is None:
                 raise ParseError(line=line, ip=0, msg="expanded keyword arguments are unsupported")
-            if keyword.arg not in parameter_names:
+            if keyword.arg not in parameter_names and function.args.kwarg is None:
                 raise ParseError(
                     line=line,
                     ip=0,
@@ -1082,11 +1091,13 @@ class PyFront(ast.NodeVisitor):
         for keyword in node.keywords:
             if keyword.arg is None:
                 raise ParseError(line=line, ip=0, msg="expanded keyword arguments are unsupported")
-            if keyword.arg not in parameter_names:
+            if keyword.arg not in parameter_names and signature.kwarg_name is None:
                 raise ParseError(line=line, ip=0, msg=f"unexpected keyword argument {keyword.arg!r} for {name}")
             if keyword.arg in provided_names or keyword.arg in keyword_names:
                 raise ParseError(line=line, ip=0, msg=f"multiple values for argument {keyword.arg!r}")
             keyword_names.add(keyword.arg)
+            if keyword.arg in parameter_names:
+                bound[keyword.arg] = self._new_temp_name()
 
         for parameter_name, value in zip(provided_names, node.args):
             temp_name = self._new_temp_name()
@@ -1100,12 +1111,6 @@ class PyFront(ast.NodeVisitor):
                 self._compile_expr(value)
                 self._store_name(temp_name, line)
                 vararg_temps.append(temp_name)
-        for keyword in node.keywords:
-            temp_name = self._new_temp_name()
-            self._compile_expr(keyword.value)
-            self._store_name(temp_name, line)
-            bound[keyword.arg] = temp_name
-
         for parameter_name in parameter_names:
             if parameter_name in bound:
                 continue
@@ -1117,6 +1122,17 @@ class PyFront(ast.NodeVisitor):
                     ip=0,
                     msg=f"missing required argument {parameter_name!r} for {name}",
                 )
+        extra_keyword_temps = {
+            keyword.arg: self._new_temp_name()
+            for keyword in node.keywords
+            if keyword.arg not in parameter_names
+        }
+        for keyword in node.keywords:
+            temp_name = bound.get(keyword.arg)
+            if temp_name is None:
+                temp_name = extra_keyword_temps.get(keyword.arg)
+            self._compile_expr(keyword.value)
+            self._store_name(temp_name, line)
         for parameter_name in parameter_names:
             if parameter_name in bound:
                 self._load_name(bound[parameter_name], line)
@@ -1126,7 +1142,16 @@ class PyFront(ast.NodeVisitor):
             for temp_name in vararg_temps:
                 self._load_name(temp_name, line)
             _emit(self.instrs, OP.BUILD_TUPLE, len(vararg_temps), line=line)
-        argument_count = len(parameter_names) + bool(signature.vararg_name)
+        if signature.kwarg_name:
+            for keyword_name, temp_name in extra_keyword_temps.items():
+                _emit(self.instrs, OP.PUSH_STR, len(keyword_name), *map(ord, keyword_name), line=line)
+                self._load_name(temp_name, line)
+            _emit(self.instrs, OP.BUILD_DICT, len(extra_keyword_temps), line=line)
+        argument_count = (
+            len(parameter_names)
+            + bool(signature.vararg_name)
+            + bool(signature.kwarg_name)
+        )
         _emit(self.instrs, OP.CALL, self.function_ids[name], argument_count, line=line)
 
     def compile(self) -> Program:
@@ -1159,6 +1184,7 @@ class PyFront(ast.NodeVisitor):
                     keyword_only_names,
                     defaults,
                     stmt.args.vararg.arg if stmt.args.vararg else None,
+                    stmt.args.kwarg.arg if stmt.args.kwarg else None,
                 )
         for stmt in self._module.body:
             self._compile_stmt(stmt)

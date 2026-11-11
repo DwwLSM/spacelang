@@ -168,6 +168,31 @@ def test_compile_py_supports_varargs_in_sp_file(tmp_path):
         assert output.getvalue() == "(2, (3, 4), 'top', '!')\n('<', 5, (6, 7), '?')\n"
 
 
+def test_compile_py_supports_kwargs_in_sp_file(tmp_path):
+    source = tmp_path / "kwargs.py"
+    destination = tmp_path / "kwargs.sp"
+    source.write_text(
+        "def collect(value, **options):\n"
+        "    return (value, options)\n"
+        "\n"
+        "def make_collector(prefix):\n"
+        "    def collect(value, **options):\n"
+        "        return (prefix, value, options)\n"
+        "    return collect\n"
+        "\n"
+        "closure = make_collector('<')\n"
+        "print(collect(2, color='blue', size=3))\n"
+        "print(closure(4, active=True))\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "(2, {'color': 'blue', 'size': 3})\n('<', 4, {'active': True})\n"
+
+
 def test_compile_py_supports_global_declarations_in_sp_file(tmp_path):
     source = tmp_path / "global_scope.py"
     destination = tmp_path / "global_scope.sp"

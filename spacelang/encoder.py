@@ -73,7 +73,8 @@ def encode(program: Program) -> str:
             OP.CALL_OBJ_KW: 2,
             OP.MAKE_CLOSURE_SIG: 4,
             OP.MAKE_CLOSURE_KWONLY: 6,
-            OP.MAKE_CLOSURE_ARGS: 6,
+            OP.MAKE_CLOSURE_ARGS: 8,
+            OP.BUILD_DICT: 1,
         }
         if op != OP.PUSH_STR and len(instr.args) != expected_args[op]:
             raise EncodingError(line=instr.line, ip=ip, msg=f"invalid argument count for {op.name}")

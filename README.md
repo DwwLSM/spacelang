@@ -76,9 +76,9 @@ supported.
 
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, dictionary and set comprehensions,
-`**kwargs` parameters and argument unpacking, slice assignment, and async syntax
-are not implemented. Functions may collect extra positional arguments with
-`*args`. Function defaults must be immutable literals.
+Argument unpacking, slice assignment, and async syntax are not implemented.
+Functions may collect extra positional arguments with `*args` and extra
+keyword arguments with `**kwargs`. Function defaults must be immutable literals.
 Keyword arguments work for top-level functions, builtins, and dynamic
 SpaceLang closures; methods do not accept keyword arguments. Expressions
 currently do not support floating-point literals, dictionaries, sets, slicing,
@@ -195,7 +195,8 @@ assembler directives, not VM opcodes.
 | 40 | `CALL_OBJ_KW` | `positional_count, keyword_count` | Call a dynamic callable with positional and named arguments. |
 | 41 | `MAKE_CLOSURE_SIG` | `func_id, cell_count, arg_count, default_count` | Pop captured cells and signature metadata, then push a closure. |
 | 42 | `MAKE_CLOSURE_KWONLY` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count` | Create a closure with positional and keyword-only parameter metadata. |
-| 43 | `MAKE_CLOSURE_ARGS` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count` | Create a closure that collects extra positional arguments. |
+| 43 | `MAKE_CLOSURE_ARGS` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count, has_varargs, has_kwargs` | Create a closure with variadic argument metadata. |
+| 44 | `BUILD_DICT` | `count` | Pop `count` key/value pairs and push a dictionary. |
 
 `OP` operation IDs:
 

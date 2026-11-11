@@ -7,7 +7,7 @@ from spacelang.names import NameTable
 def test_import_and_ir_basics():
     assert OP.PUSH_INT == 7
     assert OP.HALT == 29
-    assert len(OP) == 44
+    assert len(OP) == 45
 
 
 def test_error_types_have_line_and_ip():

@@ -51,6 +51,7 @@ class OP(IntEnum):
     MAKE_CLOSURE_SIG = 41
     MAKE_CLOSURE_KWONLY = 42
     MAKE_CLOSURE_ARGS = 43
+    BUILD_DICT = 44
 
 
 @dataclass(slots=True)

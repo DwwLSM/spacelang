@@ -58,6 +58,7 @@ enum Opcode : std::uint8_t {
     MAKE_CLOSURE_SIG = 41,
     MAKE_CLOSURE_KWONLY = 42,
     MAKE_CLOSURE_ARGS = 43,
+    BUILD_DICT = 44,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -208,7 +209,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 44) {
+        if (opcode < 0 || opcode >= 45) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -221,9 +222,9 @@ VM::VM(pybind11::object program) {
         const std::size_t expected[] = {
             0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
             1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
-            1, 0, 1, 0, 3, 1, 1, 1, 2, 4, 6, 6,
+            1, 0, 1, 0, 3, 1, 1, 1, 2, 4, 6, 8, 1,
         };
-        if (instr.op >= 44
+        if (instr.op >= 45
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -411,6 +412,7 @@ pybind11::object VM::run() {
             &&op_push_none, &&op_make_closure, &&op_cellify,
             &&op_load_cell_ref, &&op_load_deref, &&op_call_obj_kw,
             &&op_make_closure_sig, &&op_make_closure_kwonly, &&op_make_closure_args,
+            &&op_build_dict,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -531,14 +533,18 @@ pybind11::object VM::run() {
                 pybind11::dict keywords;
                 std::vector<pybind11::object> positional_values;
                 const auto pop_keywords = [&]() {
+                    std::vector<std::pair<std::string, pybind11::object>> items;
                     for (std::int64_t index = 0; index < keyword_count; ++index) {
                         const auto value = pop("keyword value").to_python();
                         const auto name_id = pop("keyword name").to_python().cast<std::int64_t>();
-                        const auto& key = name(name_id);
+                        items.emplace_back(name(name_id), value);
+                    }
+                    for (auto item = items.rbegin(); item != items.rend(); ++item) {
+                        const auto& key = item->first;
                         if (keywords.contains(pybind11::str(key))) {
                             raise_space_error("TypeError", "multiple values for keyword '" + key + "'", instr.line);
                         }
-                        keywords[pybind11::str(key)] = value;
+                        keywords[pybind11::str(key)] = item->second;
                     }
                 };
                 const auto pop_positional = [&]() {
@@ -610,6 +616,8 @@ pybind11::object VM::run() {
                             callable.attr("positional_count").cast<std::int64_t>();
                         const auto vararg_name_value = callable.attr("vararg_name");
                         const bool has_varargs = !vararg_name_value.is_none();
+                        const auto kwarg_name_value = callable.attr("kwarg_name");
+                        const bool has_kwargs = !kwarg_name_value.is_none();
                         const auto defaults = callable.attr("defaults").cast<pybind11::dict>();
                         if (!has_varargs
                             && positional_values.size() > static_cast<std::size_t>(positional_parameter_count)) {
@@ -622,6 +630,7 @@ pybind11::object VM::run() {
                         }
                         std::vector<pybind11::object> bound(static_cast<std::size_t>(parameter_names.size()));
                         std::vector<bool> assigned(bound.size(), false);
+                        pybind11::dict extra_keywords;
                         const auto assigned_positional_count = std::min(
                             positional_values.size(),
                             static_cast<std::size_t>(positional_parameter_count)
@@ -638,7 +647,12 @@ pybind11::object VM::run() {
                                 ++index;
                             }
                             if (index == static_cast<std::size_t>(parameter_names.size())) {
-                                raise_space_error("TypeError", "unexpected keyword argument '" + key + "'", instr.line);
+                                if (!has_kwargs) {
+                                    raise_space_error("TypeError", "unexpected keyword argument '" + key + "'", instr.line);
+                                }
+                                extra_keywords[item.first] =
+                                    pybind11::reinterpret_borrow<pybind11::object>(item.second);
+                                continue;
                             }
                             if (assigned[index]) {
                                 raise_space_error("TypeError", "multiple values for argument '" + key + "'", instr.line);
@@ -653,7 +667,7 @@ pybind11::object VM::run() {
                             {},
                             callable.attr("cells").cast<pybind11::list>(),
                         };
-                        frame.locals.resize(bound.size() + (has_varargs ? 1 : 0));
+                        frame.locals.resize(bound.size() + (has_varargs ? 1 : 0) + (has_kwargs ? 1 : 0));
                         frame.initialized.assign(frame.locals.size(), true);
                         for (std::size_t index = 0; index < bound.size(); ++index) {
                             if (!assigned[index]) {
@@ -686,6 +700,10 @@ pybind11::object VM::run() {
                                 );
                             }
                             frame.locals[bound.size()] = Value::from_python(varargs);
+                        }
+                        if (has_kwargs) {
+                            frame.locals[bound.size() + (has_varargs ? 1 : 0)] =
+                                Value::from_python(extra_keywords);
                         }
                         call_stack_.push_back(std::move(frame));
                         ip = function->second.first;
@@ -855,6 +873,25 @@ pybind11::object VM::run() {
                         Py_INCREF(values[index].ptr());
                         PyTuple_SET_ITEM(result.ptr(), static_cast<Py_ssize_t>(index), values[index].ptr());
                     }
+                }
+                stack_.push_back(Value::from_python(result));
+                ++ip;
+                break;
+            }
+            case BUILD_DICT: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_build_dict:
+#endif
+                std::vector<std::pair<pybind11::object, pybind11::object>> items;
+                for (std::int64_t index = 0; index < instr.args[0]; ++index) {
+                    auto value = pop("dict value").to_python();
+                    auto key = pop("dict key").to_python();
+                    items.emplace_back(std::move(key), std::move(value));
+                }
+                std::reverse(items.begin(), items.end());
+                pybind11::dict result;
+                for (const auto& item : items) {
+                    result[item.first] = item.second;
                 }
                 stack_.push_back(Value::from_python(result));
                 ++ip;
@@ -1132,10 +1169,21 @@ pybind11::object VM::run() {
                     const auto keyword_only_count = static_cast<std::size_t>(instr.args[3]);
                     const auto positional_default_count = static_cast<std::size_t>(instr.args[4]);
                     const auto keyword_default_count = static_cast<std::size_t>(instr.args[5]);
-                    if (positional_default_count > positional_count) {
+                    const bool has_varargs = instr.args[6] == 1;
+                    const bool has_kwargs = instr.args[7] == 1;
+                    if (instr.args[6] > 1 || instr.args[7] > 1
+                        || positional_default_count > positional_count
+                        || keyword_default_count > keyword_only_count) {
                         raise_space_error("RuntimeError", "invalid variadic closure signature", instr.line);
                     }
-                    const auto vararg_name_id = pop("vararg name").to_python().cast<std::int64_t>();
+                    std::int64_t kwarg_name_id = -1;
+                    std::int64_t vararg_name_id = -1;
+                    if (has_kwargs) {
+                        kwarg_name_id = pop("kwarg name").to_python().cast<std::int64_t>();
+                    }
+                    if (has_varargs) {
+                        vararg_name_id = pop("vararg name").to_python().cast<std::int64_t>();
+                    }
                     std::vector<std::pair<std::int64_t, pybind11::object>> keyword_defaults(keyword_default_count);
                     for (std::size_t index = keyword_default_count; index > 0; --index) {
                         auto value = pop("keyword-only default value").to_python();
@@ -1172,7 +1220,8 @@ pybind11::object VM::run() {
                             parameter_names,
                             defaults,
                             positional_count,
-                            name(vararg_name_id)
+                            has_varargs ? pybind11::cast(name(vararg_name_id)) : pybind11::none(),
+                            has_kwargs ? pybind11::cast(name(kwarg_name_id)) : pybind11::none()
                         )
                     ));
                     ++ip;

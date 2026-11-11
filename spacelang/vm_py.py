@@ -35,6 +35,7 @@ class Closure:
         defaults: dict[str, Any] | None = None,
         positional_count: int | None = None,
         vararg_name: str | None = None,
+        kwarg_name: str | None = None,
     ):
         self.func_id = func_id
         self.cells = cells
@@ -43,6 +44,7 @@ class Closure:
         self.defaults = defaults or {}
         self.positional_count = self.arg_count if positional_count is None else positional_count
         self.vararg_name = vararg_name
+        self.kwarg_name = kwarg_name
 
 
 @dataclass
@@ -144,9 +146,13 @@ class VM:
                 msg=f"expected at most {closure.positional_count} positional arguments, got {len(positional)}",
             )
         bound = dict(zip(parameter_names, positional[:closure.positional_count]))
+        extra_keywords: dict[str, Any] = {}
         for name, value in keywords.items():
             if name not in parameter_names:
-                raise TypeError(line=line, ip=self.ip, msg=f"unexpected keyword argument {name!r}")
+                if closure.kwarg_name is None:
+                    raise TypeError(line=line, ip=self.ip, msg=f"unexpected keyword argument {name!r}")
+                extra_keywords[name] = value
+                continue
             if name in bound:
                 raise TypeError(line=line, ip=self.ip, msg=f"multiple values for argument {name!r}")
             bound[name] = value
@@ -160,6 +166,8 @@ class VM:
                 raise TypeError(line=line, ip=self.ip, msg=f"missing required argument {name!r}")
         if closure.vararg_name is not None:
             args.append(tuple(positional[closure.positional_count:]))
+        if closure.kwarg_name is not None:
+            args.append(extra_keywords)
         return args
 
     def _raise(self, exc: BaseException) -> None:
@@ -458,6 +466,18 @@ class VM:
                 self.ip += 1
                 continue
 
+            if op == OP.BUILD_DICT:
+                count = int(args[0])
+                items = []
+                for _ in range(count):
+                    value = self._pop("dict value")
+                    key = self._pop("dict key")
+                    items.append((key, value))
+                items.reverse()
+                self._push(dict(items))
+                self.ip += 1
+                continue
+
             if op == OP.CONCAT:
                 count = int(args[0])
                 values = []
@@ -561,9 +581,12 @@ class VM:
                 nargs = int(args[0]) if op == OP.CALL_OBJ else int(args[0])
                 nkw = 0 if op == OP.CALL_OBJ else int(args[1])
                 keywords: dict[str, Any] = {}
+                keyword_items = []
                 for _ in range(nkw):
                     value = self._pop("keyword value")
                     name = self._name(int(self._pop("keyword name")))
+                    keyword_items.append((name, value))
+                for name, value in reversed(keyword_items):
                     if name in keywords:
                         raise TypeError(line=instr.line, ip=self.ip, msg=f"multiple values for keyword {name!r}")
                     keywords[name] = value
@@ -687,7 +710,21 @@ class VM:
                 keyword_only_count = int(args[3])
                 positional_default_count = int(args[4])
                 keyword_default_count = int(args[5])
-                vararg_name = self._name(int(self._pop("vararg name")))
+                has_varargs = int(args[6]) == 1
+                has_kwargs = int(args[7]) == 1
+                if (
+                    int(args[6]) not in {0, 1}
+                    or int(args[7]) not in {0, 1}
+                    or positional_default_count > positional_count
+                    or keyword_default_count > keyword_only_count
+                ):
+                    raise RuntimeError(
+                        line=instr.line,
+                        ip=self.ip,
+                        msg="invalid variadic closure signature",
+                    )
+                kwarg_name = self._name(int(self._pop("kwarg name"))) if has_kwargs else None
+                vararg_name = self._name(int(self._pop("vararg name"))) if has_varargs else None
                 keyword_defaults = []
                 for _ in range(keyword_default_count):
                     value = self._pop("keyword-only default value")
@@ -722,6 +759,7 @@ class VM:
                         defaults,
                         positional_count,
                         vararg_name,
+                        kwarg_name,
                     )
                 )
                 self.ip += 1

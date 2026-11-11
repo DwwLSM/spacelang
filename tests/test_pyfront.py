@@ -269,7 +269,6 @@ def test_pyfront_user_functions_support_defaults_and_keyword_arguments():
     "source",
     [
         "def f(a, /): return a",
-        "def f(**kwargs): return 0",
     ],
 )
 def test_pyfront_rejects_unsupported_function_forms(source):
@@ -474,6 +473,55 @@ def test_pyfront_nested_closure_can_capture_varargs():
     print(inner())
     """)
     assert run_source(source) == "(1, 2, 3)\n"
+
+
+def test_pyfront_collects_extra_keyword_arguments():
+    source = textwrap.dedent("""
+    def collect(value, **options):
+        return (value, options)
+
+    def collect_all(first, *rest, **options):
+        return (first, rest, options)
+
+    def collect_keyword_only(*, label, **options):
+        return (label, options)
+
+    print(collect(1, color="blue", size=3))
+    print(collect_all(1, 2, 3, color="green"))
+    print(collect_all(1))
+    print(collect_keyword_only(label="item", active=True))
+    """)
+    assert run_source(source) == (
+        "(1, {'color': 'blue', 'size': 3})\n"
+        "(1, (2, 3), {'color': 'green'})\n"
+        "(1, (), {})\n"
+        "('item', {'active': True})\n"
+    )
+
+
+def test_pyfront_saved_closure_collects_extra_keyword_arguments():
+    source = textwrap.dedent("""
+    def make_collector(prefix):
+        def collect(value, *rest, marker="!", **options):
+            return (prefix, value, rest, marker, options)
+        return collect
+
+    collect = make_collector("<")
+    print(collect(1, 2, 3, marker="?", color="red", size=4))
+    """)
+    assert run_source(source) == "('<', 1, (2, 3), '?', {'color': 'red', 'size': 4})\n"
+
+
+def test_pyfront_nested_function_direct_call_passes_extra_keywords():
+    source = textwrap.dedent("""
+    def outer():
+        def inner(value, **options):
+            return (value, options)
+        return inner(2, flag=True)
+
+    print(outer())
+    """)
+    assert run_source(source) == "(2, {'flag': True})\n"
 
 
 @pytest.mark.parametrize(
