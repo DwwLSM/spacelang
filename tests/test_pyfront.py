@@ -265,6 +265,68 @@ def test_pyfront_user_functions_support_defaults_and_keyword_arguments():
     assert run_source(source) == "item3!\nitem4?\nvalue:5!\nn=6.\n"
 
 
+def test_pyfront_expands_call_arguments_for_top_level_and_nested_functions():
+    source = textwrap.dedent("""
+    def make_options(**options):
+        return options
+
+    def collect(first, second=2, *rest, marker="!", **options):
+        return (first, second, rest, marker, options)
+
+    def outer():
+        def inner(value, **options):
+            return (value, options)
+        values = [3]
+        options = make_options(label="nested")
+        return inner(*values, **options)
+
+    values = [1, 4, 5]
+    options = make_options(marker="?", color="blue")
+    print(collect(*values, **options))
+    print(collect(**make_options(first=7)))
+    print(outer())
+    """)
+    assert run_source(source) == (
+        "(1, 4, (5,), '?', {'color': 'blue'})\n"
+        "(7, 2, (), '!', {})\n"
+        "(3, {'label': 'nested'})\n"
+    )
+
+
+def test_pyfront_expands_builtin_call_arguments():
+    source = textwrap.dedent("""
+    values = [[1, 2, 3]]
+    print(len(*values))
+    print(*["left", "right"], sep=":")
+    """)
+    assert run_source(source) == "3\nleft:right\n"
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        (
+            "def collect(**options): return options\n"
+            "def make(**options): return options\n"
+            "collect(**make(value=1), **make(value=2))",
+            "multiple values for keyword argument 'value'",
+        ),
+        (
+            "def collect(**options): return options\n"
+            "collect(**[1, 2])",
+            r"argument after \*\* must be a mapping",
+        ),
+    ],
+)
+@pytest.mark.parametrize("engine", ["py", "cpp"])
+def test_pyfront_expanded_keyword_arguments_validate_mapping(source, message, engine):
+    from spacelang.vm_cpp import VM as CppVM
+
+    vm_type = VM if engine == "py" else CppVM
+    with pytest.raises(SpaceError, match=message):
+        vm_type(compile_py(source)).run()
+
+
 @pytest.mark.parametrize(
     "source",
     [

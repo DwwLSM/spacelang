@@ -59,6 +59,10 @@ enum Opcode : std::uint8_t {
     MAKE_CLOSURE_KWONLY = 42,
     MAKE_CLOSURE_ARGS = 43,
     BUILD_DICT = 44,
+    CALL_OBJ_EX = 45,
+    CALL_BUILTIN_EX = 46,
+    LIST_EXTEND = 47,
+    DICT_MERGE = 48,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -209,7 +213,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 45) {
+        if (opcode < 0 || opcode >= 49) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -222,9 +226,9 @@ VM::VM(pybind11::object program) {
         const std::size_t expected[] = {
             0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
             1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
-            1, 0, 1, 0, 3, 1, 1, 1, 2, 4, 6, 8, 1,
+            1, 0, 1, 0, 3, 1, 1,             1, 2, 4, 6, 8, 1, 0, 1, 0, 0,
         };
-        if (instr.op >= 45
+        if (instr.op >= 49
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -412,7 +416,8 @@ pybind11::object VM::run() {
             &&op_push_none, &&op_make_closure, &&op_cellify,
             &&op_load_cell_ref, &&op_load_deref, &&op_call_obj_kw,
             &&op_make_closure_sig, &&op_make_closure_kwonly, &&op_make_closure_args,
-            &&op_build_dict,
+            &&op_build_dict, &&op_call_obj_ex, &&op_call_builtin_ex,
+            &&op_list_extend, &&op_dict_merge,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -481,15 +486,22 @@ pybind11::object VM::run() {
             case CALL_KW:
             case CALL_OBJ:
             case CALL_OBJ_KW:
+            case CALL_OBJ_EX:
+            case CALL_BUILTIN_EX:
             case CALL_METHOD: {
 #if defined(__GNUC__) || defined(__clang__)
             op_call:
             op_call_kw:
             op_call_obj:
             op_call_obj_kw:
+            op_call_obj_ex:
+            op_call_builtin_ex:
             op_call_method:
 #endif
-                std::int64_t func_id = instr.args[0];
+                std::int64_t func_id = 0;
+                if (instr.op == CALL || instr.op == CALL_KW || instr.op == CALL_BUILTIN_EX) {
+                    func_id = instr.args[0];
+                }
                 std::int64_t positional_count = 0;
                 std::int64_t keyword_count = 0;
                 if (instr.op == CALL_KW) {
@@ -500,6 +512,10 @@ pybind11::object VM::run() {
                     keyword_count = instr.args[1];
                 } else if (instr.op == CALL_OBJ) {
                     positional_count = instr.args[0];
+                } else if (instr.op == CALL_OBJ_EX) {
+                    positional_count = 0;
+                } else if (instr.op == CALL_BUILTIN_EX) {
+                    func_id = instr.args[0];
                 } else {
                     positional_count = instr.args[1];
                 }
@@ -528,6 +544,8 @@ pybind11::object VM::run() {
                         break;
                     }
                     callable = builtin(func_id);
+                } else if (instr.op == CALL_BUILTIN_EX) {
+                    callable = builtin(func_id);
                 }
 
                 pybind11::dict keywords;
@@ -553,7 +571,17 @@ pybind11::object VM::run() {
                     }
                     std::reverse(positional_values.begin(), positional_values.end());
                 };
-                if (instr.op == CALL_OBJ_KW) {
+                if (instr.op == CALL_OBJ_EX || instr.op == CALL_BUILTIN_EX) {
+                    const auto keyword_object = pop("keyword arguments").to_python();
+                    const auto positional_object = pop("positional arguments").to_python();
+                    if (!PyDict_Check(keyword_object.ptr()) || !PyList_Check(positional_object.ptr())) {
+                        raise_space_error("TypeError", "invalid expanded call arguments", instr.line);
+                    }
+                    keywords = pybind11::reinterpret_borrow<pybind11::dict>(keyword_object);
+                    for (const auto& value : pybind11::reinterpret_borrow<pybind11::list>(positional_object)) {
+                        positional_values.push_back(pybind11::reinterpret_borrow<pybind11::object>(value));
+                    }
+                } else if (instr.op == CALL_OBJ_KW) {
                     pop_keywords();
                     pop_positional();
                 } else {
@@ -565,7 +593,7 @@ pybind11::object VM::run() {
                     Py_INCREF(positional_values[index].ptr());
                     PyTuple_SET_ITEM(positional.ptr(), static_cast<Py_ssize_t>(index), positional_values[index].ptr());
                 }
-                if (instr.op == CALL_OBJ || instr.op == CALL_OBJ_KW) {
+                if (instr.op == CALL_OBJ || instr.op == CALL_OBJ_KW || instr.op == CALL_OBJ_EX) {
                     callable = pop("callable").to_python();
                     const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
                     if (pybind11::isinstance(callable, closure_type)) {
@@ -894,6 +922,64 @@ pybind11::object VM::run() {
                     result[item.first] = item.second;
                 }
                 stack_.push_back(Value::from_python(result));
+                ++ip;
+                break;
+            }
+            case LIST_EXTEND: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_list_extend:
+#endif
+                const auto iterable = pop("list iterable").to_python();
+                const auto target = pop("list").to_python();
+                if (!PyList_Check(target.ptr())) {
+                    raise_space_error("TypeError", "LIST_EXTEND target must be a list", instr.line);
+                }
+                PyObject* extend_result = PyObject_CallMethod(target.ptr(), "extend", "O", iterable.ptr());
+                if (extend_result == nullptr) {
+                    throw pybind11::error_already_set();
+                }
+                Py_DECREF(extend_result);
+                stack_.push_back(Value::from_python(target));
+                ++ip;
+                break;
+            }
+            case DICT_MERGE: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_dict_merge:
+#endif
+                const auto mapping = pop("keyword mapping").to_python();
+                const auto target_object = pop("keyword arguments").to_python();
+                if (!PyDict_Check(target_object.ptr())) {
+                    raise_space_error("TypeError", "DICT_MERGE target must be a dictionary", instr.line);
+                }
+                const int has_keys = PyObject_HasAttrString(mapping.ptr(), "keys");
+                if (has_keys < 0) {
+                    throw pybind11::error_already_set();
+                }
+                if (has_keys == 0) {
+                    raise_space_error("TypeError", "argument after ** must be a mapping", instr.line);
+                }
+                PyObject* keys_raw = PyMapping_Keys(mapping.ptr());
+                if (keys_raw == nullptr) {
+                    throw pybind11::error_already_set();
+                }
+                auto keys = pybind11::reinterpret_steal<pybind11::object>(keys_raw);
+                auto target = pybind11::reinterpret_borrow<pybind11::dict>(target_object);
+                for (const auto& key_handle : keys) {
+                    const auto key = pybind11::reinterpret_borrow<pybind11::object>(key_handle);
+                    if (!PyUnicode_Check(key.ptr())) {
+                        raise_space_error("TypeError", "keywords must be strings", instr.line);
+                    }
+                    if (target.contains(key)) {
+                        raise_space_error(
+                            "TypeError",
+                            "got multiple values for keyword argument '" + key.cast<std::string>() + "'",
+                            instr.line
+                        );
+                    }
+                    target[key] = mapping[key];
+                }
+                stack_.push_back(Value::from_python(target));
                 ++ip;
                 break;
             }

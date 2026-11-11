@@ -52,6 +52,10 @@ class OP(IntEnum):
     MAKE_CLOSURE_KWONLY = 42
     MAKE_CLOSURE_ARGS = 43
     BUILD_DICT = 44
+    CALL_OBJ_EX = 45
+    CALL_BUILTIN_EX = 46
+    LIST_EXTEND = 47
+    DICT_MERGE = 48
 
 
 @dataclass(slots=True)

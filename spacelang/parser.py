@@ -49,7 +49,7 @@ def parse(token_stream) -> Program:
         op_code = token_stream[i]
         op_line = token_lines[i]
         i += 1
-        if op_code not in range(45):
+        if op_code not in range(49):
             raise ParseError(line=op_line, ip=op_index, msg=f"unknown opcode {op_code}")
 
         op = OP(op_code)
@@ -92,6 +92,9 @@ def parse(token_stream) -> Program:
             npos, i = _parse_int_value(token_stream, i, op_line)
             nkw, i = _parse_int_value(token_stream, i, op_line)
             args = [npos, nkw]
+        elif op == OP.CALL_BUILTIN_EX:
+            func_id, i = _parse_int_value(token_stream, i, op_line)
+            args = [func_id]
         elif op in {OP.CALL, OP.CALL_METHOD, OP.DEF}:
             func_id, i = _parse_int_value(token_stream, i, op_line)
             nargs, i = _parse_int_value(token_stream, i, op_line)
@@ -119,7 +122,20 @@ def parse(token_stream) -> Program:
             catch_ip, i = _parse_int_value(token_stream, i, op_line)
             finally_ip, i = _parse_int_value(token_stream, i, op_line)
             args = [catch_ip, finally_ip]
-        elif op in {OP.NOP, OP.RET, OP.RAISE, OP.END_TRY, OP.SETUP_WITH, OP.HALT, OP.GET_ITER, OP.STORE_INDEX, OP.PUSH_NONE}:
+        elif op in {
+            OP.NOP,
+            OP.RET,
+            OP.RAISE,
+            OP.END_TRY,
+            OP.SETUP_WITH,
+            OP.HALT,
+            OP.GET_ITER,
+            OP.STORE_INDEX,
+            OP.PUSH_NONE,
+            OP.CALL_OBJ_EX,
+            OP.LIST_EXTEND,
+            OP.DICT_MERGE,
+        }:
             pass
 
         instrs.append(Instr(op, args, line=op_line))

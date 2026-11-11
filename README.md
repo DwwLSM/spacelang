@@ -76,17 +76,19 @@ supported.
 
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, dictionary and set comprehensions,
-Argument unpacking, slice assignment, and async syntax are not implemented.
+slice assignment, and async syntax are not implemented.
 Functions may collect extra positional arguments with `*args` and extra
 keyword arguments with `**kwargs`. Function defaults must be immutable literals.
 Keyword arguments work for top-level functions, builtins, and dynamic
-SpaceLang closures; methods do not accept keyword arguments. Expressions
+SpaceLang closures. Calls may expand positional iterables and keyword mappings
+with `*values` and `**options`; ordinary explicit keyword arguments to methods
+remain unsupported. Expressions
 currently do not support floating-point literals, dictionaries, sets, slicing,
 membership or identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
 and `%`. Top-level and nested functions support required and optional positional
 parameters and keyword-only parameters. Defaults must be immutable literals.
-Positional and keyword arguments are supported for direct calls to known
-top-level functions. Builtin keyword arguments are supported
+Positional and keyword arguments, including argument expansion, are supported
+for direct calls to known top-level functions. Builtin keyword arguments are supported
 where the target builtin accepts them. Functions use statically determined
 local variables; `global` declarations and lexical closures with `nonlocal`
 updates are supported.
@@ -197,6 +199,10 @@ assembler directives, not VM opcodes.
 | 42 | `MAKE_CLOSURE_KWONLY` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count` | Create a closure with positional and keyword-only parameter metadata. |
 | 43 | `MAKE_CLOSURE_ARGS` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count, has_varargs, has_kwargs` | Create a closure with variadic argument metadata. |
 | 44 | `BUILD_DICT` | `count` | Pop `count` key/value pairs and push a dictionary. |
+| 45 | `CALL_OBJ_EX` | none | Call a dynamic callable with a positional list and keyword dictionary. |
+| 46 | `CALL_BUILTIN_EX` | `func_id` | Call a builtin with a positional list and keyword dictionary. |
+| 47 | `LIST_EXTEND` | none | Extend the list below the stack top with the iterable at the top. |
+| 48 | `DICT_MERGE` | none | Merge the mapping at the stack top into the keyword dictionary below it, rejecting duplicate or non-string keys. |
 
 `OP` operation IDs:
 

@@ -108,6 +108,10 @@ def test_assemble_and_disassemble_closure_opcodes():
         MAKE_CLOSURE_ARGS 10000 2 2 1 1 1 1 1
         BUILD_DICT 2
         CALL_OBJ_KW 2 1
+        CALL_OBJ_EX
+        CALL_BUILTIN_EX 2
+        LIST_EXTEND
+        DICT_MERGE
         CELLIFY 3
         LOAD_CELL_REF 4
         LOAD_DEREF 5

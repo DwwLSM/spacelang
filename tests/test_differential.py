@@ -38,6 +38,18 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "def outer(*values):\n    def inner(): return values\n    return inner\ninner = outer(1, 2, 3)\nprint(inner())",
         "def collect(*values): return values\nprint(collect(), collect(1, 2, 3))",
         "def collect(value, **options): return (value, options)\nprint(collect(1, color='blue', size=3))",
+        "def make_options(**options): return options\n"
+        "def collect(first, second=2, *rest, marker='!', **options): return (first, second, rest, marker, options)\n"
+        "values = [1, 4, 5]\noptions = make_options(marker='?', color='blue')\n"
+        "print(collect(*values, **options), collect(**make_options(first=7)))",
+        "def make_options(**options): return options\n"
+        "def outer():\n"
+        "    def inner(value, **options): return (value, options)\n"
+        "    values = [3]\n"
+        "    options = make_options(label='nested')\n"
+        "    return inner(*values, **options)\n"
+        "print(outer())",
+        "values = [[1, 2, 3]]\nprint(len(*values))\nprint(*['left', 'right'], sep=':')",
         "def make_collector(prefix):\n    def collect(value, *rest, marker='!', **options): return (prefix, value, rest, marker, options)\n    return collect\ncollect = make_collector('<')\nprint(collect(1, 2, 3, marker='?', color='red', size=4))",
         "def outer():\n    def inner(value, **options): return (value, options)\n    return inner(2, flag=True)\nprint(outer())",
         "counter = 4\ndef update():\n    global counter\n    counter = counter + 1\n    return counter\nprint(update(), counter)",

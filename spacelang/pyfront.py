@@ -107,6 +107,7 @@ class PyFront(ast.NodeVisitor):
         self.funcs: dict[int, tuple[int, int]] = {}
         self.function_ids: dict[str, int] = {}
         self.function_signatures: dict[str, _FunctionSignature] = {}
+        self.function_nodes: dict[str, ast.FunctionDef] = {}
         self.function_id_by_node: dict[int, int] = {}
         self.function_scopes: dict[int, _FunctionScope] = {}
         self.next_func_id = 10000
@@ -506,6 +507,10 @@ class PyFront(ast.NodeVisitor):
                 local_callable = self._is_local_name(name)
                 if name in BUILTIN_IDS and not local_callable:
                     line = getattr(node, "lineno", 0)
+                    if self._has_expanded_arguments(node):
+                        self._compile_call_argument_containers(node)
+                        _emit(self.instrs, OP.CALL_BUILTIN_EX, BUILTIN_IDS[name], line=line)
+                        return
                     if node.keywords:
                         for keyword in node.keywords:
                             if keyword.arg is None:
@@ -563,6 +568,11 @@ class PyFront(ast.NodeVisitor):
                     _emit(self.instrs, OP.CALL_OBJ, len(node.args), line=getattr(node, "lineno", 0))
                 return
             if isinstance(node.func, ast.Attribute):
+                if self._has_expanded_arguments(node):
+                    self._compile_expr(node.func)
+                    self._compile_call_argument_containers(node)
+                    _emit(self.instrs, OP.CALL_OBJ_EX, line=getattr(node, "lineno", 0))
+                    return
                 if node.keywords:
                     raise ParseError(
                         line=getattr(node, "lineno", 0),
@@ -573,6 +583,11 @@ class PyFront(ast.NodeVisitor):
                 for arg in node.args:
                     self._compile_expr(arg)
                 _emit(self.instrs, OP.CALL_METHOD, self._name_id(node.func.attr), len(node.args), line=getattr(node, "lineno", 0))
+                return
+            if self._has_expanded_arguments(node):
+                self._compile_expr(node.func)
+                self._compile_call_argument_containers(node)
+                _emit(self.instrs, OP.CALL_OBJ_EX, line=getattr(node, "lineno", 0))
                 return
             raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported call target: {ast.dump(node.func)}")
 
@@ -1016,6 +1031,11 @@ class PyFront(ast.NodeVisitor):
         function: ast.FunctionDef,
     ) -> None:
         line = getattr(node, "lineno", 0)
+        if self._has_expanded_arguments(node):
+            self._load_name(function.name, line)
+            self._compile_call_argument_containers(node)
+            _emit(self.instrs, OP.CALL_OBJ_EX, line=line)
+            return
         positional_names = [arg.arg for arg in function.args.args]
         keyword_only_names = [arg.arg for arg in function.args.kwonlyargs]
         parameter_names = [*positional_names, *keyword_only_names]
@@ -1065,6 +1085,95 @@ class PyFront(ast.NodeVisitor):
             self._compile_expr(keyword.value)
         _emit(self.instrs, OP.CALL_OBJ_KW, len(node.args), len(node.keywords), line=line)
 
+    def _has_expanded_arguments(self, node: ast.Call) -> bool:
+        return any(isinstance(argument, ast.Starred) for argument in node.args) or any(
+            keyword.arg is None for keyword in node.keywords
+        )
+
+    def _compile_call_argument_containers(self, node: ast.Call) -> None:
+        line = getattr(node, "lineno", 0)
+        _emit(self.instrs, OP.BUILD_LIST, 0, line=line)
+        for argument in node.args:
+            if isinstance(argument, ast.Starred):
+                self._compile_expr(argument.value)
+            else:
+                self._compile_expr(argument)
+                _emit(self.instrs, OP.BUILD_LIST, 1, line=line)
+            _emit(self.instrs, OP.LIST_EXTEND, line=line)
+
+        _emit(self.instrs, OP.BUILD_DICT, 0, line=line)
+        for keyword in node.keywords:
+            if keyword.arg is None:
+                self._compile_expr(keyword.value)
+            else:
+                _emit(
+                    self.instrs,
+                    OP.PUSH_STR,
+                    len(keyword.arg),
+                    *map(ord, keyword.arg),
+                    line=line,
+                )
+                self._compile_expr(keyword.value)
+                _emit(self.instrs, OP.BUILD_DICT, 1, line=line)
+            _emit(self.instrs, OP.DICT_MERGE, line=line)
+
+    def _compile_function_closure(self, node: ast.FunctionDef, func_id: int, line: int) -> None:
+        positional_names = [arg.arg for arg in node.args.args]
+        keyword_only_names = [arg.arg for arg in node.args.kwonlyargs]
+        parameter_names = [*positional_names, *keyword_only_names]
+        keyword_only_defaults = [
+            (name, default)
+            for name, default in zip(keyword_only_names, node.args.kw_defaults)
+            if default is not None
+        ]
+        for name in parameter_names:
+            _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
+        for default in node.args.defaults:
+            self._compile_expr(default)
+        for name, default in keyword_only_defaults:
+            _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
+            self._compile_expr(default)
+        if node.args.vararg:
+            _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.vararg.arg), line=line)
+        if node.args.kwarg:
+            _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.kwarg.arg), line=line)
+        if node.args.vararg or node.args.kwarg:
+            _emit(
+                self.instrs,
+                OP.MAKE_CLOSURE_ARGS,
+                func_id,
+                0,
+                len(positional_names),
+                len(keyword_only_names),
+                len(node.args.defaults),
+                len(keyword_only_defaults),
+                int(node.args.vararg is not None),
+                int(node.args.kwarg is not None),
+                line=line,
+            )
+        elif keyword_only_names:
+            _emit(
+                self.instrs,
+                OP.MAKE_CLOSURE_KWONLY,
+                func_id,
+                0,
+                len(positional_names),
+                len(keyword_only_names),
+                len(node.args.defaults),
+                len(keyword_only_defaults),
+                line=line,
+            )
+        else:
+            _emit(
+                self.instrs,
+                OP.MAKE_CLOSURE_SIG,
+                func_id,
+                0,
+                len(parameter_names),
+                len(node.args.defaults),
+                line=line,
+            )
+
     def _is_supported_default(self, node: ast.expr) -> bool:
         if isinstance(node, ast.Constant):
             return node.value is None or isinstance(node.value, (bool, int, str))
@@ -1076,6 +1185,11 @@ class PyFront(ast.NodeVisitor):
 
     def _compile_user_function_call(self, node: ast.Call, name: str) -> None:
         line = getattr(node, "lineno", 0)
+        if self._has_expanded_arguments(node):
+            self._compile_function_closure(self.function_nodes[name], self.function_ids[name], line)
+            self._compile_call_argument_containers(node)
+            _emit(self.instrs, OP.CALL_OBJ_EX, line=line)
+            return
         signature = self.function_signatures[name]
         positional_names = signature.positional_names
         keyword_only_names = signature.keyword_only_names
@@ -1170,6 +1284,7 @@ class PyFront(ast.NodeVisitor):
                 scope = self._build_function_scope(stmt, [])
                 assign_function_ids(scope)
                 self.function_ids[stmt.name] = self.function_id_by_node[id(stmt)]
+                self.function_nodes[stmt.name] = stmt
                 positional_names = [arg.arg for arg in stmt.args.args]
                 keyword_only_names = [arg.arg for arg in stmt.args.kwonlyargs]
                 required_count = len(positional_names) - len(stmt.args.defaults)

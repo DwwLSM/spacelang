@@ -143,6 +143,29 @@ def test_compile_py_supports_saved_closure_keyword_arguments_in_sp_file(tmp_path
         assert output.getvalue() == "12 8\n"
 
 
+def test_compile_py_supports_expanded_call_arguments_in_sp_file(tmp_path):
+    source = tmp_path / "expanded_arguments.py"
+    destination = tmp_path / "expanded_arguments.sp"
+    source.write_text(
+        "def make_options(**options):\n"
+        "    return options\n"
+        "\n"
+        "def collect(first, *rest, **options):\n"
+        "    return (first, rest, options)\n"
+        "\n"
+        "values = [1, 2, 3]\n"
+        "options = make_options(color='blue')\n"
+        "print(collect(*values, **options))\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "(1, (2, 3), {'color': 'blue'})\n"
+
+
 def test_compile_py_supports_varargs_in_sp_file(tmp_path):
     source = tmp_path / "varargs.py"
     destination = tmp_path / "varargs.sp"

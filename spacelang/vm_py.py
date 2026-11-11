@@ -255,6 +255,47 @@ class VM:
             if op == OP.NOP:
                 self.ip += 1
                 continue
+
+            if op == OP.LIST_EXTEND:
+                iterable = self._pop("list iterable")
+                target = self._pop("list")
+                if not isinstance(target, list):
+                    raise TypeError(line=instr.line, ip=self.ip, msg="LIST_EXTEND target must be a list")
+                target.extend(iterable)
+                self._push(target)
+                self.ip += 1
+                continue
+
+            if op == OP.DICT_MERGE:
+                mapping = self._pop("keyword mapping")
+                target = self._pop("keyword arguments")
+                if not isinstance(target, dict):
+                    raise TypeError(line=instr.line, ip=self.ip, msg="DICT_MERGE target must be a dictionary")
+                try:
+                    keys = mapping.keys()
+                except AttributeError as exc:
+                    raise TypeError(
+                        line=instr.line,
+                        ip=self.ip,
+                        msg="argument after ** must be a mapping",
+                    ) from exc
+                for key in keys:
+                    if not isinstance(key, str):
+                        raise TypeError(
+                            line=instr.line,
+                            ip=self.ip,
+                            msg="keywords must be strings",
+                        )
+                    if key in target:
+                        raise TypeError(
+                            line=instr.line,
+                            ip=self.ip,
+                            msg=f"got multiple values for keyword argument {key!r}",
+                        )
+                    target[key] = mapping[key]
+                self._push(target)
+                self.ip += 1
+                continue
             if op == OP.DEF:
                 func_id = int(args[0])
                 if func_id in self.funcs:
@@ -577,21 +618,28 @@ class VM:
                 self.ip += 1
                 continue
 
-            if op in {OP.CALL_OBJ, OP.CALL_OBJ_KW}:
-                nargs = int(args[0]) if op == OP.CALL_OBJ else int(args[0])
-                nkw = 0 if op == OP.CALL_OBJ else int(args[1])
-                keywords: dict[str, Any] = {}
-                keyword_items = []
-                for _ in range(nkw):
-                    value = self._pop("keyword value")
-                    name = self._name(int(self._pop("keyword name")))
-                    keyword_items.append((name, value))
-                for name, value in reversed(keyword_items):
-                    if name in keywords:
-                        raise TypeError(line=instr.line, ip=self.ip, msg=f"multiple values for keyword {name!r}")
-                    keywords[name] = value
-                args_list = self._collect_args(nargs)
-                callable_obj = self._pop("callable")
+            if op in {OP.CALL_OBJ, OP.CALL_OBJ_KW, OP.CALL_OBJ_EX}:
+                if op == OP.CALL_OBJ_EX:
+                    keywords = self._pop("keyword arguments")
+                    args_list = self._pop("positional arguments")
+                    if not isinstance(keywords, dict) or not isinstance(args_list, list):
+                        raise TypeError(line=instr.line, ip=self.ip, msg="invalid expanded call arguments")
+                    callable_obj = self._pop("callable")
+                else:
+                    nargs = int(args[0])
+                    nkw = 0 if op == OP.CALL_OBJ else int(args[1])
+                    keywords = {}
+                    keyword_items = []
+                    for _ in range(nkw):
+                        value = self._pop("keyword value")
+                        name = self._name(int(self._pop("keyword name")))
+                        keyword_items.append((name, value))
+                    for name, value in reversed(keyword_items):
+                        if name in keywords:
+                            raise TypeError(line=instr.line, ip=self.ip, msg=f"multiple values for keyword {name!r}")
+                        keywords[name] = value
+                    args_list = self._collect_args(nargs)
+                    callable_obj = self._pop("callable")
                 if isinstance(callable_obj, Closure):
                     if callable_obj.func_id not in self.funcs:
                         raise UndefinedFunc(
@@ -625,7 +673,7 @@ class VM:
                     )
                     self.ip = self.funcs[callable_obj.func_id][0]
                     continue
-                if op == OP.CALL_OBJ_KW:
+                if op in {OP.CALL_OBJ_KW, OP.CALL_OBJ_EX}:
                     result = callable_obj(*args_list, **keywords)
                 else:
                     result = callable_obj(*args_list)
@@ -795,6 +843,19 @@ class VM:
                 if func is None:
                     raise UndefinedFunc(line=0, ip=self.ip, msg=f"undefined callable {func_id}")
                 self._push(func(*positional, **kwargs))
+                self.ip += 1
+                continue
+
+            if op == OP.CALL_BUILTIN_EX:
+                keywords = self._pop("keyword arguments")
+                positional = self._pop("positional arguments")
+                if not isinstance(keywords, dict) or not isinstance(positional, list):
+                    raise TypeError(line=instr.line, ip=self.ip, msg="invalid expanded call arguments")
+                func_id = int(args[0])
+                func = ALL_BUILTINS.get(func_id)
+                if func is None:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined callable {func_id}")
+                self._push(func(*positional, **keywords))
                 self.ip += 1
                 continue
 
