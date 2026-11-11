@@ -91,6 +91,11 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "sum_value = 0.1 + 0.2\nproduct = 1.5 * 2\n"
         "print(integer_looking, exponential, negative, sum_value, product)\n"
         "print(2.5 > 2, 3 == 3.0)",
+        "first = []\nalias = first\nother = []\n"
+        "print(None is None, None is not False)\n"
+        "print(first is alias, first is not other)\n"
+        "print(1 is 1, 1 is not True, 1 is not 1.0)\n"
+        "print(None is None is not other)",
         "import math\nresult = math.sqrt(81)\nprint(result)",
         'print("left", "right", sep="-")',
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",

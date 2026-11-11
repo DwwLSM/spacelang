@@ -493,6 +493,8 @@ class PyFront(ast.NodeVisitor):
                 ast.GtE: 11,
                 ast.In: 12,
                 ast.NotIn: 13,
+                ast.Is: 14,
+                ast.IsNot: 15,
             }
             line = getattr(node, "lineno", 0)
             false_label = f"compare_false_{len(self.instrs)}"

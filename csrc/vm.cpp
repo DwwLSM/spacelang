@@ -157,6 +157,29 @@ bool try_numeric_binary_fast(std::int64_t op, const Value& left, const Value& ri
 }
 
 Value numeric_binary(std::int64_t op, const Value& left, const Value& right) {
+    if (op == 14 || op == 15) {
+        bool identical = left.tag == right.tag;
+        if (identical) {
+            switch (left.tag) {
+                case Value::Tag::INT:
+                    identical = left.data.i == right.data.i;
+                    break;
+                case Value::Tag::FLOAT:
+                    identical = left.data.f == right.data.f;
+                    break;
+                case Value::Tag::BOOL:
+                    identical = left.data.b == right.data.b;
+                    break;
+                case Value::Tag::NONE:
+                    break;
+                case Value::Tag::PYOBJ:
+                    identical = left.data.obj == right.data.obj;
+                    break;
+            }
+        }
+        return Value(op == 14 ? identical : !identical);
+    }
+
     Value fast_result;
     if (try_numeric_binary_fast(op, left, right, fast_result)) {
         return fast_result;
@@ -1495,7 +1518,7 @@ pybind11::object VM::run() {
 #endif
                 const auto right = pop("rhs");
                 const auto left = pop("lhs");
-                if (instr.args[0] < 1 || instr.args[0] > 13) {
+                if (instr.args[0] < 1 || instr.args[0] > 15) {
                     raise_space_error("ParseError", "unsupported op_id " + std::to_string(instr.args[0]));
                 }
                 stack_.push_back(numeric_binary(instr.args[0], left, right));

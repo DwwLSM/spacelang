@@ -90,8 +90,9 @@ Keyword arguments work for top-level functions, builtins, and dynamic
 SpaceLang closures. Calls may expand positional iterables and keyword mappings
 with `*values` and `**options`; ordinary explicit keyword arguments to methods
 remain unsupported. Expressions
-currently do not support identity comparisons or operators beyond `+`, `-`,
-`*`, `/`, and `%`. Top-level and nested functions support required and optional
+currently do not support operators beyond `+`, `-`, `*`, `/`, and `%`.
+Identity comparisons (`is` and `is not`) are supported. Top-level and nested
+functions support required and optional
 positional parameters, positional-only parameters, and keyword-only parameters.
 Positional and keyword arguments, including argument expansion, are supported
 for direct calls to known top-level functions. Builtin keyword arguments are

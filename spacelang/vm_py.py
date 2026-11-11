@@ -108,6 +108,15 @@ class VM:
     def _emit(self, exc: Exception) -> None:
         raise exc
 
+    @staticmethod
+    def _identical(left: Any, right: Any) -> bool:
+        if left is right:
+            return True
+        scalar_types = (bool, int, float, type(None))
+        if type(left) in scalar_types and type(right) is type(left):
+            return left == right
+        return left is right
+
     def _call_builtin(self, func_id: int, args: list[Any], kwargs: dict[str, Any] | None = None) -> Any:
         func = ALL_BUILTINS.get(func_id)
         if func is None:
@@ -482,6 +491,10 @@ class VM:
                     result = lhs in rhs
                 elif op_id == 13:
                     result = lhs not in rhs
+                elif op_id == 14:
+                    result = self._identical(lhs, rhs)
+                elif op_id == 15:
+                    result = not self._identical(lhs, rhs)
                 else:
                     raise ParseError(line=0, ip=self.ip, msg=f"unsupported op_id {op_id}")
                 self._push(result)

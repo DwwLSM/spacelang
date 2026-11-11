@@ -41,6 +41,24 @@ def test_pyfront_floating_point_literals_and_arithmetic():
     )
 
 
+def test_pyfront_identity_comparisons():
+    source = (
+        "first = []\n"
+        "alias = first\n"
+        "other = []\n"
+        "print(None is None, None is not False)\n"
+        "print(first is alias, first is not other)\n"
+        "print(1 is 1, 1 is not True, 1 is not 1.0)\n"
+        "print(None is None is not other)\n"
+    )
+    assert run_source(source) == (
+        "True True\n"
+        "True True\n"
+        "True True True\n"
+        "True\n"
+    )
+
+
 def test_pyfront_drops_expression_results_and_preserves_none_call_results():
     assert run_source('print(print("inner"))') == "inner\nNone\n"
     assert run_source("def value(): return 7\nvalue()\nprint(1)") == "1\n"

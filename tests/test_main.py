@@ -226,6 +226,28 @@ def test_compile_py_supports_float_literals_in_sp_file(tmp_path):
         assert output.getvalue() == expected
 
 
+def test_compile_py_supports_identity_comparisons_in_sp_file(tmp_path):
+    source = tmp_path / "identity.py"
+    destination = tmp_path / "identity.sp"
+    source.write_text(
+        "first = []\n"
+        "alias = first\n"
+        "other = []\n"
+        "print(None is None, None is not False)\n"
+        "print(first is alias, first is not other)\n"
+        "print(1 is 1, 1 is not True, 1 is not 1.0)\n"
+        "print(None is None is not other)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    expected = "True True\nTrue True\nTrue True True\nTrue\n"
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == expected
+
+
 def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
     source = tmp_path / "function_parameters.py"
     destination = tmp_path / "function_parameters.sp"
