@@ -73,6 +73,10 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "print(data, data['name'], data['count'], data['active'])",
         "first = {'value': 1, 'keep': 2}\nsecond = {'value': 3, 4: 'number'}\n"
         "result = {**first, 'extra': 5, **second, 'last': 6}\nprint(result)",
+        "offset = 10\nresult = {x: x + offset for x in range(5) if x > 1}\n"
+        "pairs = {x: y for x in [1, 2, 3] for y in range(x) if y > 0}\n"
+        "overwritten = {x % 2: x for x in range(5)}\n"
+        "print(result, pairs, overwritten)",
         "import math\nresult = math.sqrt(81)\nprint(result)",
         'print("left", "right", sep="-")',
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",

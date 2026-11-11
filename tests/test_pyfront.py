@@ -219,6 +219,19 @@ def test_pyfront_dictionary_literals_lookup_assignment_and_update():
     assert run_source(source) == "{'name': 'Ada', 'count': 3, 'active': True} Ada 3 True\n"
 
 
+def test_pyfront_dictionary_comprehensions_support_filters_and_multiple_generators():
+    source = (
+        "offset = 10\n"
+        "result = {x: x + offset for x in range(5) if x > 1}\n"
+        "pairs = {x: y for x in [1, 2, 3] for y in range(x) if y > 0}\n"
+        "overwritten = {x % 2: x for x in range(5)}\n"
+        "print(result, pairs, overwritten)\n"
+    )
+    assert run_source(source) == (
+        "{2: 12, 3: 13, 4: 14} {2: 1, 3: 2} {0: 4, 1: 3}\n"
+    )
+
+
 def test_pyfront_dictionary_unpacking_overwrites_in_order():
     source = (
         "first = {'value': 1, 'keep': 2}\n"

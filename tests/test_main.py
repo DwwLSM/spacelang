@@ -139,6 +139,26 @@ def test_compile_py_supports_dictionary_unpacking_in_sp_file(tmp_path):
         assert output.getvalue() == "{'value': 3, 'keep': 2, 'extra': 5, 4: 'number', 'last': 6}\n"
 
 
+def test_compile_py_supports_dictionary_comprehensions_in_sp_file(tmp_path):
+    source = tmp_path / "dictionary_comprehension.py"
+    destination = tmp_path / "dictionary_comprehension.sp"
+    source.write_text(
+        "offset = 10\n"
+        "result = {x: x + offset for x in range(5) if x > 1}\n"
+        "pairs = {x: y for x in [1, 2, 3] for y in range(x) if y > 0}\n"
+        "overwritten = {x % 2: x for x in range(5)}\n"
+        "print(result, pairs, overwritten)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    expected = "{2: 12, 3: 13, 4: 14} {2: 1, 3: 2} {0: 4, 1: 3}\n"
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == expected
+
+
 def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
     source = tmp_path / "function_parameters.py"
     destination = tmp_path / "function_parameters.sp"

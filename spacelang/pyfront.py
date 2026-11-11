@@ -63,6 +63,14 @@ class _LocalNameCollector(ast.NodeVisitor):
             for condition in generator.ifs:
                 self.visit(condition)
 
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        self.visit(node.key)
+        self.visit(node.value)
+        for generator in node.generators:
+            self.visit(generator.iter)
+            for condition in generator.ifs:
+                self.visit(condition)
+
 
 @dataclass
 class _FunctionScope:
@@ -645,6 +653,10 @@ class PyFront(ast.NodeVisitor):
             self._compile_listcomp(node)
             return
 
+        if isinstance(node, ast.DictComp):
+            self._compile_dictcomp(node)
+            return
+
         if isinstance(node, ast.If):
             self._compile_expr(node.test)
             false_label = f"if_false_{len(self.instrs)}"
@@ -794,23 +806,40 @@ class PyFront(ast.NodeVisitor):
         _emit(self.instrs, OP.BUILD_LIST, 0, line=line)
         self._store_name(result_name, line)
 
+        self._compile_comprehension(node.generators, line, result_name, node.elt)
+
+    def _compile_dictcomp(self, node: ast.DictComp) -> None:
+        line = getattr(node, "lineno", 0)
+        result_name = self._new_temp_name()
+        _emit(self.instrs, OP.BUILD_DICT, 0, line=line)
+        self._store_name(result_name, line)
+
+        self._compile_comprehension(node.generators, line, result_name, (node.key, node.value))
+
+    def _compile_comprehension(
+        self,
+        generators: list[ast.comprehension],
+        line: int,
+        result_name: str,
+        item: ast.expr | tuple[ast.expr, ast.expr],
+    ) -> None:
         if any(
             generator.is_async or not isinstance(generator.target, ast.Name)
-            for generator in node.generators
+            for generator in generators
         ):
             raise ParseError(
                 line=line,
                 ip=0,
-                msg="list comprehensions require synchronous name targets",
+                msg="comprehensions require synchronous name targets",
             )
 
         def compile_generator(index: int) -> None:
-            generator = node.generators[index]
+            generator = generators[index]
             self._compile_expr(generator.iter)
             _emit(self.instrs, OP.GET_ITER, line=line)
 
-            loop_label = f"listcomp_loop_{len(self.instrs)}"
-            exit_label = f"listcomp_exit_{len(self.instrs)}"
+            loop_label = f"comprehension_loop_{len(self.instrs)}"
+            exit_label = f"comprehension_exit_{len(self.instrs)}"
             self._emit_label(loop_label)
             _emit(self.instrs, OP.FOR_ITER, exit_label, line=line)
             target_name = self._new_temp_name()
@@ -821,10 +850,16 @@ class PyFront(ast.NodeVisitor):
                 self._compile_expr(condition)
                 _emit(self.instrs, OP.JZ, loop_label, line=line)
 
-            if index + 1 == len(node.generators):
+            if index + 1 == len(generators):
                 self._load_name(result_name, line)
-                self._compile_expr(node.elt)
-                _emit(self.instrs, OP.CALL_METHOD, self._name_id("append"), 1, line=line)
+                if isinstance(item, tuple):
+                    self._compile_expr(item[0])
+                    self._compile_expr(item[1])
+                    _emit(self.instrs, OP.BUILD_DICT, 1, line=line)
+                    _emit(self.instrs, OP.DICT_UPDATE, line=line)
+                else:
+                    self._compile_expr(item)
+                    _emit(self.instrs, OP.CALL_METHOD, self._name_id("append"), 1, line=line)
                 _emit(self.instrs, OP.STACK, 3, line=line)
             else:
                 compile_generator(index + 1)

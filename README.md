@@ -75,10 +75,11 @@ one or more synchronous `for` clauses, name targets, and `if` filters are
 supported.
 
 This is still a Python subset, not full Python; features such as classes,
-exceptions in source code, generators, dictionary and set comprehensions,
+exceptions in source code, generators, and set comprehensions,
 slice assignment, and async syntax are not implemented. Dictionary literals,
 including `**mapping` unpacking, key lookup, assignment, and augmented
-assignment are supported.
+assignment are supported. Dictionary comprehensions support synchronous
+`for` clauses with name targets and `if` filters.
 Functions may collect extra positional arguments with `*args` and extra
 keyword arguments with `**kwargs`. Positional-only parameters (`/`) and
 keyword-only parameters (`*`) are supported. Default expressions use the
