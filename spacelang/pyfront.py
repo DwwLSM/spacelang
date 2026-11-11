@@ -525,12 +525,29 @@ class PyFront(ast.NodeVisitor):
                 for arg in node.args:
                     self._compile_expr(arg)
                 if node.keywords:
-                    raise ParseError(
+                    for keyword in node.keywords:
+                        if keyword.arg is None:
+                            raise ParseError(
+                                line=getattr(node, "lineno", 0),
+                                ip=0,
+                                msg="expanded keyword arguments are unsupported",
+                            )
+                        _emit(
+                            self.instrs,
+                            OP.PUSH_INT,
+                            self._name_id(keyword.arg),
+                            line=getattr(node, "lineno", 0),
+                        )
+                        self._compile_expr(keyword.value)
+                    _emit(
+                        self.instrs,
+                        OP.CALL_OBJ_KW,
+                        len(node.args),
+                        len(node.keywords),
                         line=getattr(node, "lineno", 0),
-                        ip=0,
-                        msg="keyword arguments to callable objects are unsupported",
                     )
-                _emit(self.instrs, OP.CALL_OBJ, len(node.args), line=getattr(node, "lineno", 0))
+                else:
+                    _emit(self.instrs, OP.CALL_OBJ, len(node.args), line=getattr(node, "lineno", 0))
                 return
             if isinstance(node.func, ast.Attribute):
                 if node.keywords:
@@ -906,12 +923,20 @@ class PyFront(ast.NodeVisitor):
                     ip=0,
                     msg=f"cannot capture enclosing name {name!r}",
                 )
+        parameter_names = [arg.arg for arg in node.args.args]
+        required_count = len(parameter_names) - len(node.args.defaults)
+        default_names = parameter_names[required_count:]
+        for name in parameter_names:
+            _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
+        for default in node.args.defaults:
+            self._compile_expr(default)
         _emit(
             self.instrs,
-            OP.MAKE_CLOSURE,
+            OP.MAKE_CLOSURE_SIG,
             func_id,
             len(scope.free_names),
-            len(node.args.args),
+            len(parameter_names),
+            len(default_names),
             line=line,
         )
         self._store_name(node.name, line)

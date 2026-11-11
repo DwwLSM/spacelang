@@ -6,7 +6,9 @@ import pytest
 
 pytest.importorskip("spacelang._spacelang_cpp")
 
+from spacelang.errors import SpaceError
 from spacelang.encoder import encode
+from spacelang.ir import OP
 from spacelang.lexer import tokenize
 from spacelang.parser import parse
 from spacelang.pyfront import compile_py
@@ -25,6 +27,7 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "def make_factorial(limit):\n    def wrapper():\n        def factorial(value):\n            if value < 2:\n                return 1\n            return value * factorial(value - 1)\n        return factorial(limit)\n    return wrapper\nfactorial = make_factorial(5)\nprint(factorial())",
         "def outer(base):\n    def combine(left, right=3, suffix=\"!\"):\n        return base + left + right\n    return combine(left=2, suffix=\"?\", right=4)\nprint(outer(10))",
         "def factorial():\n    def calculate(value, result=1):\n        if value < 2:\n            return result\n        return calculate(value=value - 1, result=result * value)\n    return calculate(value=5)\nprint(factorial())",
+        "def make_adder(base):\n    def add(value, extra=2): return base + value + extra\n    return add\nfn = make_adder(5)\nprint(fn(extra=4, value=3))",
         "counter = 4\ndef update():\n    global counter\n    counter = counter + 1\n    return counter\nprint(update(), counter)",
         "item = 9\ndef values():\n    result = [item for item in [1, 2]]\n    empty = None\n    return item, empty\nprint(values())",
         "def empty():\n    return None\nprint(empty(), None)",
@@ -80,6 +83,46 @@ def test_python_and_cpp_engines_match_assignment_targets():
     for vm in machines:
         assert vm.globals_["box"].value == 5
         assert vm.globals_["items"] == [2, 1]
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [
+        ("fn(1, unknown=2)", "unexpected keyword argument 'unknown'"),
+        ("fn(1, value=2)", "multiple values for argument 'value'"),
+        ("fn()", "missing required argument 'value'"),
+    ],
+)
+def test_python_and_cpp_engines_validate_saved_closure_keywords(call, message):
+    source = (
+        "def outer():\n"
+        "    def inner(value): return value\n"
+        "    return inner\n"
+        "fn = outer()\n"
+        f"{call}\n"
+    )
+    program = compile_py(source)
+
+    for vm_type in (PythonVM, CppVM):
+        with pytest.raises(SpaceError, match=message):
+            vm_type(program).run()
+
+
+def test_python_and_cpp_engines_still_run_legacy_closure_bytecode():
+    program = parse(
+        [
+            OP.DEF, 10000, 1,
+            OP.LOAD_ARG, 0,
+            OP.RET,
+            OP.MAKE_CLOSURE, 10000, 0, 1,
+            OP.PUSH_INT, 12,
+            OP.CALL_OBJ, 1,
+            OP.HALT,
+        ]
+    )
+
+    for vm_type in (PythonVM, CppVM):
+        assert vm_type(program).run() == 6
 
 
 def test_python_and_cpp_engines_match_optimized_closures():

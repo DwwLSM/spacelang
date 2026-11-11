@@ -50,6 +50,8 @@ MNEMONICS = {
     "CELLIFY": OP.CELLIFY,
     "LOAD_CELL_REF": OP.LOAD_CELL_REF,
     "LOAD_DEREF": OP.LOAD_DEREF,
+    "CALL_OBJ_KW": OP.CALL_OBJ_KW,
+    "MAKE_CLOSURE_SIG": OP.MAKE_CLOSURE_SIG,
 }
 
 NAME_OPS = {
@@ -195,6 +197,10 @@ def assemble(src: str) -> Program:
         elif op in {OP.CALL, OP.CALL_METHOD, OP.DEF} and len(args) == 2:
             instrs.append(Instr(op, args, line=source_line))
         elif op == OP.MAKE_CLOSURE and len(args) == 3:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.MAKE_CLOSURE_SIG and len(args) == 4:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.CALL_OBJ_KW and len(args) == 2:
             instrs.append(Instr(op, args, line=source_line))
         elif op == OP.CALL_OBJ and len(args) == 1:
             instrs.append(Instr(op, args, line=source_line))

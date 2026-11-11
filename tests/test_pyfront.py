@@ -376,10 +376,31 @@ def test_pyfront_nested_function_calls_validate_argument_count():
         compile_py(source)
 
 
-def test_pyfront_rejects_keyword_arguments_for_saved_closure_values():
-    source = "def outer():\n    def inner(value): return value\n    return inner\nf = outer()\nf(value=3)"
-    with pytest.raises(ParseError, match="keyword arguments to callable objects are unsupported"):
-        compile_py(source)
+def test_pyfront_saved_closures_support_keyword_arguments_and_defaults():
+    source = textwrap.dedent("""
+    def outer(base):
+        def combine(left, right=3, suffix="!"):
+            return base + left + right
+        return combine
+
+    fn = outer(10)
+    print(fn(2), fn(2, right=4), fn(left=3, suffix="?", right=5))
+    """)
+    assert run_source(source) == "15 16 18\n"
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [
+        ("fn(1, unknown=2)", "unexpected keyword argument 'unknown'"),
+        ("fn(1, value=2)", "multiple values for argument 'value'"),
+        ("fn()", "missing required argument 'value'"),
+    ],
+)
+def test_pyfront_saved_closures_validate_keyword_bindings(call, message):
+    source = f"def outer():\n    def inner(value): return value\n    return inner\nfn = outer()\n{call}"
+    with pytest.raises(SpaceError, match=message):
+        run_source(source)
 
 
 def test_pyfront_supports_simple_f_strings_and_list_comprehensions():

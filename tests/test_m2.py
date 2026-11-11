@@ -103,6 +103,8 @@ def test_assemble_and_disassemble_closure_opcodes():
     program = assemble(
         """
         MAKE_CLOSURE 10000 2 3
+        MAKE_CLOSURE_SIG 10000 2 3 1
+        CALL_OBJ_KW 2 1
         CELLIFY 3
         LOAD_CELL_REF 4
         LOAD_DEREF 5

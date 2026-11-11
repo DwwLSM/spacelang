@@ -47,6 +47,8 @@ class OP(IntEnum):
     CELLIFY = 37
     LOAD_CELL_REF = 38
     LOAD_DEREF = 39
+    CALL_OBJ_KW = 40
+    MAKE_CLOSURE_SIG = 41
 
 
 @dataclass(slots=True)

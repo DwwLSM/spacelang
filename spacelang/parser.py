@@ -49,7 +49,7 @@ def parse(token_stream) -> Program:
         op_code = token_stream[i]
         op_line = token_lines[i]
         i += 1
-        if op_code not in range(40):
+        if op_code not in range(42):
             raise ParseError(line=op_line, ip=op_index, msg=f"unknown opcode {op_code}")
 
         op = OP(op_code)
@@ -64,6 +64,16 @@ def parse(token_stream) -> Program:
             nfree, i = _parse_int_value(token_stream, i, op_line)
             nargs, i = _parse_int_value(token_stream, i, op_line)
             args = [func_id, nfree, nargs]
+        elif op == OP.MAKE_CLOSURE_SIG:
+            func_id, i = _parse_int_value(token_stream, i, op_line)
+            nfree, i = _parse_int_value(token_stream, i, op_line)
+            nargs, i = _parse_int_value(token_stream, i, op_line)
+            ndefaults, i = _parse_int_value(token_stream, i, op_line)
+            args = [func_id, nfree, nargs, ndefaults]
+        elif op == OP.CALL_OBJ_KW:
+            npos, i = _parse_int_value(token_stream, i, op_line)
+            nkw, i = _parse_int_value(token_stream, i, op_line)
+            args = [npos, nkw]
         elif op in {OP.CALL, OP.CALL_METHOD, OP.DEF}:
             func_id, i = _parse_int_value(token_stream, i, op_line)
             nargs, i = _parse_int_value(token_stream, i, op_line)

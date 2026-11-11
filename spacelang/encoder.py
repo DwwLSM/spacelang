@@ -70,6 +70,8 @@ def encode(program: Program) -> str:
             OP.CELLIFY: 1,
             OP.LOAD_CELL_REF: 1,
             OP.LOAD_DEREF: 1,
+            OP.CALL_OBJ_KW: 2,
+            OP.MAKE_CLOSURE_SIG: 4,
         }
         if op != OP.PUSH_STR and len(instr.args) != expected_args[op]:
             raise EncodingError(line=instr.line, ip=ip, msg=f"invalid argument count for {op.name}")

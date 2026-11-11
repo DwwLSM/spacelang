@@ -122,6 +122,27 @@ def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
         assert output.getvalue() == "v=3\nx=4\n"
 
 
+def test_compile_py_supports_saved_closure_keyword_arguments_in_sp_file(tmp_path):
+    source = tmp_path / "closure_keywords.py"
+    destination = tmp_path / "closure_keywords.sp"
+    source.write_text(
+        "def make_adder(base):\n"
+        "    def add(value, extra=2):\n"
+        "        return base + value + extra\n"
+        "    return add\n"
+        "\n"
+        "fn = make_adder(5)\n"
+        "print(fn(extra=4, value=3), fn(1))\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "12 8\n"
+
+
 def test_compile_py_supports_global_declarations_in_sp_file(tmp_path):
     source = tmp_path / "global_scope.py"
     destination = tmp_path / "global_scope.sp"

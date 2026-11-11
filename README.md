@@ -77,19 +77,18 @@ supported.
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, dictionary and set comprehensions,
 starred arguments, keyword-only parameters, slice assignment, and async syntax
-are not implemented. Nested function defaults must be immutable literals;
-keyword arguments work for statically identified nested function names, not
-saved/dynamic closure values. Expressions currently do not support
-floating-point literals, dictionaries, sets, slicing, membership or identity
-comparisons, or operators beyond `+`, `-`, `*`, `/`, and `%`. Functions use
-positional parameters; required and optional positional parameters are
-supported for top-level functions. Defaults must be immutable literals and are
-emitted at direct user-function call sites. Positional and keyword arguments
-are supported for direct calls to known top-level functions. Builtin keyword
-arguments are supported where the target builtin accepts them; methods and
-dynamically called objects do not accept keyword arguments. Functions use
-statically determined local variables; `global` declarations and lexical
-closures with `nonlocal` updates are supported.
+are not implemented. Nested function defaults must be immutable literals.
+Keyword arguments work for top-level functions, builtins, and dynamic
+SpaceLang closures; methods do not accept keyword arguments. Expressions
+currently do not support floating-point literals, dictionaries, sets, slicing,
+membership or identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
+and `%`. Functions use positional parameters; required and optional positional
+parameters are supported for top-level and nested functions. Defaults must be
+immutable literals. Positional and keyword arguments are supported for direct
+calls to known top-level functions. Builtin keyword arguments are supported
+where the target builtin accepts them. Functions use statically determined
+local variables; `global` declarations and lexical closures with `nonlocal`
+updates are supported.
 Unsupported syntax raises an error rather than being silently compiled.
 
 ## Run a `.sp` program
@@ -188,10 +187,12 @@ assembler directives, not VM opcodes.
 | 33 | `STORE_INDEX` | none | Pop a key, container, and value, then assign `container[key] = value`. |
 | 34 | `UNPACK_SEQUENCE` | `count` | Unpack exactly `count` values from an iterable onto the stack. |
 | 35 | `PUSH_NONE` | none | Push Python's `None` value. |
-| 36 | `MAKE_CLOSURE` | `func_id, cell_count, arg_count` | Pop captured cells and push a closure for the function. |
+| 36 | `MAKE_CLOSURE` | `func_id, cell_count, arg_count` | Pop captured cells and push a legacy positional-only closure. |
 | 37 | `CELLIFY` | `local_slot` | Wrap a local slot in a shared closure cell. |
 | 38 | `LOAD_CELL_REF` | `local_slot` | Push the cell object stored in a local slot. |
 | 39 | `LOAD_DEREF` | `closure_index` | Push a captured cell reference from the current closure. |
+| 40 | `CALL_OBJ_KW` | `positional_count, keyword_count` | Call a dynamic callable with positional and named arguments. |
+| 41 | `MAKE_CLOSURE_SIG` | `func_id, cell_count, arg_count, default_count` | Pop captured cells and signature metadata, then push a closure. |
 
 `OP` operation IDs:
 

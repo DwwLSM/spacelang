@@ -27,10 +27,18 @@ class Cell:
 
 
 class Closure:
-    def __init__(self, func_id: int, cells: list[Cell], arg_count: int):
+    def __init__(
+        self,
+        func_id: int,
+        cells: list[Cell],
+        parameter_names: list[str] | int,
+        defaults: dict[str, Any] | None = None,
+    ):
         self.func_id = func_id
         self.cells = cells
-        self.arg_count = arg_count
+        self.arg_count = parameter_names if isinstance(parameter_names, int) else len(parameter_names)
+        self.parameter_names = None if isinstance(parameter_names, int) else parameter_names
+        self.defaults = defaults or {}
 
 
 @dataclass
@@ -116,6 +124,37 @@ class VM:
         self._push_frame(func_id, args, self.ip + 1)
         self.ip = entry_ip
         return None
+
+    def _bind_closure_args(
+        self,
+        closure: Closure,
+        positional: list[Any],
+        keywords: dict[str, Any],
+        line: int,
+    ) -> list[Any]:
+        parameter_names = closure.parameter_names
+        if len(positional) > len(parameter_names):
+            raise TypeError(
+                line=line,
+                ip=self.ip,
+                msg=f"expected at most {len(parameter_names)} positional arguments, got {len(positional)}",
+            )
+        bound = dict(zip(parameter_names, positional))
+        for name, value in keywords.items():
+            if name not in parameter_names:
+                raise TypeError(line=line, ip=self.ip, msg=f"unexpected keyword argument {name!r}")
+            if name in bound:
+                raise TypeError(line=line, ip=self.ip, msg=f"multiple values for argument {name!r}")
+            bound[name] = value
+        args = []
+        for name in parameter_names:
+            if name in bound:
+                args.append(bound[name])
+            elif name in closure.defaults:
+                args.append(closure.defaults[name])
+            else:
+                raise TypeError(line=line, ip=self.ip, msg=f"missing required argument {name!r}")
+        return args
 
     def _raise(self, exc: BaseException) -> None:
         while self.try_stack:
@@ -512,12 +551,17 @@ class VM:
                 self.ip += 1
                 continue
 
-            if op == OP.CALL_OBJ:
-                nargs = int(args[0])
-                args_list = []
-                for _ in range(nargs):
-                    args_list.append(self._pop("call arg"))
-                args_list.reverse()
+            if op in {OP.CALL_OBJ, OP.CALL_OBJ_KW}:
+                nargs = int(args[0]) if op == OP.CALL_OBJ else int(args[0])
+                nkw = 0 if op == OP.CALL_OBJ else int(args[1])
+                keywords: dict[str, Any] = {}
+                for _ in range(nkw):
+                    value = self._pop("keyword value")
+                    name = self._name(int(self._pop("keyword name")))
+                    if name in keywords:
+                        raise TypeError(line=instr.line, ip=self.ip, msg=f"multiple values for keyword {name!r}")
+                    keywords[name] = value
+                args_list = self._collect_args(nargs)
                 callable_obj = self._pop("callable")
                 if isinstance(callable_obj, Closure):
                     if callable_obj.func_id not in self.funcs:
@@ -526,13 +570,24 @@ class VM:
                             ip=self.ip,
                             msg=f"undefined user function {callable_obj.func_id}",
                         )
-                    expected_args = callable_obj.arg_count
-                    if len(args_list) != expected_args:
-                        raise TypeError(
-                            line=instr.line,
-                            ip=self.ip,
-                            msg=f"expected {expected_args} positional arguments, got {len(args_list)}",
-                        )
+                    if callable_obj.parameter_names is None:
+                        if keywords:
+                            raise TypeError(
+                                line=instr.line,
+                                ip=self.ip,
+                                msg="keyword arguments are unavailable for this legacy closure",
+                            )
+                        if len(args_list) != callable_obj.arg_count:
+                            raise TypeError(
+                                line=instr.line,
+                                ip=self.ip,
+                                msg=(
+                                    f"expected {callable_obj.arg_count} positional arguments, "
+                                    f"got {len(args_list)}"
+                                ),
+                            )
+                    else:
+                        args_list = self._bind_closure_args(callable_obj, args_list, keywords, instr.line)
                     self._push_frame(
                         callable_obj.func_id,
                         args_list,
@@ -541,20 +596,44 @@ class VM:
                     )
                     self.ip = self.funcs[callable_obj.func_id][0]
                     continue
-                result = callable_obj(*args_list)
+                if op == OP.CALL_OBJ_KW:
+                    result = callable_obj(*args_list, **keywords)
+                else:
+                    result = callable_obj(*args_list)
                 self._push(result)
                 self.ip += 1
                 continue
 
             if op == OP.MAKE_CLOSURE:
                 func_id = int(args[0])
-                count = int(args[1])
+                cell_count = int(args[1])
                 arg_count = int(args[2])
-                cells = [self._pop("closure cell") for _ in range(count)]
+                cells = [self._pop("closure cell") for _ in range(cell_count)]
                 cells.reverse()
                 if func_id not in self.funcs:
                     raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
                 self._push(Closure(func_id, cells, arg_count))
+                self.ip += 1
+                continue
+
+            if op == OP.MAKE_CLOSURE_SIG:
+                func_id = int(args[0])
+                cell_count = int(args[1])
+                parameter_count = int(args[2])
+                default_count = int(args[3])
+                default_values = [self._pop("default value") for _ in range(default_count)]
+                default_values.reverse()
+                parameter_names = [
+                    self._name(int(self._pop("parameter name")))
+                    for _ in range(parameter_count)
+                ]
+                parameter_names.reverse()
+                defaults = dict(zip(parameter_names[-default_count:] if default_count else [], default_values))
+                cells = [self._pop("closure cell") for _ in range(cell_count)]
+                cells.reverse()
+                if func_id not in self.funcs:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
+                self._push(Closure(func_id, cells, parameter_names, defaults))
                 self.ip += 1
                 continue
 
