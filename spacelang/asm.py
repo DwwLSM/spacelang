@@ -33,6 +33,7 @@ MNEMONICS = {
     "DICT_MERGE": OP.DICT_MERGE,
     "DICT_UPDATE": OP.DICT_UPDATE,
     "BUILD_SET": OP.BUILD_SET,
+    "BUILD_SLICE": OP.BUILD_SLICE,
     "MAKE_CLOSURE_POSONLY": OP.MAKE_CLOSURE_POSONLY,
     "CONCAT": OP.CONCAT,
     "DEF": OP.DEF,
@@ -240,6 +241,7 @@ def assemble(src: str) -> Program:
             OP.LIST_EXTEND,
             OP.DICT_MERGE,
             OP.DICT_UPDATE,
+            OP.BUILD_SLICE,
         } and len(args) == 0:
             instrs.append(Instr(op, [], line=source_line))
         else:

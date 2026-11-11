@@ -181,6 +181,29 @@ def test_compile_py_supports_sets_in_sp_file(tmp_path):
         assert output.getvalue() == expected
 
 
+def test_compile_py_supports_slicing_in_sp_file(tmp_path):
+    source = tmp_path / "slicing.py"
+    destination = tmp_path / "slicing.sp"
+    source.write_text(
+        "values = [0, 1, 2, 3, 4, 5]\n"
+        "middle = values[1:5:2]\n"
+        "reverse = values[::-1]\n"
+        "values[1:3] = [8, 9]\n"
+        "values[::2] = [20, 21, 22]\n"
+        "values[1:2] += [30]\n"
+        "print(middle, reverse, values)\n"
+        "print('abcdef'[1:5:2], (0, 1, 2, 3)[::-1])\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    expected = "[1, 3] [5, 4, 3, 2, 1, 0] [20, 8, 30, 21, 3, 22, 5]\n" "bd (3, 2, 1, 0)\n"
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == expected
+
+
 def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
     source = tmp_path / "function_parameters.py"
     destination = tmp_path / "function_parameters.sp"

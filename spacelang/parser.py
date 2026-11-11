@@ -49,7 +49,7 @@ def parse(token_stream) -> Program:
         op_code = token_stream[i]
         op_line = token_lines[i]
         i += 1
-        if op_code not in range(52):
+        if op_code not in range(53):
             raise ParseError(line=op_line, ip=op_index, msg=f"unknown opcode {op_code}")
 
         op = OP(op_code)
@@ -157,6 +157,7 @@ def parse(token_stream) -> Program:
             OP.LIST_EXTEND,
             OP.DICT_MERGE,
             OP.DICT_UPDATE,
+            OP.BUILD_SLICE,
         }:
             pass
 

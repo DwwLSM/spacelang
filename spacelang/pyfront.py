@@ -394,12 +394,12 @@ class PyFront(ast.NodeVisitor):
                 self._store_name(object_name, line)
                 self._load_name(object_name, line)
                 _emit(self.instrs, OP.GET_ATTR, self._name_id(target.attr), line=line)
-            elif isinstance(target, ast.Subscript) and not isinstance(target.slice, ast.Slice):
+            elif isinstance(target, ast.Subscript):
                 object_name = self._new_temp_name()
                 index_name = self._new_temp_name()
                 self._compile_expr(target.value)
                 self._store_name(object_name, line)
-                self._compile_expr(target.slice)
+                self._compile_subscript_index(target.slice, line)
                 self._store_name(index_name, line)
                 self._load_name(object_name, line)
                 self._load_name(index_name, line)
@@ -623,7 +623,7 @@ class PyFront(ast.NodeVisitor):
 
         if isinstance(node, ast.Subscript):
             self._compile_expr(node.value)
-            self._compile_expr(node.slice)
+            self._compile_subscript_index(node.slice, getattr(node, "lineno", 0))
             _emit(self.instrs, OP.INDEX, 0, line=getattr(node, "lineno", 0))
             return
 
@@ -813,12 +813,23 @@ class PyFront(ast.NodeVisitor):
             self._compile_expr(target.value)
             _emit(self.instrs, OP.STORE_ATTR, self._name_id(target.attr), line=line)
             return
-        if isinstance(target, ast.Subscript) and not isinstance(target.slice, ast.Slice):
+        if isinstance(target, ast.Subscript):
             self._compile_expr(target.value)
-            self._compile_expr(target.slice)
+            self._compile_subscript_index(target.slice, line)
             _emit(self.instrs, OP.STORE_INDEX, line=line)
             return
         raise ParseError(line=line, ip=0, msg="unsupported assignment target")
+
+    def _compile_subscript_index(self, index: ast.expr, line: int) -> None:
+        if not isinstance(index, ast.Slice):
+            self._compile_expr(index)
+            return
+        for component in (index.lower, index.upper, index.step):
+            if component is None:
+                _emit(self.instrs, OP.PUSH_NONE, line=line)
+            else:
+                self._compile_expr(component)
+        _emit(self.instrs, OP.BUILD_SLICE, line=line)
 
     def _compile_listcomp(self, node: ast.ListComp) -> None:
         line = getattr(node, "lineno", 0)

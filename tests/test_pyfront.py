@@ -354,6 +354,23 @@ def test_pyfront_sets_support_literals_membership_add_and_comprehensions():
     )
 
 
+def test_pyfront_slicing_and_slice_assignment():
+    source = (
+        "values = [0, 1, 2, 3, 4, 5]\n"
+        "middle = values[1:5:2]\n"
+        "reverse = values[::-1]\n"
+        "values[1:3] = [8, 9]\n"
+        "values[::2] = [20, 21, 22]\n"
+        "values[1:2] += [30]\n"
+        "print(middle, reverse, values)\n"
+        "print('abcdef'[1:5:2], (0, 1, 2, 3)[::-1])\n"
+    )
+    assert run_source(source) == (
+        "[1, 3] [5, 4, 3, 2, 1, 0] [20, 8, 30, 21, 3, 22, 5]\n"
+        "bd (3, 2, 1, 0)\n"
+    )
+
+
 def test_pyfront_set_comprehension_does_not_leak_target_name():
     source = (
         "def collect():\n"

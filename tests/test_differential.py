@@ -82,6 +82,11 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "pairs = {x + y for x in range(3) for y in range(x) if y > 0}\n"
         "print(values, empty, lookup, pairs)\n"
         "print(2 in values, 4 not in values, 'a' in {'a': 1})",
+        "values = [0, 1, 2, 3, 4, 5]\n"
+        "middle = values[1:5:2]\nreverse = values[::-1]\n"
+        "values[1:3] = [8, 9]\nvalues[::2] = [20, 21, 22]\n"
+        "values[1:2] += [30]\nprint(middle, reverse, values)\n"
+        "print('abcdef'[1:5:2], (0, 1, 2, 3)[::-1])",
         "import math\nresult = math.sqrt(81)\nprint(result)",
         'print("left", "right", sep="-")',
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",

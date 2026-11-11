@@ -562,6 +562,14 @@ class VM:
                 self.ip += 1
                 continue
 
+            if op == OP.BUILD_SLICE:
+                step = self._pop("slice step")
+                upper = self._pop("slice upper bound")
+                lower = self._pop("slice lower bound")
+                self._push(slice(lower, upper, step))
+                self.ip += 1
+                continue
+
             if op == OP.CONCAT:
                 count = int(args[0])
                 values = []

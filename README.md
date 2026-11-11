@@ -70,17 +70,17 @@ assignments, supported imports, `if`/`else`, `while`, `break`/`continue`, simple
 positional functions including nested functions, captured variables and
 `nonlocal`, and `for` loops over Python iterables. The reference and
 native VMs share iterator bytecode for lists, tuples, strings, `range(...)`, and
-other Python iterable objects. Sequence indexing and list comprehensions with
-one or more synchronous `for` clauses, name targets, and `if` filters are
-supported.
+other Python iterable objects. Sequence indexing and slicing, including slice
+assignment, and list comprehensions with one or more synchronous `for` clauses,
+name targets, and `if` filters are supported.
 
 This is still a Python subset, not full Python; features such as classes,
-exceptions in source code, generators, set unpacking, slice assignment, and
-async syntax are not implemented. Set literals, `set()`, membership checks, and
-set comprehensions are supported. Dictionary literals,
-including `**mapping` unpacking, key lookup, assignment, and augmented
-assignment are supported. Dictionary comprehensions support synchronous
-`for` clauses with name targets and `if` filters.
+exceptions in source code, generators, set unpacking, and async syntax are not
+implemented. Set literals, `set()`, membership checks, and set comprehensions
+are supported. Dictionary literals, including `**mapping` unpacking, key
+lookup, assignment, and augmented assignment are supported. Dictionary
+comprehensions support synchronous `for` clauses with name targets and `if`
+filters.
 Functions may collect extra positional arguments with `*args` and extra
 keyword arguments with `**kwargs`. Positional-only parameters (`/`) and
 keyword-only parameters (`*`) are supported. Default expressions use the
@@ -90,8 +90,8 @@ Keyword arguments work for top-level functions, builtins, and dynamic
 SpaceLang closures. Calls may expand positional iterables and keyword mappings
 with `*values` and `**options`; ordinary explicit keyword arguments to methods
 remain unsupported. Expressions
-currently do not support floating-point literals, slicing,
-identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
+currently do not support floating-point literals, identity comparisons, or
+operators beyond `+`, `-`, `*`, `/`,
 and `%`. Top-level and nested functions support required and optional positional
 parameters, positional-only parameters, and keyword-only parameters.
 Positional and keyword arguments, including argument expansion, are supported

@@ -59,6 +59,7 @@ class OP(IntEnum):
     MAKE_CLOSURE_POSONLY = 49
     DICT_UPDATE = 50
     BUILD_SET = 51
+    BUILD_SLICE = 52
 
 
 @dataclass(slots=True)

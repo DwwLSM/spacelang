@@ -66,6 +66,7 @@ enum Opcode : std::uint8_t {
     MAKE_CLOSURE_POSONLY = 49,
     DICT_UPDATE = 50,
     BUILD_SET = 51,
+    BUILD_SLICE = 52,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -225,7 +226,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 52) {
+        if (opcode < 0 || opcode >= 53) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -238,9 +239,9 @@ VM::VM(pybind11::object program) {
         const std::size_t expected[] = {
             0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
             1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
-            1, 0,             1, 0, 3, 1, 1,                         1, 2, 4, 6, 8, 1, 0, 1, 0, 0, 9, 0, 1,
+            1, 0,             1, 0, 3, 1, 1,                         1, 2, 4, 6, 8, 1, 0, 1, 0, 0, 9, 0, 1, 0,
         };
-        if (instr.op >= 52
+        if (instr.op >= 53
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -431,6 +432,7 @@ pybind11::object VM::run() {
             &&op_build_dict, &&op_call_obj_ex, &&op_call_builtin_ex,
             &&op_list_extend, &&op_dict_merge, &&op_make_closure_posonly,
             &&op_dict_update, &&op_build_set,
+            &&op_build_slice,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -789,6 +791,27 @@ pybind11::object VM::run() {
                 const auto key = pop("index key").to_python();
                 const auto object = pop("index object").to_python();
                 stack_.push_back(Value::from_python(object[key]));
+                ++ip;
+                break;
+            }
+            case BUILD_SLICE: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_build_slice:
+#endif
+                const auto step = pop("slice step").to_python();
+                const auto upper = pop("slice upper bound").to_python();
+                const auto lower = pop("slice lower bound").to_python();
+                PyObject* raw_slice = PySlice_New(
+                    lower.ptr(),
+                    upper.ptr(),
+                    step.ptr()
+                );
+                if (raw_slice == nullptr) {
+                    throw pybind11::error_already_set();
+                }
+                stack_.push_back(Value::from_python(
+                    pybind11::reinterpret_steal<pybind11::object>(raw_slice)
+                ));
                 ++ip;
                 break;
             }
