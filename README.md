@@ -77,8 +77,9 @@ supported.
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, dictionary and set comprehensions,
 starred arguments, keyword-only parameters, slice assignment, and async syntax
-are not implemented. Nested function defaults and keyword arguments are not
-supported. Expressions currently do not support
+are not implemented. Nested function defaults must be immutable literals;
+keyword arguments work for statically identified nested function names, not
+saved/dynamic closure values. Expressions currently do not support
 floating-point literals, dictionaries, sets, slicing, membership or identity
 comparisons, or operators beyond `+`, `-`, `*`, `/`, and `%`. Functions use
 positional parameters; required and optional positional parameters are

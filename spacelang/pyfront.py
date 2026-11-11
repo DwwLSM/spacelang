@@ -110,6 +110,7 @@ class PyFront(ast.NodeVisitor):
         self.name_overrides: list[dict[str, str]] = []
         self.loop_stack: list[_LoopContext] = []
         self.global_names_stack: list[set[str]] = [set()]
+        self.function_scope_stack: list[_FunctionScope] = []
 
     def _next_func_id(self) -> int:
         func_id = self.next_func_id
@@ -200,6 +201,19 @@ class PyFront(ast.NodeVisitor):
             if name in scope.local_names or name in scope.free_names:
                 return True
         return False
+
+    def _nested_function_for_call(self, name: str) -> ast.FunctionDef | None:
+        for scope in reversed(self.function_scope_stack):
+            if scope.node.name == name and name in scope.free_names:
+                return scope.node
+            if name in scope.global_names:
+                return None
+            if name in scope.local_names:
+                return next(
+                    (child.node for child in scope.children if child.node.name == name),
+                    None,
+                )
+        return None
 
     def _build_function_scope(
         self,
@@ -503,6 +517,10 @@ class PyFront(ast.NodeVisitor):
                 if name in self.function_ids and not local_callable:
                     self._compile_user_function_call(node, name)
                     return
+                nested_function = self._nested_function_for_call(name) if local_callable else None
+                if nested_function is not None:
+                    self._compile_nested_function_call(node, nested_function)
+                    return
                 self._compile_expr(node.func)
                 for arg in node.args:
                     self._compile_expr(arg)
@@ -777,12 +795,6 @@ class PyFront(ast.NodeVisitor):
         raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported statement: {type(node).__name__}")
 
     def _compile_function(self, node: ast.FunctionDef, *, nested: bool = False) -> None:
-        if nested and node.args.defaults:
-            raise ParseError(
-                line=getattr(node, "lineno", 0),
-                ip=0,
-                msg="nested functions do not support default arguments",
-            )
         if (
             node.args.posonlyargs
             or node.args.vararg is not None
@@ -847,6 +859,7 @@ class PyFront(ast.NodeVisitor):
         enclosing_loops, self.loop_stack = self.loop_stack, []
         self.locals_stack.append(local_scope)
         self.global_names_stack.append(collector.global_names)
+        self.function_scope_stack.append(scope)
 
         for name in sorted(scope.captured_names):
             _emit(self.instrs, OP.CELLIFY, local_scope[name], line=node.lineno)
@@ -858,6 +871,7 @@ class PyFront(ast.NodeVisitor):
             self._compile_stmt(stmt)
         self.global_names_stack.pop()
         self.locals_stack.pop()
+        self.function_scope_stack.pop()
         self.loop_stack = enclosing_loops
         self.funcs[func_id] = (start_ip, len(self.instrs))
         _emit(self.instrs, OP.PUSH_INT, 0, line=getattr(node, "lineno", 0))
@@ -868,6 +882,12 @@ class PyFront(ast.NodeVisitor):
         line = getattr(node, "lineno", 0)
         scope = self.function_scopes[id(node)]
         func_id = self.function_id_by_node[id(node)]
+        if any(not self._is_supported_default(value) for value in node.args.defaults):
+            raise ParseError(
+                line=line,
+                ip=0,
+                msg="function defaults must be immutable literals",
+            )
 
         for name in scope.free_names:
             if (
@@ -896,6 +916,59 @@ class PyFront(ast.NodeVisitor):
         )
         self._store_name(node.name, line)
         self.pending_nested_functions.append(node)
+
+    def _compile_nested_function_call(
+        self,
+        node: ast.Call,
+        function: ast.FunctionDef,
+    ) -> None:
+        line = getattr(node, "lineno", 0)
+        parameter_names = [arg.arg for arg in function.args.args]
+        required_count = len(parameter_names) - len(function.args.defaults)
+        defaults = dict(zip(parameter_names[required_count:], function.args.defaults))
+        if len(node.args) > len(parameter_names):
+            raise ParseError(line=line, ip=0, msg=f"too many positional arguments for {function.name}")
+        if any(isinstance(arg, ast.Starred) for arg in node.args):
+            raise ParseError(line=line, ip=0, msg="expanded positional arguments are unsupported")
+
+        bound: dict[str, str] = {}
+        ordered_values = list(node.args)
+        ordered_names = parameter_names[:len(node.args)]
+        keyword_names: set[str] = set()
+        for keyword in node.keywords:
+            if keyword.arg is None:
+                raise ParseError(line=line, ip=0, msg="expanded keyword arguments are unsupported")
+            if keyword.arg not in parameter_names:
+                raise ParseError(
+                    line=line,
+                    ip=0,
+                    msg=f"unexpected keyword argument {keyword.arg!r} for {function.name}",
+                )
+            if keyword.arg in ordered_names or keyword.arg in keyword_names:
+                raise ParseError(line=line, ip=0, msg=f"multiple values for argument {keyword.arg!r}")
+            keyword_names.add(keyword.arg)
+            ordered_names.append(keyword.arg)
+            ordered_values.append(keyword.value)
+
+        self._load_name(function.name, line)
+        for parameter_name, value in zip(ordered_names, ordered_values):
+            temp_name = self._new_temp_name()
+            self._compile_expr(value)
+            self._store_name(temp_name, line)
+            bound[parameter_name] = temp_name
+
+        for parameter_name in parameter_names:
+            if parameter_name in bound:
+                self._load_name(bound[parameter_name], line)
+            elif parameter_name in defaults:
+                self._compile_expr(defaults[parameter_name])
+            else:
+                raise ParseError(
+                    line=line,
+                    ip=0,
+                    msg=f"missing required argument {parameter_name!r} for {function.name}",
+                )
+        _emit(self.instrs, OP.CALL_OBJ, len(parameter_names), line=line)
 
     def _is_supported_default(self, node: ast.expr) -> bool:
         if isinstance(node, ast.Constant):

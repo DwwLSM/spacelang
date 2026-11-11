@@ -272,7 +272,6 @@ def test_pyfront_user_functions_support_defaults_and_keyword_arguments():
         "def f(a, /): return a",
         "def f(*, value): return value",
         "def f(**kwargs): return 0",
-        "def outer():\n    def inner(value=1): return value\n    return inner()",
     ],
 )
 def test_pyfront_rejects_unsupported_function_forms(source):
@@ -289,6 +288,7 @@ def test_pyfront_rejects_unsupported_function_forms(source):
         "def f(a): return a\nf(1, a=2)",
         "def f(a): return a\nf(b=1)",
         "def f(a=[]): return a",
+        "def outer():\n    def inner(value=[]): return value\n    return inner()",
     ],
 )
 def test_pyfront_rejects_invalid_user_function_bindings(source):
@@ -329,6 +329,37 @@ def test_pyfront_nested_function_closures_forward_cells_and_recurse():
     assert run_source(source) == "120\n"
 
 
+def test_pyfront_nested_functions_support_defaults_and_keyword_arguments():
+    source = textwrap.dedent("""
+    def outer(base):
+        def combine(left, right=3, suffix="!"):
+            return base + left + right
+        return combine(left=2, suffix="?", right=4)
+
+    def with_default():
+        def answer(value=42):
+            return value
+        return answer()
+
+    print(outer(10), with_default())
+    """)
+    assert run_source(source) == "16 42\n"
+
+
+def test_pyfront_nested_recursive_function_supports_keyword_arguments():
+    source = textwrap.dedent("""
+    def factorial():
+        def calculate(value, result=1):
+            if value < 2:
+                return result
+            return calculate(value=value - 1, result=result * value)
+        return calculate(value=5)
+
+    print(factorial())
+    """)
+    assert run_source(source) == "120\n"
+
+
 def test_pyfront_nested_functions_without_captured_variables():
     source = "def outer():\n    def inner(value): return value + 1\n    return inner\nf = outer()\nprint(f(4))"
     assert run_source(source) == "5\n"
@@ -341,8 +372,14 @@ def test_pyfront_rejects_nonlocal_without_enclosing_binding():
 
 def test_pyfront_nested_function_calls_validate_argument_count():
     source = "def outer():\n    def inner(value): return value\n    return inner()\nouter()"
-    with pytest.raises(SpaceError, match="expected 1 positional arguments, got 0"):
-        run_source(source)
+    with pytest.raises(ParseError, match="missing required argument 'value'"):
+        compile_py(source)
+
+
+def test_pyfront_rejects_keyword_arguments_for_saved_closure_values():
+    source = "def outer():\n    def inner(value): return value\n    return inner\nf = outer()\nf(value=3)"
+    with pytest.raises(ParseError, match="keyword arguments to callable objects are unsupported"):
+        compile_py(source)
 
 
 def test_pyfront_supports_simple_f_strings_and_list_comprehensions():

@@ -23,6 +23,8 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "def factorial(value):\n    if value < 2:\n        return 1\n    return value * factorial(value - 1)\nprint(factorial(5))",
         "def make_counter(start):\n    value = start\n    def increment():\n        nonlocal value\n        value = value + 1\n        return value\n    return increment\ncounter = make_counter(4)\nprint(counter(), counter())",
         "def make_factorial(limit):\n    def wrapper():\n        def factorial(value):\n            if value < 2:\n                return 1\n            return value * factorial(value - 1)\n        return factorial(limit)\n    return wrapper\nfactorial = make_factorial(5)\nprint(factorial())",
+        "def outer(base):\n    def combine(left, right=3, suffix=\"!\"):\n        return base + left + right\n    return combine(left=2, suffix=\"?\", right=4)\nprint(outer(10))",
+        "def factorial():\n    def calculate(value, result=1):\n        if value < 2:\n            return result\n        return calculate(value=value - 1, result=result * value)\n    return calculate(value=5)\nprint(factorial())",
         "counter = 4\ndef update():\n    global counter\n    counter = counter + 1\n    return counter\nprint(update(), counter)",
         "item = 9\ndef values():\n    result = [item for item in [1, 2]]\n    empty = None\n    return item, empty\nprint(values())",
         "def empty():\n    return None\nprint(empty(), None)",
