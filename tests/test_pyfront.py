@@ -268,7 +268,6 @@ def test_pyfront_user_functions_support_defaults_and_keyword_arguments():
 @pytest.mark.parametrize(
     "source",
     [
-        "def f(*args): return 0",
         "def f(a, /): return a",
         "def f(**kwargs): return 0",
     ],
@@ -435,6 +434,46 @@ def test_pyfront_nested_function_direct_call_accepts_keyword_only_arguments():
     print(outer())
     """)
     assert run_source(source) == "2!\n"
+
+
+def test_pyfront_collects_extra_positional_arguments():
+    source = textwrap.dedent("""
+    def collect(first, *rest):
+        return (first, rest)
+
+    def format_values(first=1, *rest, label, suffix="!"):
+        return (first, rest, label, suffix)
+
+    print(collect(1), collect(1, 2, 3))
+    print(format_values(label="x"), format_values(5, 6, 7, label="y"))
+    """)
+    assert run_source(source) == "(1, ()) (1, (2, 3))\n(1, (), 'x', '!') (5, (6, 7), 'y', '!')\n"
+
+
+def test_pyfront_saved_closure_collects_extra_positional_arguments():
+    source = textwrap.dedent("""
+    def make_collector(prefix):
+        def collect(first, *rest, marker="!"):
+            return (prefix, first, rest, marker)
+        return collect
+
+    collect = make_collector("<")
+    print(collect(1), collect(1, 2, 3, marker="?"))
+    """)
+    assert run_source(source) == "('<', 1, (), '!') ('<', 1, (2, 3), '?')\n"
+
+
+def test_pyfront_nested_closure_can_capture_varargs():
+    source = textwrap.dedent("""
+    def outer(*values):
+        def inner():
+            return values
+        return inner
+
+    inner = outer(1, 2, 3)
+    print(inner())
+    """)
+    assert run_source(source) == "(1, 2, 3)\n"
 
 
 @pytest.mark.parametrize(

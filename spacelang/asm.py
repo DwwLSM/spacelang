@@ -53,6 +53,7 @@ MNEMONICS = {
     "CALL_OBJ_KW": OP.CALL_OBJ_KW,
     "MAKE_CLOSURE_SIG": OP.MAKE_CLOSURE_SIG,
     "MAKE_CLOSURE_KWONLY": OP.MAKE_CLOSURE_KWONLY,
+    "MAKE_CLOSURE_ARGS": OP.MAKE_CLOSURE_ARGS,
 }
 
 NAME_OPS = {
@@ -202,6 +203,8 @@ def assemble(src: str) -> Program:
         elif op == OP.MAKE_CLOSURE_SIG and len(args) == 4:
             instrs.append(Instr(op, args, line=source_line))
         elif op == OP.MAKE_CLOSURE_KWONLY and len(args) == 6:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.MAKE_CLOSURE_ARGS and len(args) == 6:
             instrs.append(Instr(op, args, line=source_line))
         elif op == OP.CALL_OBJ_KW and len(args) == 2:
             instrs.append(Instr(op, args, line=source_line))

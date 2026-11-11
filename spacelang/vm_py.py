@@ -34,6 +34,7 @@ class Closure:
         parameter_names: list[str] | int,
         defaults: dict[str, Any] | None = None,
         positional_count: int | None = None,
+        vararg_name: str | None = None,
     ):
         self.func_id = func_id
         self.cells = cells
@@ -41,6 +42,7 @@ class Closure:
         self.parameter_names = None if isinstance(parameter_names, int) else parameter_names
         self.defaults = defaults or {}
         self.positional_count = self.arg_count if positional_count is None else positional_count
+        self.vararg_name = vararg_name
 
 
 @dataclass
@@ -135,13 +137,13 @@ class VM:
         line: int,
     ) -> list[Any]:
         parameter_names = closure.parameter_names
-        if len(positional) > closure.positional_count:
+        if len(positional) > closure.positional_count and closure.vararg_name is None:
             raise TypeError(
                 line=line,
                 ip=self.ip,
                 msg=f"expected at most {closure.positional_count} positional arguments, got {len(positional)}",
             )
-        bound = dict(zip(parameter_names, positional))
+        bound = dict(zip(parameter_names, positional[:closure.positional_count]))
         for name, value in keywords.items():
             if name not in parameter_names:
                 raise TypeError(line=line, ip=self.ip, msg=f"unexpected keyword argument {name!r}")
@@ -156,6 +158,8 @@ class VM:
                 args.append(closure.defaults[name])
             else:
                 raise TypeError(line=line, ip=self.ip, msg=f"missing required argument {name!r}")
+        if closure.vararg_name is not None:
+            args.append(tuple(positional[closure.positional_count:]))
         return args
 
     def _raise(self, exc: BaseException) -> None:
@@ -673,6 +677,53 @@ class VM:
                 if func_id not in self.funcs:
                     raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
                 self._push(Closure(func_id, cells, parameter_names, defaults, positional_count))
+                self.ip += 1
+                continue
+
+            if op == OP.MAKE_CLOSURE_ARGS:
+                func_id = int(args[0])
+                cell_count = int(args[1])
+                positional_count = int(args[2])
+                keyword_only_count = int(args[3])
+                positional_default_count = int(args[4])
+                keyword_default_count = int(args[5])
+                vararg_name = self._name(int(self._pop("vararg name")))
+                keyword_defaults = []
+                for _ in range(keyword_default_count):
+                    value = self._pop("keyword-only default value")
+                    name = self._name(int(self._pop("keyword-only default name")))
+                    keyword_defaults.append((name, value))
+                keyword_defaults.reverse()
+                positional_defaults = [
+                    self._pop("default value") for _ in range(positional_default_count)
+                ]
+                positional_defaults.reverse()
+                parameter_names = [
+                    self._name(int(self._pop("parameter name")))
+                    for _ in range(positional_count + keyword_only_count)
+                ]
+                parameter_names.reverse()
+                defaults = dict(
+                    zip(
+                        parameter_names[positional_count - positional_default_count:positional_count],
+                        positional_defaults,
+                    )
+                )
+                defaults.update(keyword_defaults)
+                cells = [self._pop("closure cell") for _ in range(cell_count)]
+                cells.reverse()
+                if func_id not in self.funcs:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
+                self._push(
+                    Closure(
+                        func_id,
+                        cells,
+                        parameter_names,
+                        defaults,
+                        positional_count,
+                        vararg_name,
+                    )
+                )
                 self.ip += 1
                 continue
 

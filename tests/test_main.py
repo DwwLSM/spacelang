@@ -143,6 +143,31 @@ def test_compile_py_supports_saved_closure_keyword_arguments_in_sp_file(tmp_path
         assert output.getvalue() == "12 8\n"
 
 
+def test_compile_py_supports_varargs_in_sp_file(tmp_path):
+    source = tmp_path / "varargs.py"
+    destination = tmp_path / "varargs.sp"
+    source.write_text(
+        "def collect(first=1, *rest, label, suffix='!'):\n"
+        "    return (first, rest, label, suffix)\n"
+        "\n"
+        "def make_collector(prefix):\n"
+        "    def collect(first, *rest, marker='!'):\n"
+        "        return (prefix, first, rest, marker)\n"
+        "    return collect\n"
+        "\n"
+        "closure = make_collector('<')\n"
+        "print(collect(2, 3, 4, label='top'))\n"
+        "print(closure(5, 6, 7, marker='?'))\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "(2, (3, 4), 'top', '!')\n('<', 5, (6, 7), '?')\n"
+
+
 def test_compile_py_supports_global_declarations_in_sp_file(tmp_path):
     source = tmp_path / "global_scope.py"
     destination = tmp_path / "global_scope.sp"

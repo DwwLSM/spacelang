@@ -105,6 +105,7 @@ def test_assemble_and_disassemble_closure_opcodes():
         MAKE_CLOSURE 10000 2 3
         MAKE_CLOSURE_SIG 10000 2 3 1
         MAKE_CLOSURE_KWONLY 10000 2 2 1 1 1
+        MAKE_CLOSURE_ARGS 10000 2 2 1 1 1
         CALL_OBJ_KW 2 1
         CELLIFY 3
         LOAD_CELL_REF 4

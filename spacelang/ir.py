@@ -50,6 +50,7 @@ class OP(IntEnum):
     CALL_OBJ_KW = 40
     MAKE_CLOSURE_SIG = 41
     MAKE_CLOSURE_KWONLY = 42
+    MAKE_CLOSURE_ARGS = 43
 
 
 @dataclass(slots=True)
