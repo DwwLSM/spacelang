@@ -76,7 +76,9 @@ supported.
 
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, dictionary and set comprehensions,
-slice assignment, and async syntax are not implemented.
+dictionary unpacking in literals, slice assignment, and async syntax are not
+implemented. Dictionary literals, key lookup, assignment, and augmented
+assignment are supported.
 Functions may collect extra positional arguments with `*args` and extra
 keyword arguments with `**kwargs`. Positional-only parameters (`/`) and
 keyword-only parameters (`*`) are supported. Default expressions use the
@@ -86,7 +88,7 @@ Keyword arguments work for top-level functions, builtins, and dynamic
 SpaceLang closures. Calls may expand positional iterables and keyword mappings
 with `*values` and `**options`; ordinary explicit keyword arguments to methods
 remain unsupported. Expressions
-currently do not support floating-point literals, dictionaries, sets, slicing,
+currently do not support floating-point literals, sets, slicing,
 membership or identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
 and `%`. Top-level and nested functions support required and optional positional
 parameters, positional-only parameters, and keyword-only parameters.

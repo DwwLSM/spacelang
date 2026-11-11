@@ -103,6 +103,24 @@ def test_compile_py_supports_unpacking_and_index_assignment(tmp_path):
         assert output.getvalue() == "[5, 1]\n"
 
 
+def test_compile_py_supports_dictionary_operations_in_sp_file(tmp_path):
+    source = tmp_path / "dictionary.py"
+    destination = tmp_path / "dictionary.sp"
+    source.write_text(
+        "data = {'name': 'Ada', 'count': 1}\n"
+        "data['count'] += 2\n"
+        "data['active'] = True\n"
+        "print(data, data['name'], data['count'], data['active'])\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "{'name': 'Ada', 'count': 3, 'active': True} Ada 3 True\n"
+
+
 def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
     source = tmp_path / "function_parameters.py"
     destination = tmp_path / "function_parameters.sp"

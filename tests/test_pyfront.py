@@ -206,6 +206,30 @@ def test_pyfront_attribute_index_and_augmented_assignments():
     assert output.getvalue() == "7 [7, 7]\n"
 
 
+def test_pyfront_dictionary_literals_lookup_assignment_and_update():
+    source = textwrap.dedent("""
+    key = "name"
+    data = {}
+    data[key] = "Ada"
+    data["count"] = 1
+    data["count"] += 2
+    data.update({"active": True})
+    print(data, data["name"], data["count"], data["active"])
+    """)
+    assert run_source(source) == "{'name': 'Ada', 'count': 3, 'active': True} Ada 3 True\n"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "data = {**other}",
+    ],
+)
+def test_pyfront_rejects_dictionary_unpacking(source):
+    with pytest.raises(ParseError, match="dictionary unpacking is unsupported"):
+        compile_py(source)
+
+
 def test_pyfront_assignment_targets_work_inside_functions():
     program = compile_py(
         "def update(box, values):\n"

@@ -68,6 +68,9 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "def empty():\n    return None\nprint(empty(), None)",
         'def render(value, prefix="v="): return prefix + str(value)\nprint(render(3))\nprint(render(value=4, prefix="x="))',
         "values = [1, 2, 3]\nresult = values[1]\nprint(result)",
+        "key = 'name'\ndata = {}\ndata[key] = 'Ada'\ndata['count'] = 1\n"
+        "data['count'] += 2\ndata.update({'active': True})\n"
+        "print(data, data['name'], data['count'], data['active'])",
         "import math\nresult = math.sqrt(81)\nprint(result)",
         'print("left", "right", sep="-")',
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",
