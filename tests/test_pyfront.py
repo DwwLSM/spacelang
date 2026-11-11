@@ -338,6 +338,33 @@ def test_pyfront_expands_builtin_call_arguments():
     assert run_source(source) == "3\nleft:right\n"
 
 
+def test_pyfront_sets_support_literals_membership_add_and_comprehensions():
+    source = (
+        "values = {1, 2, 2}\n"
+        "empty = set()\n"
+        "values.add(3)\n"
+        "lookup = {value for value in range(6) if value % 2 == 0}\n"
+        "pairs = {x + y for x in range(3) for y in range(x) if y > 0}\n"
+        "print(values, empty, lookup, pairs)\n"
+        "print(2 in values, 4 not in values, 'a' in {'a': 1})\n"
+    )
+    assert run_source(source) == (
+        "{1, 2, 3} set() {0, 2, 4} {3}\n"
+        "True True True\n"
+    )
+
+
+def test_pyfront_set_comprehension_does_not_leak_target_name():
+    source = (
+        "def collect():\n"
+        "    value = 99\n"
+        "    result = {value for value in [1, 2]}\n"
+        "    return value, result\n"
+        "print(collect())\n"
+    )
+    assert run_source(source) == "(99, {1, 2})\n"
+
+
 @pytest.mark.parametrize(
     ("source", "message"),
     [
@@ -354,6 +381,8 @@ def test_pyfront_expands_builtin_call_arguments():
         ),
     ],
 )
+
+
 @pytest.mark.parametrize("engine", ["py", "cpp"])
 def test_pyfront_expanded_keyword_arguments_validate_mapping(source, message, engine):
     from spacelang.vm_cpp import VM as CppVM

@@ -65,6 +65,7 @@ enum Opcode : std::uint8_t {
     DICT_MERGE = 48,
     MAKE_CLOSURE_POSONLY = 49,
     DICT_UPDATE = 50,
+    BUILD_SET = 51,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -197,6 +198,15 @@ Value numeric_binary(std::int64_t op, const Value& left, const Value& right) {
         case 11:
             result = PyObject_RichCompare(left_object.ptr(), right_object.ptr(), Py_GE);
             break;
+        case 12:
+        case 13: {
+            const int contains = PySequence_Contains(right_object.ptr(), left_object.ptr());
+            if (contains < 0) {
+                throw pybind11::error_already_set();
+            }
+            result = PyBool_FromLong(op == 12 ? contains : !contains);
+            break;
+        }
         default:
             throw pybind11::value_error("unsupported native OP id");
     }
@@ -215,7 +225,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 51) {
+        if (opcode < 0 || opcode >= 52) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -228,9 +238,9 @@ VM::VM(pybind11::object program) {
         const std::size_t expected[] = {
             0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
             1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
-            1, 0,             1, 0, 3, 1, 1,                         1, 2, 4, 6, 8, 1, 0, 1, 0, 0, 9, 0,
+            1, 0,             1, 0, 3, 1, 1,                         1, 2, 4, 6, 8, 1, 0, 1, 0, 0, 9, 0, 1,
         };
-        if (instr.op >= 51
+        if (instr.op >= 52
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -304,9 +314,9 @@ void VM::raise_space_error(const char* type, const std::string& message, std::in
 pybind11::object VM::builtin(std::int64_t func_id) const {
     static const char* builtin_names[] = {
         "print", "input", "len", "int", "float", "str", "bool", "abs",
-        "range", "type", "open", "getattr", "setattr", "callable", "repr", "isinstance",
+        "range", "type", "open", "getattr", "setattr", "callable", "repr", "isinstance", "set",
     };
-    if (func_id >= 0 && func_id < 16) {
+    if (func_id >= 0 && func_id < 17) {
         return pybind11::module_::import("builtins").attr(builtin_names[func_id]);
     }
     const std::pair<std::int64_t, const char*> module_functions[] = {
@@ -420,7 +430,7 @@ pybind11::object VM::run() {
             &&op_make_closure_sig, &&op_make_closure_kwonly, &&op_make_closure_args,
             &&op_build_dict, &&op_call_obj_ex, &&op_call_builtin_ex,
             &&op_list_extend, &&op_dict_merge, &&op_make_closure_posonly,
-            &&op_dict_update,
+            &&op_dict_update, &&op_build_set,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -942,6 +952,29 @@ pybind11::object VM::run() {
                 ++ip;
                 break;
             }
+            case BUILD_SET: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_build_set:
+#endif
+                std::vector<pybind11::object> values;
+                for (std::int64_t index = 0; index < instr.args[0]; ++index) {
+                    values.push_back(pop("set element").to_python());
+                }
+                std::reverse(values.begin(), values.end());
+                PyObject* raw_set = PySet_New(nullptr);
+                if (raw_set == nullptr) {
+                    throw pybind11::error_already_set();
+                }
+                auto result = pybind11::reinterpret_steal<pybind11::set>(raw_set);
+                for (const auto& value : values) {
+                    if (PySet_Add(result.ptr(), value.ptr()) < 0) {
+                        throw pybind11::error_already_set();
+                    }
+                }
+                stack_.push_back(Value::from_python(result));
+                ++ip;
+                break;
+            }
             case LIST_EXTEND: {
 #if defined(__GNUC__) || defined(__clang__)
             op_list_extend:
@@ -1439,7 +1472,7 @@ pybind11::object VM::run() {
 #endif
                 const auto right = pop("rhs");
                 const auto left = pop("lhs");
-                if (instr.args[0] < 1 || instr.args[0] > 11) {
+                if (instr.args[0] < 1 || instr.args[0] > 13) {
                     raise_space_error("ParseError", "unsupported op_id " + std::to_string(instr.args[0]));
                 }
                 stack_.push_back(numeric_binary(instr.args[0], left, right));

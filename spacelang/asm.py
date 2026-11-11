@@ -32,6 +32,7 @@ MNEMONICS = {
     "LIST_EXTEND": OP.LIST_EXTEND,
     "DICT_MERGE": OP.DICT_MERGE,
     "DICT_UPDATE": OP.DICT_UPDATE,
+    "BUILD_SET": OP.BUILD_SET,
     "MAKE_CLOSURE_POSONLY": OP.MAKE_CLOSURE_POSONLY,
     "CONCAT": OP.CONCAT,
     "DEF": OP.DEF,
@@ -223,7 +224,7 @@ def assemble(src: str) -> Program:
             instrs.append(Instr(op, args, line=source_line))
         elif op == OP.TRY and len(args) == 2:
             instrs.append(Instr(op, args, line=source_line))
-        elif op in {OP.OP, OP.STACK, OP.IMPORT, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.INDEX, OP.UNPACK_SEQUENCE, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.BUILD_DICT, OP.CONCAT, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.CELLIFY, OP.LOAD_CELL_REF, OP.LOAD_DEREF, OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER, OP.PUSH_INT} and len(args) == 1:
+        elif op in {OP.OP, OP.STACK, OP.IMPORT, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.INDEX, OP.UNPACK_SEQUENCE, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.BUILD_DICT, OP.BUILD_SET, OP.CONCAT, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.CELLIFY, OP.LOAD_CELL_REF, OP.LOAD_DEREF, OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER, OP.PUSH_INT} and len(args) == 1:
             instrs.append(Instr(op, args, line=source_line))
         elif op in {
             OP.NOP,

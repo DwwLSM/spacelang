@@ -159,6 +159,28 @@ def test_compile_py_supports_dictionary_comprehensions_in_sp_file(tmp_path):
         assert output.getvalue() == expected
 
 
+def test_compile_py_supports_sets_in_sp_file(tmp_path):
+    source = tmp_path / "sets.py"
+    destination = tmp_path / "sets.sp"
+    source.write_text(
+        "values = {1, 2, 2}\n"
+        "empty = set()\n"
+        "values.add(3)\n"
+        "lookup = {value for value in range(6) if value % 2 == 0}\n"
+        "pairs = {x + y for x in range(3) for y in range(x) if y > 0}\n"
+        "print(values, empty, lookup, pairs)\n"
+        "print(2 in values, 4 not in values, 'a' in {'a': 1})\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    expected = "{1, 2, 3} set() {0, 2, 4} {3}\nTrue True True\n"
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == expected
+
+
 def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
     source = tmp_path / "function_parameters.py"
     destination = tmp_path / "function_parameters.sp"

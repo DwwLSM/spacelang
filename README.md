@@ -75,8 +75,9 @@ one or more synchronous `for` clauses, name targets, and `if` filters are
 supported.
 
 This is still a Python subset, not full Python; features such as classes,
-exceptions in source code, generators, and set comprehensions,
-slice assignment, and async syntax are not implemented. Dictionary literals,
+exceptions in source code, generators, set unpacking, slice assignment, and
+async syntax are not implemented. Set literals, `set()`, membership checks, and
+set comprehensions are supported. Dictionary literals,
 including `**mapping` unpacking, key lookup, assignment, and augmented
 assignment are supported. Dictionary comprehensions support synchronous
 `for` clauses with name targets and `if` filters.
@@ -89,8 +90,8 @@ Keyword arguments work for top-level functions, builtins, and dynamic
 SpaceLang closures. Calls may expand positional iterables and keyword mappings
 with `*values` and `**options`; ordinary explicit keyword arguments to methods
 remain unsupported. Expressions
-currently do not support floating-point literals, sets, slicing,
-membership or identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
+currently do not support floating-point literals, slicing,
+identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
 and `%`. Top-level and nested functions support required and optional positional
 parameters, positional-only parameters, and keyword-only parameters.
 Positional and keyword arguments, including argument expansion, are supported

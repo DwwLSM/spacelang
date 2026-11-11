@@ -24,6 +24,7 @@ BUILTIN_IDS = {
     "callable": 13,
     "repr": 14,
     "isinstance": 15,
+    "set": 16,
 }
 
 
@@ -66,6 +67,13 @@ class _LocalNameCollector(ast.NodeVisitor):
     def visit_DictComp(self, node: ast.DictComp) -> None:
         self.visit(node.key)
         self.visit(node.value)
+        for generator in node.generators:
+            self.visit(generator.iter)
+            for condition in generator.ifs:
+                self.visit(condition)
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        self.visit(node.elt)
         for generator in node.generators:
             self.visit(generator.iter)
             for condition in generator.ifs:
@@ -478,6 +486,8 @@ class PyFront(ast.NodeVisitor):
                 ast.Gt: 8,
                 ast.LtE: 10,
                 ast.GtE: 11,
+                ast.In: 12,
+                ast.NotIn: 13,
             }
             line = getattr(node, "lineno", 0)
             false_label = f"compare_false_{len(self.instrs)}"
@@ -629,6 +639,12 @@ class PyFront(ast.NodeVisitor):
             _emit(self.instrs, OP.BUILD_TUPLE, len(node.elts), line=getattr(node, "lineno", 0))
             return
 
+        if isinstance(node, ast.Set):
+            for item in node.elts:
+                self._compile_expr(item)
+            _emit(self.instrs, OP.BUILD_SET, len(node.elts), line=getattr(node, "lineno", 0))
+            return
+
         if isinstance(node, ast.Dict):
             line = getattr(node, "lineno", 0)
             if all(key is not None for key in node.keys):
@@ -655,6 +671,10 @@ class PyFront(ast.NodeVisitor):
 
         if isinstance(node, ast.DictComp):
             self._compile_dictcomp(node)
+            return
+
+        if isinstance(node, ast.SetComp):
+            self._compile_setcomp(node)
             return
 
         if isinstance(node, ast.If):
@@ -816,21 +836,31 @@ class PyFront(ast.NodeVisitor):
 
         self._compile_comprehension(node.generators, line, result_name, (node.key, node.value))
 
+    def _compile_setcomp(self, node: ast.SetComp) -> None:
+        line = getattr(node, "lineno", 0)
+        result_name = self._new_temp_name()
+        _emit(self.instrs, OP.BUILD_SET, 0, line=line)
+        self._store_name(result_name, line)
+
+        self._compile_comprehension(node.generators, line, result_name, node.elt, kind="set")
+
     def _compile_comprehension(
         self,
         generators: list[ast.comprehension],
         line: int,
         result_name: str,
         item: ast.expr | tuple[ast.expr, ast.expr],
+        kind: str = "list",
     ) -> None:
         if any(
             generator.is_async or not isinstance(generator.target, ast.Name)
             for generator in generators
         ):
+            kind_name = {"list": "list", "dict": "dictionary", "set": "set"}[kind]
             raise ParseError(
                 line=line,
                 ip=0,
-                msg="comprehensions require synchronous name targets",
+                msg=f"{kind_name} comprehensions require synchronous name targets",
             )
 
         def compile_generator(index: int) -> None:
@@ -859,7 +889,8 @@ class PyFront(ast.NodeVisitor):
                     _emit(self.instrs, OP.DICT_UPDATE, line=line)
                 else:
                     self._compile_expr(item)
-                    _emit(self.instrs, OP.CALL_METHOD, self._name_id("append"), 1, line=line)
+                    method = "add" if kind == "set" else "append"
+                    _emit(self.instrs, OP.CALL_METHOD, self._name_id(method), 1, line=line)
                 _emit(self.instrs, OP.STACK, 3, line=line)
             else:
                 compile_generator(index + 1)

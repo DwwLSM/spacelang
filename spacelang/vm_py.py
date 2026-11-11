@@ -478,6 +478,10 @@ class VM:
                     result = lhs <= rhs
                 elif op_id == 11:
                     result = lhs >= rhs
+                elif op_id == 12:
+                    result = lhs in rhs
+                elif op_id == 13:
+                    result = lhs not in rhs
                 else:
                     raise ParseError(line=0, ip=self.ip, msg=f"unsupported op_id {op_id}")
                 self._push(result)
@@ -545,6 +549,16 @@ class VM:
                     items.append((key, value))
                 items.reverse()
                 self._push(dict(items))
+                self.ip += 1
+                continue
+
+            if op == OP.BUILD_SET:
+                count = int(args[0])
+                values = []
+                for _ in range(count):
+                    values.append(self._pop("set element"))
+                values.reverse()
+                self._push(set(values))
                 self.ip += 1
                 continue
 

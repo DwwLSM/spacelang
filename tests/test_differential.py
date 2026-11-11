@@ -77,6 +77,11 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "pairs = {x: y for x in [1, 2, 3] for y in range(x) if y > 0}\n"
         "overwritten = {x % 2: x for x in range(5)}\n"
         "print(result, pairs, overwritten)",
+        "values = {1, 2, 2}\nempty = set()\nvalues.add(3)\n"
+        "lookup = {value for value in range(6) if value % 2 == 0}\n"
+        "pairs = {x + y for x in range(3) for y in range(x) if y > 0}\n"
+        "print(values, empty, lookup, pairs)\n"
+        "print(2 in values, 4 not in values, 'a' in {'a': 1})",
         "import math\nresult = math.sqrt(81)\nprint(result)",
         'print("left", "right", sep="-")',
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",
