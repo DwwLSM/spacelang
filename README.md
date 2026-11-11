@@ -73,6 +73,149 @@ exceptions in source code, generators, nested or filtered comprehensions,
 keyword arguments to user functions, and general iterator protocols are not implemented.
 Unsupported syntax raises an error rather than being silently compiled.
 
+## Run a `.sp` program
+
+Write assembly mnemonics to a `.spasm` file, assemble it into the whitespace-only
+`.sp` format, then run it with the reference VM:
+
+`example.spasm`:
+
+```text
+PUSH_INT 2
+PUSH_INT 3
+OP 1
+CALL 0 1
+STACK 3
+HALT
+```
+
+Run these commands from an installed checkout:
+
+```bash
+spacelang asm example.spasm example.sp
+spacelang disasm example.sp
+spacelang run example.sp
+```
+
+The program prints `5`. `CALL 0 1` calls the `print` builtin; `STACK 3`
+drops the builtin's return value. To use the source checkout without installing
+the command, invoke the CLI as `python -m spacelang.main run example.sp`.
+
+## How whitespace becomes instructions
+
+A `.sp` file is a stream of integer tokens written as spaces and newlines. The
+number of spaces before each newline is one token's value; the newline ends that
+token. The parser reads the first token as an opcode, then consumes the number
+of argument tokens required by that opcode. For example, `PUSH_INT 2` is encoded
+as the tokens `7` (the `PUSH_INT` opcode) and `4` (zig-zag encoded integer 2).
+`OP 1` is the tokens `5` (`OP`) and `1` (addition). The VM executes the resulting
+instructions; spaces are not executed one at a time.
+
+For the example above, the token values are:
+
+| Assembly | Space-count tokens |
+| --- | --- |
+| `PUSH_INT 2` | `7, 4` |
+| `PUSH_INT 3` | `7, 6` |
+| `OP 1` | `5, 1` |
+| `CALL 0 1` | `1, 0, 1` |
+| `STACK 3` | `6, 3` |
+| `HALT` | `29` |
+
+## Space instruction table
+
+Every `.sp` token is the count of spaces before a newline. The first token of
+each instruction is its opcode ID; the following tokens are its arguments.
+`PUSH_INT` uses zig-zag encoding for its integer argument. `PUSH_STR` is
+followed by a length and then one code-point token per character. Name IDs refer
+to the program's name table. The `.name`, `.label`, and `.enddef` forms are
+assembler directives, not VM opcodes.
+
+| ID | Mnemonic | Arguments in `.spasm` | Reference VM effect |
+| ---: | --- | --- | --- |
+| 0 | `NOP` | none | Do nothing. |
+| 1 | `CALL` | `func_id, nargs` | Call a builtin or user function with positional arguments. A builtin's result is pushed. |
+| 2 | `CALL_KW` | `func_id, npos, nkw` | Call a builtin with positional and keyword arguments; user functions are not supported here. |
+| 3 | `CALL_OBJ` | `nargs` | Pop a callable and its positional arguments, call it, and push the result. |
+| 4 | `IMPORT` | `module_id` | Import a supported module and push it. |
+| 5 | `OP` | `operation_id` | Pop two operands, apply the selected binary operation, and push the result. |
+| 6 | `STACK` | `stack_operation_id` | Apply a stack manipulation operation. |
+| 7 | `PUSH_INT` | `integer` | Push an integer; its argument token is zig-zag encoded. |
+| 8 | `PUSH_STR` | `length, codepoint...` | Push a string from the specified number of code points. |
+| 9 | `LOAD_GLOBAL` | `name_id` | Push a global value; an undefined name raises an error. |
+| 10 | `STORE_GLOBAL` | `name_id` | Pop a value and store it as a global. |
+| 11 | `GET_ATTR` | `name_id` | Pop an object and push the named attribute. |
+| 12 | `CALL_METHOD` | `name_id, nargs` | Pop a receiver and arguments, call the named method, and push its result. |
+| 13 | `INDEX` | `reserved` | Pop a key and container, then push `container[key]`; the argument is currently ignored. |
+| 14 | `BUILD_LIST` | `count` | Pop `count` values and push a list in their original order. |
+| 15 | `BUILD_TUPLE` | `count` | Pop `count` values and push a tuple in their original order. |
+| 16 | `CONCAT` | `count` | Pop and concatenate `count` homogeneous strings, bytes, lists, or tuples. |
+| 17 | `DEF` | `func_id, nargs` | Mark a function entry; execution skips its body when reached in normal flow. |
+| 18 | `RET` | none | Return the top stack value from the current function. |
+| 19 | `LOAD_ARG` | `index` | Push a function argument by slot index. |
+| 20 | `LOAD_LOCAL` | `slot` | Push a local variable by slot index. |
+| 21 | `STORE_LOCAL` | `slot` | Pop and store a local variable by slot index. |
+| 22 | `JMP` | `target_ip` | Jump to an instruction index. |
+| 23 | `JZ` | `target_ip` | Pop a condition; jump if it is false. |
+| 24 | `JNZ` | `target_ip` | Pop a condition; jump if it is true. |
+| 25 | `RAISE` | none | Pop an exception value and raise it through the active handler, if any. |
+| 26 | `TRY` | `catch_ip, finally_ip` | Begin a protected region; `0` means that the corresponding handler is absent. |
+| 27 | `END_TRY` | none | Close a try/catch/finally region and continue its control flow. |
+| 28 | `SETUP_WITH` | none | Pop a value onto the VM's with-stack; this alone does not implement Python's full `with` protocol. |
+| 29 | `HALT` | none | Stop execution; if the stack is non-empty, pop its top as the run result. |
+
+`OP` operation IDs:
+
+| ID | Operation |
+| ---: | --- |
+| 1 | Addition (`left + right`) |
+| 2 | Subtraction (`left - right`) |
+| 3 | Multiplication (`left * right`) |
+| 4 | True division (`left / right`) |
+| 5 | Modulo (`left % right`) |
+| 6 | Equal (`left == right`) |
+| 7 | Less than (`left < right`) |
+| 8 | Greater than (`left > right`) |
+| 9 | Not equal (`left != right`) |
+| 10 | Less than or equal (`left <= right`) |
+| 11 | Greater than or equal (`left >= right`) |
+
+`STACK` operation IDs (`top` means the rightmost stack value):
+
+| ID | Operation | Effect |
+| ---: | --- | --- |
+| 1 | `DUP` | Duplicate the top value. |
+| 2 | `SWAP` | Swap the top two values. |
+| 3 | `DROP` | Remove the top value. |
+| 4 | `OVER` | Copy the second value to the top. |
+| 5 | `ROT` | Rotate the top three values from `[a, b, c]` to `[b, c, a]`. |
+
+`IMPORT` module IDs are `0=math`, `1=random`, `2=os`, `3=re`, and `4=sys`.
+Jump targets and name IDs are zero-based. Function IDs of `10000` or greater
+identify user-defined functions in the reference VM.
+
+Each individual token is limited to 65,535 spaces. A direct `PUSH_INT 100000`
+would require an argument token of 200,000 spaces because positive integers use
+zig-zag encoding, so it cannot be encoded as one token. For a Python-subset
+source constant, use `--compress-source`; for `100000`, the compiler can factor
+it into smaller constants and multiplication instructions:
+
+`large.py`:
+
+```python
+print(100000)
+```
+
+```bash
+spacelang compile-py large.py large.sp --compress-source
+spacelang run large.sp
+```
+
+This prints `100000`. `--compress-source` makes the integer representable using
+multiple small tokens; it does not mean that one very long run of spaces is
+executed. `.spz` is a separate gzip-compressed container for an already encoded
+`.sp` program.
+
 ## Create a self-copying program
 
 For Python files, `quine` writes a new file with a small hook that copies that
@@ -185,3 +328,25 @@ python -m pytest
 
 The tests cover the current IR, encoding/parser, assembler/disassembler, VM,
 Python-subset frontend, and native/reference differential behavior.
+
+## Render the introduction animation
+
+The Manim scene source is in `scene.py`. Install the optional animation
+dependency (and Manim's required system packages; see the
+[Manim installation guide](https://docs.manim.community/en/stable/installation.html)):
+
+```bash
+python -m pip install -e ".[animation]"
+```
+
+Render an English version with subtitles:
+
+```bash
+manim -ql scene.py SpacelangIntroEnglishWithSubtitle
+```
+
+Use `SpacelangIntroChineseWithSubtitle`,
+`SpacelangIntroEnglishWithoutSubtitle`, or
+`SpacelangIntroChineseWithoutSubtitle` for the other variants. Manim writes
+rendered videos and its generated assets under `media/`; these are ignored by
+Git and can be recreated from `scene.py`.
