@@ -99,6 +99,30 @@ def test_assemble_and_disassemble_assignment_opcodes():
     ]
 
 
+def test_assemble_and_disassemble_closure_opcodes():
+    program = assemble(
+        """
+        MAKE_CLOSURE 10000 2 3
+        MAKE_CLOSURE_SIG 10000 2 3 1
+        MAKE_CLOSURE_KWONLY 10000 2 2 1 1 1
+        MAKE_CLOSURE_ARGS 10000 2 2 1 1 1 1 1
+        BUILD_DICT 2
+        CALL_OBJ_KW 2 1
+        CALL_OBJ_EX
+        CALL_BUILTIN_EX 2
+        LIST_EXTEND
+        DICT_MERGE
+        CELLIFY 3
+        LOAD_CELL_REF 4
+        LOAD_DEREF 5
+        HALT
+        """
+    )
+    assert [(instr.op, instr.args) for instr in assemble(disasm(program)).instrs] == [
+        (instr.op, instr.args) for instr in program.instrs
+    ]
+
+
 def test_assembler_supports_quoted_strings_inline_comments_and_name_declarations():
     program = assemble(
         """

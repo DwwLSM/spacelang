@@ -20,12 +20,40 @@ from .ir import Instr, OP, Program
 from .modules import do_import
 
 
+class Cell:
+    def __init__(self, value: Any = None, initialized: bool = False):
+        self.value = value
+        self.initialized = initialized
+
+
+class Closure:
+    def __init__(
+        self,
+        func_id: int,
+        cells: list[Cell],
+        parameter_names: list[str] | int,
+        defaults: dict[str, Any] | None = None,
+        positional_count: int | None = None,
+        vararg_name: str | None = None,
+        kwarg_name: str | None = None,
+    ):
+        self.func_id = func_id
+        self.cells = cells
+        self.arg_count = parameter_names if isinstance(parameter_names, int) else len(parameter_names)
+        self.parameter_names = None if isinstance(parameter_names, int) else parameter_names
+        self.defaults = defaults or {}
+        self.positional_count = self.arg_count if positional_count is None else positional_count
+        self.vararg_name = vararg_name
+        self.kwarg_name = kwarg_name
+
+
 @dataclass
 class Frame:
     func_id: int
     return_ip: int
     locals: list[Any] = field(default_factory=list)
     initialized: list[bool] = field(default_factory=list)
+    closure_cells: list[Cell] = field(default_factory=list)
 
 
 class VM:
@@ -56,12 +84,19 @@ class VM:
     def _push(self, value: Any) -> None:
         self.stack.append(value)
 
-    def _push_frame(self, func_id: int, args: list[Any], return_ip: int) -> None:
+    def _push_frame(
+        self,
+        func_id: int,
+        args: list[Any],
+        return_ip: int,
+        closure_cells: list[Cell] | None = None,
+    ) -> None:
         frame = Frame(
             func_id=func_id,
             return_ip=return_ip,
             locals=list(args),
             initialized=[True] * len(args),
+            closure_cells=closure_cells or [],
         )
         self.call_stack.append(frame)
 
@@ -95,6 +130,45 @@ class VM:
         self._push_frame(func_id, args, self.ip + 1)
         self.ip = entry_ip
         return None
+
+    def _bind_closure_args(
+        self,
+        closure: Closure,
+        positional: list[Any],
+        keywords: dict[str, Any],
+        line: int,
+    ) -> list[Any]:
+        parameter_names = closure.parameter_names
+        if len(positional) > closure.positional_count and closure.vararg_name is None:
+            raise TypeError(
+                line=line,
+                ip=self.ip,
+                msg=f"expected at most {closure.positional_count} positional arguments, got {len(positional)}",
+            )
+        bound = dict(zip(parameter_names, positional[:closure.positional_count]))
+        extra_keywords: dict[str, Any] = {}
+        for name, value in keywords.items():
+            if name not in parameter_names:
+                if closure.kwarg_name is None:
+                    raise TypeError(line=line, ip=self.ip, msg=f"unexpected keyword argument {name!r}")
+                extra_keywords[name] = value
+                continue
+            if name in bound:
+                raise TypeError(line=line, ip=self.ip, msg=f"multiple values for argument {name!r}")
+            bound[name] = value
+        args = []
+        for name in parameter_names:
+            if name in bound:
+                args.append(bound[name])
+            elif name in closure.defaults:
+                args.append(closure.defaults[name])
+            else:
+                raise TypeError(line=line, ip=self.ip, msg=f"missing required argument {name!r}")
+        if closure.vararg_name is not None:
+            args.append(tuple(positional[closure.positional_count:]))
+        if closure.kwarg_name is not None:
+            args.append(extra_keywords)
+        return args
 
     def _raise(self, exc: BaseException) -> None:
         while self.try_stack:
@@ -181,6 +255,47 @@ class VM:
             if op == OP.NOP:
                 self.ip += 1
                 continue
+
+            if op == OP.LIST_EXTEND:
+                iterable = self._pop("list iterable")
+                target = self._pop("list")
+                if not isinstance(target, list):
+                    raise TypeError(line=instr.line, ip=self.ip, msg="LIST_EXTEND target must be a list")
+                target.extend(iterable)
+                self._push(target)
+                self.ip += 1
+                continue
+
+            if op == OP.DICT_MERGE:
+                mapping = self._pop("keyword mapping")
+                target = self._pop("keyword arguments")
+                if not isinstance(target, dict):
+                    raise TypeError(line=instr.line, ip=self.ip, msg="DICT_MERGE target must be a dictionary")
+                try:
+                    keys = mapping.keys()
+                except AttributeError as exc:
+                    raise TypeError(
+                        line=instr.line,
+                        ip=self.ip,
+                        msg="argument after ** must be a mapping",
+                    ) from exc
+                for key in keys:
+                    if not isinstance(key, str):
+                        raise TypeError(
+                            line=instr.line,
+                            ip=self.ip,
+                            msg="keywords must be strings",
+                        )
+                    if key in target:
+                        raise TypeError(
+                            line=instr.line,
+                            ip=self.ip,
+                            msg=f"got multiple values for keyword argument {key!r}",
+                        )
+                    target[key] = mapping[key]
+                self._push(target)
+                self.ip += 1
+                continue
             if op == OP.DEF:
                 func_id = int(args[0])
                 if func_id in self.funcs:
@@ -244,7 +359,12 @@ class VM:
                 slot = int(args[0])
                 if slot < 0 or slot >= len(frame.locals) or not frame.initialized[slot]:
                     raise UndefinedName(line=instr.line, ip=self.ip, msg=f"undefined local slot {slot}")
-                self._push(frame.locals[slot])
+                value = frame.locals[slot]
+                if isinstance(value, Cell):
+                    if not value.initialized:
+                        raise UndefinedName(line=instr.line, ip=self.ip, msg=f"undefined local slot {slot}")
+                    value = value.value
+                self._push(value)
                 self.ip += 1
                 continue
 
@@ -257,8 +377,49 @@ class VM:
                 while len(frame.locals) <= slot:
                     frame.locals.append(None)
                     frame.initialized.append(False)
-                frame.locals[slot] = value
+                if isinstance(frame.locals[slot], Cell):
+                    frame.locals[slot].value = value
+                    frame.locals[slot].initialized = True
+                    frame.initialized[slot] = True
+                else:
+                    frame.locals[slot] = value
+                    frame.initialized[slot] = True
+                self.ip += 1
+                continue
+
+            if op == OP.CELLIFY:
+                frame = self._current_frame()
+                if frame is None:
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg="CELLIFY outside function")
+                slot = int(args[0])
+                while len(frame.locals) <= slot:
+                    frame.locals.append(None)
+                    frame.initialized.append(False)
+                if not isinstance(frame.locals[slot], Cell):
+                    frame.locals[slot] = Cell(frame.locals[slot], frame.initialized[slot])
                 frame.initialized[slot] = True
+                self.ip += 1
+                continue
+
+            if op == OP.LOAD_CELL_REF:
+                frame = self._current_frame()
+                if frame is None:
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg="LOAD_CELL_REF outside function")
+                slot = int(args[0])
+                if slot >= len(frame.locals) or not isinstance(frame.locals[slot], Cell):
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg=f"local slot {slot} is not a cell")
+                self._push(frame.locals[slot])
+                self.ip += 1
+                continue
+
+            if op == OP.LOAD_DEREF:
+                frame = self._current_frame()
+                if frame is None:
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg="LOAD_DEREF outside function")
+                index = int(args[0])
+                if index >= len(frame.closure_cells):
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg=f"undefined closure cell {index}")
+                self._push(frame.closure_cells[index])
                 self.ip += 1
                 continue
 
@@ -343,6 +504,18 @@ class VM:
                     values.append(self._pop("tuple element"))
                 values.reverse()
                 self._push(tuple(values))
+                self.ip += 1
+                continue
+
+            if op == OP.BUILD_DICT:
+                count = int(args[0])
+                items = []
+                for _ in range(count):
+                    value = self._pop("dict value")
+                    key = self._pop("dict key")
+                    items.append((key, value))
+                items.reverse()
+                self._push(dict(items))
                 self.ip += 1
                 continue
 
@@ -445,15 +618,198 @@ class VM:
                 self.ip += 1
                 continue
 
-            if op == OP.CALL_OBJ:
-                nargs = int(args[0])
-                args_list = []
-                for _ in range(nargs):
-                    args_list.append(self._pop("call arg"))
-                args_list.reverse()
-                callable_obj = self._pop("callable")
-                result = callable_obj(*args_list)
+            if op in {OP.CALL_OBJ, OP.CALL_OBJ_KW, OP.CALL_OBJ_EX}:
+                if op == OP.CALL_OBJ_EX:
+                    keywords = self._pop("keyword arguments")
+                    args_list = self._pop("positional arguments")
+                    if not isinstance(keywords, dict) or not isinstance(args_list, list):
+                        raise TypeError(line=instr.line, ip=self.ip, msg="invalid expanded call arguments")
+                    callable_obj = self._pop("callable")
+                else:
+                    nargs = int(args[0])
+                    nkw = 0 if op == OP.CALL_OBJ else int(args[1])
+                    keywords = {}
+                    keyword_items = []
+                    for _ in range(nkw):
+                        value = self._pop("keyword value")
+                        name = self._name(int(self._pop("keyword name")))
+                        keyword_items.append((name, value))
+                    for name, value in reversed(keyword_items):
+                        if name in keywords:
+                            raise TypeError(line=instr.line, ip=self.ip, msg=f"multiple values for keyword {name!r}")
+                        keywords[name] = value
+                    args_list = self._collect_args(nargs)
+                    callable_obj = self._pop("callable")
+                if isinstance(callable_obj, Closure):
+                    if callable_obj.func_id not in self.funcs:
+                        raise UndefinedFunc(
+                            line=instr.line,
+                            ip=self.ip,
+                            msg=f"undefined user function {callable_obj.func_id}",
+                        )
+                    if callable_obj.parameter_names is None:
+                        if keywords:
+                            raise TypeError(
+                                line=instr.line,
+                                ip=self.ip,
+                                msg="keyword arguments are unavailable for this legacy closure",
+                            )
+                        if len(args_list) != callable_obj.arg_count:
+                            raise TypeError(
+                                line=instr.line,
+                                ip=self.ip,
+                                msg=(
+                                    f"expected {callable_obj.arg_count} positional arguments, "
+                                    f"got {len(args_list)}"
+                                ),
+                            )
+                    else:
+                        args_list = self._bind_closure_args(callable_obj, args_list, keywords, instr.line)
+                    self._push_frame(
+                        callable_obj.func_id,
+                        args_list,
+                        self.ip + 1,
+                        callable_obj.cells,
+                    )
+                    self.ip = self.funcs[callable_obj.func_id][0]
+                    continue
+                if op in {OP.CALL_OBJ_KW, OP.CALL_OBJ_EX}:
+                    result = callable_obj(*args_list, **keywords)
+                else:
+                    result = callable_obj(*args_list)
                 self._push(result)
+                self.ip += 1
+                continue
+
+            if op == OP.MAKE_CLOSURE:
+                func_id = int(args[0])
+                cell_count = int(args[1])
+                arg_count = int(args[2])
+                cells = [self._pop("closure cell") for _ in range(cell_count)]
+                cells.reverse()
+                if func_id not in self.funcs:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
+                self._push(Closure(func_id, cells, arg_count))
+                self.ip += 1
+                continue
+
+            if op == OP.MAKE_CLOSURE_SIG:
+                func_id = int(args[0])
+                cell_count = int(args[1])
+                parameter_count = int(args[2])
+                default_count = int(args[3])
+                default_values = [self._pop("default value") for _ in range(default_count)]
+                default_values.reverse()
+                parameter_names = [
+                    self._name(int(self._pop("parameter name")))
+                    for _ in range(parameter_count)
+                ]
+                parameter_names.reverse()
+                defaults = dict(zip(parameter_names[-default_count:] if default_count else [], default_values))
+                cells = [self._pop("closure cell") for _ in range(cell_count)]
+                cells.reverse()
+                if func_id not in self.funcs:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
+                self._push(Closure(func_id, cells, parameter_names, defaults))
+                self.ip += 1
+                continue
+
+            if op == OP.MAKE_CLOSURE_KWONLY:
+                func_id = int(args[0])
+                cell_count = int(args[1])
+                positional_count = int(args[2])
+                keyword_only_count = int(args[3])
+                positional_default_count = int(args[4])
+                keyword_default_count = int(args[5])
+                keyword_defaults = []
+                for _ in range(keyword_default_count):
+                    value = self._pop("keyword-only default value")
+                    name = self._name(int(self._pop("keyword-only default name")))
+                    keyword_defaults.append((name, value))
+                keyword_defaults.reverse()
+                positional_defaults = [
+                    self._pop("default value") for _ in range(positional_default_count)
+                ]
+                positional_defaults.reverse()
+                parameter_names = [
+                    self._name(int(self._pop("parameter name")))
+                    for _ in range(positional_count + keyword_only_count)
+                ]
+                parameter_names.reverse()
+                defaults = dict(
+                    zip(
+                        parameter_names[positional_count - positional_default_count:positional_count],
+                        positional_defaults,
+                    )
+                )
+                defaults.update(keyword_defaults)
+                cells = [self._pop("closure cell") for _ in range(cell_count)]
+                cells.reverse()
+                if func_id not in self.funcs:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
+                self._push(Closure(func_id, cells, parameter_names, defaults, positional_count))
+                self.ip += 1
+                continue
+
+            if op == OP.MAKE_CLOSURE_ARGS:
+                func_id = int(args[0])
+                cell_count = int(args[1])
+                positional_count = int(args[2])
+                keyword_only_count = int(args[3])
+                positional_default_count = int(args[4])
+                keyword_default_count = int(args[5])
+                has_varargs = int(args[6]) == 1
+                has_kwargs = int(args[7]) == 1
+                if (
+                    int(args[6]) not in {0, 1}
+                    or int(args[7]) not in {0, 1}
+                    or positional_default_count > positional_count
+                    or keyword_default_count > keyword_only_count
+                ):
+                    raise RuntimeError(
+                        line=instr.line,
+                        ip=self.ip,
+                        msg="invalid variadic closure signature",
+                    )
+                kwarg_name = self._name(int(self._pop("kwarg name"))) if has_kwargs else None
+                vararg_name = self._name(int(self._pop("vararg name"))) if has_varargs else None
+                keyword_defaults = []
+                for _ in range(keyword_default_count):
+                    value = self._pop("keyword-only default value")
+                    name = self._name(int(self._pop("keyword-only default name")))
+                    keyword_defaults.append((name, value))
+                keyword_defaults.reverse()
+                positional_defaults = [
+                    self._pop("default value") for _ in range(positional_default_count)
+                ]
+                positional_defaults.reverse()
+                parameter_names = [
+                    self._name(int(self._pop("parameter name")))
+                    for _ in range(positional_count + keyword_only_count)
+                ]
+                parameter_names.reverse()
+                defaults = dict(
+                    zip(
+                        parameter_names[positional_count - positional_default_count:positional_count],
+                        positional_defaults,
+                    )
+                )
+                defaults.update(keyword_defaults)
+                cells = [self._pop("closure cell") for _ in range(cell_count)]
+                cells.reverse()
+                if func_id not in self.funcs:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
+                self._push(
+                    Closure(
+                        func_id,
+                        cells,
+                        parameter_names,
+                        defaults,
+                        positional_count,
+                        vararg_name,
+                        kwarg_name,
+                    )
+                )
                 self.ip += 1
                 continue
 
@@ -487,6 +843,19 @@ class VM:
                 if func is None:
                     raise UndefinedFunc(line=0, ip=self.ip, msg=f"undefined callable {func_id}")
                 self._push(func(*positional, **kwargs))
+                self.ip += 1
+                continue
+
+            if op == OP.CALL_BUILTIN_EX:
+                keywords = self._pop("keyword arguments")
+                positional = self._pop("positional arguments")
+                if not isinstance(keywords, dict) or not isinstance(positional, list):
+                    raise TypeError(line=instr.line, ip=self.ip, msg="invalid expanded call arguments")
+                func_id = int(args[0])
+                func = ALL_BUILTINS.get(func_id)
+                if func is None:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined callable {func_id}")
+                self._push(func(*positional, **keywords))
                 self.ip += 1
                 continue
 

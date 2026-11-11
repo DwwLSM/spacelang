@@ -155,7 +155,10 @@ def _reachable_instructions(program: Program) -> set[int]:
     if count == 0:
         return set()
     functions_by_id = program.funcs
-    work = deque([0, *(entry for entry, _ in functions_by_id.values())])
+    definition_ips = [
+        ip for ip, instr in enumerate(program.instrs) if instr.op == OP.DEF
+    ]
+    work = deque([0, *definition_ips, *(entry for entry, _ in functions_by_id.values())])
     reachable: set[int] = set()
 
     while work:

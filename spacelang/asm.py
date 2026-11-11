@@ -26,6 +26,11 @@ MNEMONICS = {
     "INDEX": OP.INDEX,
     "BUILD_LIST": OP.BUILD_LIST,
     "BUILD_TUPLE": OP.BUILD_TUPLE,
+    "BUILD_DICT": OP.BUILD_DICT,
+    "CALL_OBJ_EX": OP.CALL_OBJ_EX,
+    "CALL_BUILTIN_EX": OP.CALL_BUILTIN_EX,
+    "LIST_EXTEND": OP.LIST_EXTEND,
+    "DICT_MERGE": OP.DICT_MERGE,
     "CONCAT": OP.CONCAT,
     "DEF": OP.DEF,
     "RET": OP.RET,
@@ -46,6 +51,14 @@ MNEMONICS = {
     "STORE_INDEX": OP.STORE_INDEX,
     "UNPACK_SEQUENCE": OP.UNPACK_SEQUENCE,
     "PUSH_NONE": OP.PUSH_NONE,
+    "MAKE_CLOSURE": OP.MAKE_CLOSURE,
+    "CELLIFY": OP.CELLIFY,
+    "LOAD_CELL_REF": OP.LOAD_CELL_REF,
+    "LOAD_DEREF": OP.LOAD_DEREF,
+    "CALL_OBJ_KW": OP.CALL_OBJ_KW,
+    "MAKE_CLOSURE_SIG": OP.MAKE_CLOSURE_SIG,
+    "MAKE_CLOSURE_KWONLY": OP.MAKE_CLOSURE_KWONLY,
+    "MAKE_CLOSURE_ARGS": OP.MAKE_CLOSURE_ARGS,
 }
 
 NAME_OPS = {
@@ -190,13 +203,38 @@ def assemble(src: str) -> Program:
             instrs.append(Instr(op, args, line=source_line))
         elif op in {OP.CALL, OP.CALL_METHOD, OP.DEF} and len(args) == 2:
             instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.MAKE_CLOSURE and len(args) == 3:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.MAKE_CLOSURE_SIG and len(args) == 4:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.MAKE_CLOSURE_KWONLY and len(args) == 6:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.MAKE_CLOSURE_ARGS and len(args) == 8:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.CALL_OBJ_KW and len(args) == 2:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.CALL_BUILTIN_EX and len(args) == 1:
+            instrs.append(Instr(op, args, line=source_line))
         elif op == OP.CALL_OBJ and len(args) == 1:
             instrs.append(Instr(op, args, line=source_line))
         elif op == OP.TRY and len(args) == 2:
             instrs.append(Instr(op, args, line=source_line))
-        elif op in {OP.OP, OP.STACK, OP.IMPORT, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.INDEX, OP.UNPACK_SEQUENCE, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.CONCAT, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER, OP.PUSH_INT} and len(args) == 1:
+        elif op in {OP.OP, OP.STACK, OP.IMPORT, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.INDEX, OP.UNPACK_SEQUENCE, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.BUILD_DICT, OP.CONCAT, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.CELLIFY, OP.LOAD_CELL_REF, OP.LOAD_DEREF, OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER, OP.PUSH_INT} and len(args) == 1:
             instrs.append(Instr(op, args, line=source_line))
-        elif op in {OP.NOP, OP.RET, OP.RAISE, OP.END_TRY, OP.SETUP_WITH, OP.HALT, OP.GET_ITER, OP.STORE_INDEX, OP.PUSH_NONE} and len(args) == 0:
+        elif op in {
+            OP.NOP,
+            OP.RET,
+            OP.RAISE,
+            OP.END_TRY,
+            OP.SETUP_WITH,
+            OP.HALT,
+            OP.GET_ITER,
+            OP.STORE_INDEX,
+            OP.PUSH_NONE,
+            OP.CALL_OBJ_EX,
+            OP.LIST_EXTEND,
+            OP.DICT_MERGE,
+        } and len(args) == 0:
             instrs.append(Instr(op, [], line=source_line))
         else:
             raise ParseError(line=line_no, ip=0, msg=f"invalid argument count for {mnemonic}")

@@ -265,14 +265,72 @@ def test_pyfront_user_functions_support_defaults_and_keyword_arguments():
     assert run_source(source) == "item3!\nitem4?\nvalue:5!\nn=6.\n"
 
 
+def test_pyfront_expands_call_arguments_for_top_level_and_nested_functions():
+    source = textwrap.dedent("""
+    def make_options(**options):
+        return options
+
+    def collect(first, second=2, *rest, marker="!", **options):
+        return (first, second, rest, marker, options)
+
+    def outer():
+        def inner(value, **options):
+            return (value, options)
+        values = [3]
+        options = make_options(label="nested")
+        return inner(*values, **options)
+
+    values = [1, 4, 5]
+    options = make_options(marker="?", color="blue")
+    print(collect(*values, **options))
+    print(collect(**make_options(first=7)))
+    print(outer())
+    """)
+    assert run_source(source) == (
+        "(1, 4, (5,), '?', {'color': 'blue'})\n"
+        "(7, 2, (), '!', {})\n"
+        "(3, {'label': 'nested'})\n"
+    )
+
+
+def test_pyfront_expands_builtin_call_arguments():
+    source = textwrap.dedent("""
+    values = [[1, 2, 3]]
+    print(len(*values))
+    print(*["left", "right"], sep=":")
+    """)
+    assert run_source(source) == "3\nleft:right\n"
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        (
+            "def collect(**options): return options\n"
+            "def make(**options): return options\n"
+            "collect(**make(value=1), **make(value=2))",
+            "multiple values for keyword argument 'value'",
+        ),
+        (
+            "def collect(**options): return options\n"
+            "collect(**[1, 2])",
+            r"argument after \*\* must be a mapping",
+        ),
+    ],
+)
+@pytest.mark.parametrize("engine", ["py", "cpp"])
+def test_pyfront_expanded_keyword_arguments_validate_mapping(source, message, engine):
+    from spacelang.vm_cpp import VM as CppVM
+
+    vm_type = VM if engine == "py" else CppVM
+    with pytest.raises(SpaceError, match=message):
+        vm_type(compile_py(source)).run()
+
+
 @pytest.mark.parametrize(
     "source",
     [
-        "def f(*args): return 0",
         "def f(a, /): return a",
-        "def f(*, value): return value",
-        "def f(**kwargs): return 0",
-        "def outer():\n    def inner(): return 1\n    return inner()",
     ],
 )
 def test_pyfront_rejects_unsupported_function_forms(source):
@@ -289,10 +347,255 @@ def test_pyfront_rejects_unsupported_function_forms(source):
         "def f(a): return a\nf(1, a=2)",
         "def f(a): return a\nf(b=1)",
         "def f(a=[]): return a",
+        "def outer():\n    def inner(value=[]): return value\n    return inner()",
     ],
 )
 def test_pyfront_rejects_invalid_user_function_bindings(source):
     with pytest.raises(ParseError):
+        compile_py(source)
+
+
+def test_pyfront_nested_functions_capture_and_update_enclosing_locals():
+    source = textwrap.dedent("""
+    def make_counter(start):
+        value = start
+        def increment():
+            nonlocal value
+            value = value + 1
+            return value
+        return increment
+
+    counter = make_counter(4)
+    print(counter(), counter())
+    """)
+    assert run_source(source) == "5 6\n"
+
+
+def test_pyfront_nested_function_closures_forward_cells_and_recurse():
+    source = textwrap.dedent("""
+    def make_factorial(limit):
+        def wrapper():
+            def factorial(value):
+                if value < 2:
+                    return 1
+                return value * factorial(value - 1)
+            return factorial(limit)
+        return wrapper
+
+    factorial = make_factorial(5)
+    print(factorial())
+    """)
+    assert run_source(source) == "120\n"
+
+
+def test_pyfront_nested_functions_support_defaults_and_keyword_arguments():
+    source = textwrap.dedent("""
+    def outer(base):
+        def combine(left, right=3, suffix="!"):
+            return base + left + right
+        return combine(left=2, suffix="?", right=4)
+
+    def with_default():
+        def answer(value=42):
+            return value
+        return answer()
+
+    print(outer(10), with_default())
+    """)
+    assert run_source(source) == "16 42\n"
+
+
+def test_pyfront_nested_recursive_function_supports_keyword_arguments():
+    source = textwrap.dedent("""
+    def factorial():
+        def calculate(value, result=1):
+            if value < 2:
+                return result
+            return calculate(value=value - 1, result=result * value)
+        return calculate(value=5)
+
+    print(factorial())
+    """)
+    assert run_source(source) == "120\n"
+
+
+def test_pyfront_nested_functions_without_captured_variables():
+    source = "def outer():\n    def inner(value): return value + 1\n    return inner\nf = outer()\nprint(f(4))"
+    assert run_source(source) == "5\n"
+
+
+def test_pyfront_rejects_nonlocal_without_enclosing_binding():
+    with pytest.raises(ParseError, match="no binding for nonlocal"):
+        compile_py("def invalid():\n    nonlocal missing")
+
+
+def test_pyfront_nested_function_calls_validate_argument_count():
+    source = "def outer():\n    def inner(value): return value\n    return inner()\nouter()"
+    with pytest.raises(ParseError, match="missing required argument 'value'"):
+        compile_py(source)
+
+
+def test_pyfront_saved_closures_support_keyword_arguments_and_defaults():
+    source = textwrap.dedent("""
+    def outer(base):
+        def combine(left, right=3, suffix="!"):
+            return base + left + right
+        return combine
+
+    fn = outer(10)
+    print(fn(2), fn(2, right=4), fn(left=3, suffix="?", right=5))
+    """)
+    assert run_source(source) == "15 16 18\n"
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [
+        ("fn(1, unknown=2)", "unexpected keyword argument 'unknown'"),
+        ("fn(1, value=2)", "multiple values for argument 'value'"),
+        ("fn()", "missing required argument 'value'"),
+    ],
+)
+def test_pyfront_saved_closures_validate_keyword_bindings(call, message):
+    source = f"def outer():\n    def inner(value): return value\n    return inner\nfn = outer()\n{call}"
+    with pytest.raises(SpaceError, match=message):
+        run_source(source)
+
+
+def test_pyfront_keyword_only_parameters_on_top_level_functions():
+    source = textwrap.dedent("""
+    def format_value(value, *, prefix, suffix="!"):
+        return prefix + str(value) + suffix
+
+    print(format_value(3, prefix="v="), format_value(4, suffix="?", prefix="x="))
+    """)
+    assert run_source(source) == "v=3! x=4?\n"
+
+
+def test_pyfront_saved_closures_support_keyword_only_parameters():
+    source = textwrap.dedent("""
+    def make_renderer(prefix):
+        def render(value=3, *, marker="!", suffix, end="."):
+            return prefix + str(value) + marker + suffix + end
+        return render
+
+    render = make_renderer("<")
+    print(render(3, suffix=">", marker="?"), render(4, suffix="]"), render(suffix=")"))
+    """)
+    assert run_source(source) == "<3?>. <4!]. <3!).\n"
+
+
+def test_pyfront_nested_function_direct_call_accepts_keyword_only_arguments():
+    source = textwrap.dedent("""
+    def outer():
+        def inner(value, *, suffix):
+            return str(value) + suffix
+        return inner(2, suffix="!")
+
+    print(outer())
+    """)
+    assert run_source(source) == "2!\n"
+
+
+def test_pyfront_collects_extra_positional_arguments():
+    source = textwrap.dedent("""
+    def collect(first, *rest):
+        return (first, rest)
+
+    def format_values(first=1, *rest, label, suffix="!"):
+        return (first, rest, label, suffix)
+
+    print(collect(1), collect(1, 2, 3))
+    print(format_values(label="x"), format_values(5, 6, 7, label="y"))
+    """)
+    assert run_source(source) == "(1, ()) (1, (2, 3))\n(1, (), 'x', '!') (5, (6, 7), 'y', '!')\n"
+
+
+def test_pyfront_saved_closure_collects_extra_positional_arguments():
+    source = textwrap.dedent("""
+    def make_collector(prefix):
+        def collect(first, *rest, marker="!"):
+            return (prefix, first, rest, marker)
+        return collect
+
+    collect = make_collector("<")
+    print(collect(1), collect(1, 2, 3, marker="?"))
+    """)
+    assert run_source(source) == "('<', 1, (), '!') ('<', 1, (2, 3), '?')\n"
+
+
+def test_pyfront_nested_closure_can_capture_varargs():
+    source = textwrap.dedent("""
+    def outer(*values):
+        def inner():
+            return values
+        return inner
+
+    inner = outer(1, 2, 3)
+    print(inner())
+    """)
+    assert run_source(source) == "(1, 2, 3)\n"
+
+
+def test_pyfront_collects_extra_keyword_arguments():
+    source = textwrap.dedent("""
+    def collect(value, **options):
+        return (value, options)
+
+    def collect_all(first, *rest, **options):
+        return (first, rest, options)
+
+    def collect_keyword_only(*, label, **options):
+        return (label, options)
+
+    print(collect(1, color="blue", size=3))
+    print(collect_all(1, 2, 3, color="green"))
+    print(collect_all(1))
+    print(collect_keyword_only(label="item", active=True))
+    """)
+    assert run_source(source) == (
+        "(1, {'color': 'blue', 'size': 3})\n"
+        "(1, (2, 3), {'color': 'green'})\n"
+        "(1, (), {})\n"
+        "('item', {'active': True})\n"
+    )
+
+
+def test_pyfront_saved_closure_collects_extra_keyword_arguments():
+    source = textwrap.dedent("""
+    def make_collector(prefix):
+        def collect(value, *rest, marker="!", **options):
+            return (prefix, value, rest, marker, options)
+        return collect
+
+    collect = make_collector("<")
+    print(collect(1, 2, 3, marker="?", color="red", size=4))
+    """)
+    assert run_source(source) == "('<', 1, (2, 3), '?', {'color': 'red', 'size': 4})\n"
+
+
+def test_pyfront_nested_function_direct_call_passes_extra_keywords():
+    source = textwrap.dedent("""
+    def outer():
+        def inner(value, **options):
+            return (value, options)
+        return inner(2, flag=True)
+
+    print(outer())
+    """)
+    assert run_source(source) == "(2, {'flag': True})\n"
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        ("def f(*, name): return name\nf('x')", "too many positional arguments"),
+        ("def f(*, name): return name\nf()", "missing required argument 'name'"),
+        ("def f(value, *, name): return name\nf(1, name=2, value=3)", "multiple values for argument 'value'"),
+    ],
+)
+def test_pyfront_keyword_only_parameter_binding_errors(source, message):
+    with pytest.raises(ParseError, match=message):
         compile_py(source)
 
 
@@ -319,6 +622,28 @@ def test_pyfront_list_comprehensions_accept_general_iterables():
         'print([value for value in (1, 2)])\n'
         'print([character for character in "xy"])'
     ) == "[1, 2]\n['x', 'y']\n"
+
+
+def test_pyfront_list_comprehensions_support_filters():
+    source = textwrap.dedent("""
+    value = 99
+    def selected():
+        return [value for value in range(8) if value % 2 == 0 if value > 2]
+
+    print(selected(), value)
+    """)
+    assert run_source(source) == "[4, 6] 99\n"
+
+
+def test_pyfront_list_comprehensions_support_nested_generators():
+    source = textwrap.dedent("""
+    outer = 99
+    result = [(outer, inner) for outer in range(3) if outer > 0
+              for outer in [outer, outer + 10] if outer < 10
+              for inner in range(outer)]
+    print(result, outer)
+    """)
+    assert run_source(source) == "[(1, 0), (2, 0), (2, 1)] 99\n"
 
 
 def test_pyfront_chained_comparisons_short_circuit_correctly():

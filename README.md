@@ -67,25 +67,31 @@ The current frontend handles integer, boolean, string, and `None` constants,
 basic arithmetic and comparisons, boolean expressions, calls, assignment to
 names, attributes and indexes, unpacking assignments, supported augmented
 assignments, supported imports, `if`/`else`, `while`, `break`/`continue`, simple
-positional functions, and `for` loops over Python iterables. The reference and
+positional functions including nested functions, captured variables and
+`nonlocal`, and `for` loops over Python iterables. The reference and
 native VMs share iterator bytecode for lists, tuples, strings, `range(...)`, and
-other Python iterable objects. Sequence indexing and simple single-clause,
-unfiltered list comprehensions are supported.
+other Python iterable objects. Sequence indexing and list comprehensions with
+one or more synchronous `for` clauses, name targets, and `if` filters are
+supported.
 
 This is still a Python subset, not full Python; features such as classes,
-exceptions in source code, generators, nested or filtered comprehensions,
-starred arguments, keyword-only parameters, slice assignment, and async syntax
-are not implemented. Expressions currently do not support
-floating-point literals, dictionaries, sets, slicing, membership or identity
-comparisons, or operators beyond `+`, `-`, `*`, `/`, and `%`. Functions must be
-top-level and use positional parameters; required and optional positional
-parameters are supported. Defaults must be immutable literals and are emitted
-at direct user-function call sites. Positional and keyword arguments are
-supported for direct calls to known user functions. Builtin keyword arguments
-are supported where the target builtin accepts them; methods and dynamically
-called objects do not accept keyword arguments. Functions use statically
-determined local variables; `global` declarations are supported, but closures,
-`nonlocal`, and nested functions are not.
+exceptions in source code, generators, dictionary and set comprehensions,
+slice assignment, and async syntax are not implemented.
+Functions may collect extra positional arguments with `*args` and extra
+keyword arguments with `**kwargs`. Function defaults must be immutable literals.
+Keyword arguments work for top-level functions, builtins, and dynamic
+SpaceLang closures. Calls may expand positional iterables and keyword mappings
+with `*values` and `**options`; ordinary explicit keyword arguments to methods
+remain unsupported. Expressions
+currently do not support floating-point literals, dictionaries, sets, slicing,
+membership or identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
+and `%`. Top-level and nested functions support required and optional positional
+parameters and keyword-only parameters. Defaults must be immutable literals.
+Positional and keyword arguments, including argument expansion, are supported
+for direct calls to known top-level functions. Builtin keyword arguments are supported
+where the target builtin accepts them. Functions use statically determined
+local variables; `global` declarations and lexical closures with `nonlocal`
+updates are supported.
 Unsupported syntax raises an error rather than being silently compiled.
 
 ## Run a `.sp` program
@@ -184,6 +190,19 @@ assembler directives, not VM opcodes.
 | 33 | `STORE_INDEX` | none | Pop a key, container, and value, then assign `container[key] = value`. |
 | 34 | `UNPACK_SEQUENCE` | `count` | Unpack exactly `count` values from an iterable onto the stack. |
 | 35 | `PUSH_NONE` | none | Push Python's `None` value. |
+| 36 | `MAKE_CLOSURE` | `func_id, cell_count, arg_count` | Pop captured cells and push a legacy positional-only closure. |
+| 37 | `CELLIFY` | `local_slot` | Wrap a local slot in a shared closure cell. |
+| 38 | `LOAD_CELL_REF` | `local_slot` | Push the cell object stored in a local slot. |
+| 39 | `LOAD_DEREF` | `closure_index` | Push a captured cell reference from the current closure. |
+| 40 | `CALL_OBJ_KW` | `positional_count, keyword_count` | Call a dynamic callable with positional and named arguments. |
+| 41 | `MAKE_CLOSURE_SIG` | `func_id, cell_count, arg_count, default_count` | Pop captured cells and signature metadata, then push a closure. |
+| 42 | `MAKE_CLOSURE_KWONLY` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count` | Create a closure with positional and keyword-only parameter metadata. |
+| 43 | `MAKE_CLOSURE_ARGS` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count, has_varargs, has_kwargs` | Create a closure with variadic argument metadata. |
+| 44 | `BUILD_DICT` | `count` | Pop `count` key/value pairs and push a dictionary. |
+| 45 | `CALL_OBJ_EX` | none | Call a dynamic callable with a positional list and keyword dictionary. |
+| 46 | `CALL_BUILTIN_EX` | `func_id` | Call a builtin with a positional list and keyword dictionary. |
+| 47 | `LIST_EXTEND` | none | Extend the list below the stack top with the iterable at the top. |
+| 48 | `DICT_MERGE` | none | Merge the mapping at the stack top into the keyword dictionary below it, rejecting duplicate or non-string keys. |
 
 `OP` operation IDs:
 

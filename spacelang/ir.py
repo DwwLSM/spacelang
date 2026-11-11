@@ -43,6 +43,19 @@ class OP(IntEnum):
     STORE_INDEX = 33
     UNPACK_SEQUENCE = 34
     PUSH_NONE = 35
+    MAKE_CLOSURE = 36
+    CELLIFY = 37
+    LOAD_CELL_REF = 38
+    LOAD_DEREF = 39
+    CALL_OBJ_KW = 40
+    MAKE_CLOSURE_SIG = 41
+    MAKE_CLOSURE_KWONLY = 42
+    MAKE_CLOSURE_ARGS = 43
+    BUILD_DICT = 44
+    CALL_OBJ_EX = 45
+    CALL_BUILTIN_EX = 46
+    LIST_EXTEND = 47
+    DICT_MERGE = 48
 
 
 @dataclass(slots=True)
