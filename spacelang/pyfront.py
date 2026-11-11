@@ -307,6 +307,11 @@ class PyFront(ast.NodeVisitor):
                 _emit(self.instrs, OP.CALL, BUILTIN_IDS["bool"], 1, line=getattr(node, "lineno", 0))
             elif isinstance(value, int):
                 _emit(self.instrs, OP.PUSH_INT, value, line=getattr(node, "lineno", 0))
+            elif isinstance(value, float):
+                literal = repr(value)
+                chars = [ord(ch) for ch in literal]
+                _emit(self.instrs, OP.PUSH_STR, len(chars), *chars, line=getattr(node, "lineno", 0))
+                _emit(self.instrs, OP.CALL, BUILTIN_IDS["float"], 1, line=getattr(node, "lineno", 0))
             elif isinstance(value, str):
                 chars = [ord(ch) for ch in value]
                 chunks = [chars[index:index + 1000] for index in range(0, len(chars), 1000)]

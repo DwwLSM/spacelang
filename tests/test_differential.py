@@ -87,6 +87,10 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "values[1:3] = [8, 9]\nvalues[::2] = [20, 21, 22]\n"
         "values[1:2] += [30]\nprint(middle, reverse, values)\n"
         "print('abcdef'[1:5:2], (0, 1, 2, 3)[::-1])",
+        "integer_looking = 1.\nexponential = 1.25e2\nnegative = -2.5\n"
+        "sum_value = 0.1 + 0.2\nproduct = 1.5 * 2\n"
+        "print(integer_looking, exponential, negative, sum_value, product)\n"
+        "print(2.5 > 2, 3 == 3.0)",
         "import math\nresult = math.sqrt(81)\nprint(result)",
         'print("left", "right", sep="-")',
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",

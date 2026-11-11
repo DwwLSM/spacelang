@@ -25,6 +25,22 @@ def test_pyfront_print_math_and_function_call():
     assert run_source("print(later(3))\ndef later(value): return value + 1") == "4\n"
 
 
+def test_pyfront_floating_point_literals_and_arithmetic():
+    source = (
+        "integer_looking = 1.\n"
+        "exponential = 1.25e2\n"
+        "negative = -2.5\n"
+        "sum_value = 0.1 + 0.2\n"
+        "product = 1.5 * 2\n"
+        "print(integer_looking, exponential, negative, sum_value, product)\n"
+        "print(2.5 > 2, 3 == 3.0)\n"
+    )
+    assert run_source(source) == (
+        "1.0 125.0 -2.5 0.30000000000000004 3.0\n"
+        "True True\n"
+    )
+
+
 def test_pyfront_drops_expression_results_and_preserves_none_call_results():
     assert run_source('print(print("inner"))') == "inner\nNone\n"
     assert run_source("def value(): return 7\nvalue()\nprint(1)") == "1\n"

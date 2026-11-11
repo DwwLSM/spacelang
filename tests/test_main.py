@@ -204,6 +204,28 @@ def test_compile_py_supports_slicing_in_sp_file(tmp_path):
         assert output.getvalue() == expected
 
 
+def test_compile_py_supports_float_literals_in_sp_file(tmp_path):
+    source = tmp_path / "floats.py"
+    destination = tmp_path / "floats.sp"
+    source.write_text(
+        "integer_looking = 1.\n"
+        "exponential = 1.25e2\n"
+        "negative = -2.5\n"
+        "sum_value = 0.1 + 0.2\n"
+        "product = 1.5 * 2\n"
+        "print(integer_looking, exponential, negative, sum_value, product)\n"
+        "print(2.5 > 2, 3 == 3.0)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    expected = "1.0 125.0 -2.5 0.30000000000000004 3.0\nTrue True\n"
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == expected
+
+
 def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
     source = tmp_path / "function_parameters.py"
     destination = tmp_path / "function_parameters.sp"
