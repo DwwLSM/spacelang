@@ -56,6 +56,7 @@ class OP(IntEnum):
     CALL_BUILTIN_EX = 46
     LIST_EXTEND = 47
     DICT_MERGE = 48
+    MAKE_CLOSURE_POSONLY = 49
 
 
 @dataclass(slots=True)

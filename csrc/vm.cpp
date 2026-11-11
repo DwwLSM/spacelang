@@ -63,6 +63,7 @@ enum Opcode : std::uint8_t {
     CALL_BUILTIN_EX = 46,
     LIST_EXTEND = 47,
     DICT_MERGE = 48,
+    MAKE_CLOSURE_POSONLY = 49,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -213,7 +214,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 49) {
+        if (opcode < 0 || opcode >= 50) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -226,9 +227,9 @@ VM::VM(pybind11::object program) {
         const std::size_t expected[] = {
             0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
             1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
-            1, 0, 1, 0, 3, 1, 1,             1, 2, 4, 6, 8, 1, 0, 1, 0, 0,
+            1, 0, 1, 0, 3, 1, 1,                         1, 2, 4, 6, 8, 1, 0, 1, 0, 0, 9,
         };
-        if (instr.op >= 49
+        if (instr.op >= 50
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -417,7 +418,7 @@ pybind11::object VM::run() {
             &&op_load_cell_ref, &&op_load_deref, &&op_call_obj_kw,
             &&op_make_closure_sig, &&op_make_closure_kwonly, &&op_make_closure_args,
             &&op_build_dict, &&op_call_obj_ex, &&op_call_builtin_ex,
-            &&op_list_extend, &&op_dict_merge,
+            &&op_list_extend, &&op_dict_merge, &&op_make_closure_posonly,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -646,6 +647,8 @@ pybind11::object VM::run() {
                         const bool has_varargs = !vararg_name_value.is_none();
                         const auto kwarg_name_value = callable.attr("kwarg_name");
                         const bool has_kwargs = !kwarg_name_value.is_none();
+                        const auto positional_only_count =
+                        callable.attr("positional_only_count").cast<std::int64_t>();
                         const auto defaults = callable.attr("defaults").cast<pybind11::dict>();
                         if (!has_varargs
                             && positional_values.size() > static_cast<std::size_t>(positional_parameter_count)) {
@@ -677,6 +680,18 @@ pybind11::object VM::run() {
                             if (index == static_cast<std::size_t>(parameter_names.size())) {
                                 if (!has_kwargs) {
                                     raise_space_error("TypeError", "unexpected keyword argument '" + key + "'", instr.line);
+                                }
+                                extra_keywords[item.first] =
+                                    pybind11::reinterpret_borrow<pybind11::object>(item.second);
+                                continue;
+                            }
+                            if (index < static_cast<std::size_t>(positional_only_count)) {
+                                if (!has_kwargs) {
+                                    raise_space_error(
+                                        "TypeError",
+                                        "positional-only argument '" + key + "' passed as a keyword",
+                                        instr.line
+                                    );
                                 }
                                 extra_keywords[item.first] =
                                     pybind11::reinterpret_borrow<pybind11::object>(item.second);
@@ -1185,12 +1200,14 @@ pybind11::object VM::run() {
             case MAKE_CLOSURE_SIG:
             case MAKE_CLOSURE_KWONLY:
             case MAKE_CLOSURE_ARGS:
+            case MAKE_CLOSURE_POSONLY:
             {
 #if defined(__GNUC__) || defined(__clang__)
             op_make_closure:
             op_make_closure_sig:
             op_make_closure_kwonly:
             op_make_closure_args:
+            op_make_closure_posonly:
 #endif
                 const auto func_id = instr.args[0];
                 if (funcs_.find(func_id) == funcs_.end()) {
@@ -1250,14 +1267,24 @@ pybind11::object VM::run() {
                     ++ip;
                     break;
                 }
-                if (instr.op == MAKE_CLOSURE_ARGS) {
-                    const auto positional_count = static_cast<std::size_t>(instr.args[2]);
-                    const auto keyword_only_count = static_cast<std::size_t>(instr.args[3]);
-                    const auto positional_default_count = static_cast<std::size_t>(instr.args[4]);
-                    const auto keyword_default_count = static_cast<std::size_t>(instr.args[5]);
-                    const bool has_varargs = instr.args[6] == 1;
-                    const bool has_kwargs = instr.args[7] == 1;
-                    if (instr.args[6] > 1 || instr.args[7] > 1
+                if (instr.op == MAKE_CLOSURE_ARGS || instr.op == MAKE_CLOSURE_POSONLY) {
+                    const bool has_posonly = instr.op == MAKE_CLOSURE_POSONLY;
+                    const auto positional_only_count =
+                        has_posonly ? static_cast<std::size_t>(instr.args[2]) : 0;
+                    const auto positional_count =
+                        static_cast<std::size_t>(instr.args[has_posonly ? 3 : 2]);
+                    const auto keyword_only_count =
+                        static_cast<std::size_t>(instr.args[has_posonly ? 4 : 3]);
+                    const auto positional_default_count =
+                        static_cast<std::size_t>(instr.args[has_posonly ? 5 : 4]);
+                    const auto keyword_default_count =
+                        static_cast<std::size_t>(instr.args[has_posonly ? 6 : 5]);
+                    const auto varargs_index = has_posonly ? 7 : 6;
+                    const auto kwargs_index = has_posonly ? 8 : 7;
+                    const bool has_varargs = instr.args[varargs_index] == 1;
+                    const bool has_kwargs = instr.args[kwargs_index] == 1;
+                    if (instr.args[varargs_index] > 1 || instr.args[kwargs_index] > 1
+                        || positional_only_count > positional_count
                         || positional_default_count > positional_count
                         || keyword_default_count > keyword_only_count) {
                         raise_space_error("RuntimeError", "invalid variadic closure signature", instr.line);
@@ -1307,7 +1334,8 @@ pybind11::object VM::run() {
                             defaults,
                             positional_count,
                             has_varargs ? pybind11::cast(name(vararg_name_id)) : pybind11::none(),
-                            has_kwargs ? pybind11::cast(name(kwarg_name_id)) : pybind11::none()
+                            has_kwargs ? pybind11::cast(name(kwarg_name_id)) : pybind11::none(),
+                            positional_only_count
                         )
                     ));
                     ++ip;

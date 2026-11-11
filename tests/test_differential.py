@@ -50,6 +50,17 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "    return inner(*values, **options)\n"
         "print(outer())",
         "values = [[1, 2, 3]]\nprint(len(*values))\nprint(*['left', 'right'], sep=':')",
+        "def f(value, /, prefix='v=', *, suffix='!'): return prefix + str(value) + suffix\n"
+        "def collect(value, /, **options): return value, options\n"
+        "def make(**options): return options\n"
+        "print(f(3), collect(1, value='extra'), f(*[4], **make(prefix='x=')))",
+        "counter = 0\ndef next_value():\n"
+        "    global counter\n    counter += 1\n    return counter\n"
+        "base = 4\ndef f(value=next_value(), *, suffix=str(base)): return value, suffix\n"
+        "base = 9\nprint(f(), f(), counter)",
+        "def outer(start):\n"
+        "    def inner(value=start + 2): return value\n"
+        "    return inner\nfirst = outer(3)\nsecond = outer(8)\nprint(first(), second())",
         "def make_collector(prefix):\n    def collect(value, *rest, marker='!', **options): return (prefix, value, rest, marker, options)\n    return collect\ncollect = make_collector('<')\nprint(collect(1, 2, 3, marker='?', color='red', size=4))",
         "def outer():\n    def inner(value, **options): return (value, options)\n    return inner(2, flag=True)\nprint(outer())",
         "counter = 4\ndef update():\n    global counter\n    counter = counter + 1\n    return counter\nprint(update(), counter)",

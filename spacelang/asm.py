@@ -31,6 +31,7 @@ MNEMONICS = {
     "CALL_BUILTIN_EX": OP.CALL_BUILTIN_EX,
     "LIST_EXTEND": OP.LIST_EXTEND,
     "DICT_MERGE": OP.DICT_MERGE,
+    "MAKE_CLOSURE_POSONLY": OP.MAKE_CLOSURE_POSONLY,
     "CONCAT": OP.CONCAT,
     "DEF": OP.DEF,
     "RET": OP.RET,
@@ -210,6 +211,8 @@ def assemble(src: str) -> Program:
         elif op == OP.MAKE_CLOSURE_KWONLY and len(args) == 6:
             instrs.append(Instr(op, args, line=source_line))
         elif op == OP.MAKE_CLOSURE_ARGS and len(args) == 8:
+            instrs.append(Instr(op, args, line=source_line))
+        elif op == OP.MAKE_CLOSURE_POSONLY and len(args) == 9:
             instrs.append(Instr(op, args, line=source_line))
         elif op == OP.CALL_OBJ_KW and len(args) == 2:
             instrs.append(Instr(op, args, line=source_line))

@@ -166,6 +166,27 @@ def test_compile_py_supports_expanded_call_arguments_in_sp_file(tmp_path):
         assert output.getvalue() == "(1, (2, 3), {'color': 'blue'})\n"
 
 
+def test_compile_py_supports_positional_only_and_expression_defaults_in_sp_file(tmp_path):
+    source = tmp_path / "parameter_edges.py"
+    destination = tmp_path / "parameter_edges.sp"
+    source.write_text(
+        "base = 3\n"
+        "def render(value, /, prefix='v=', *, suffix=str(base)):\n"
+        "    return prefix + str(value) + suffix\n"
+        "base = 9\n"
+        "print(render(4), render(*[5], **options(prefix='x=')))\n"
+        "def options(**kwargs):\n"
+        "    return kwargs\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "v=43 x=53\n"
+
+
 def test_compile_py_supports_varargs_in_sp_file(tmp_path):
     source = tmp_path / "varargs.py"
     destination = tmp_path / "varargs.sp"

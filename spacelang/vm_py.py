@@ -36,6 +36,7 @@ class Closure:
         positional_count: int | None = None,
         vararg_name: str | None = None,
         kwarg_name: str | None = None,
+        positional_only_count: int = 0,
     ):
         self.func_id = func_id
         self.cells = cells
@@ -45,6 +46,7 @@ class Closure:
         self.positional_count = self.arg_count if positional_count is None else positional_count
         self.vararg_name = vararg_name
         self.kwarg_name = kwarg_name
+        self.positional_only_count = positional_only_count
 
 
 @dataclass
@@ -151,6 +153,15 @@ class VM:
             if name not in parameter_names:
                 if closure.kwarg_name is None:
                     raise TypeError(line=line, ip=self.ip, msg=f"unexpected keyword argument {name!r}")
+                extra_keywords[name] = value
+                continue
+            if parameter_names.index(name) < closure.positional_only_count:
+                if closure.kwarg_name is None:
+                    raise TypeError(
+                        line=line,
+                        ip=self.ip,
+                        msg=f"positional-only argument {name!r} passed as a keyword",
+                    )
                 extra_keywords[name] = value
                 continue
             if name in bound:
@@ -808,6 +819,67 @@ class VM:
                         positional_count,
                         vararg_name,
                         kwarg_name,
+                    )
+                )
+                self.ip += 1
+                continue
+
+            if op == OP.MAKE_CLOSURE_POSONLY:
+                func_id = int(args[0])
+                cell_count = int(args[1])
+                positional_only_count = int(args[2])
+                positional_count = int(args[3])
+                keyword_only_count = int(args[4])
+                positional_default_count = int(args[5])
+                keyword_default_count = int(args[6])
+                has_varargs = int(args[7]) == 1
+                has_kwargs = int(args[8]) == 1
+                if (
+                    positional_only_count > positional_count
+                    or positional_default_count > positional_count
+                    or keyword_default_count > keyword_only_count
+                    or int(args[7]) not in {0, 1}
+                    or int(args[8]) not in {0, 1}
+                ):
+                    raise RuntimeError(line=instr.line, ip=self.ip, msg="invalid positional-only closure signature")
+                kwarg_name = self._name(int(self._pop("kwarg name"))) if has_kwargs else None
+                vararg_name = self._name(int(self._pop("vararg name"))) if has_varargs else None
+                keyword_defaults = []
+                for _ in range(keyword_default_count):
+                    value = self._pop("keyword-only default value")
+                    name = self._name(int(self._pop("keyword-only default name")))
+                    keyword_defaults.append((name, value))
+                keyword_defaults.reverse()
+                positional_defaults = [
+                    self._pop("default value") for _ in range(positional_default_count)
+                ]
+                positional_defaults.reverse()
+                parameter_names = [
+                    self._name(int(self._pop("parameter name")))
+                    for _ in range(positional_count + keyword_only_count)
+                ]
+                parameter_names.reverse()
+                defaults = dict(
+                    zip(
+                        parameter_names[positional_count - positional_default_count:positional_count],
+                        positional_defaults,
+                    )
+                )
+                defaults.update(keyword_defaults)
+                cells = [self._pop("closure cell") for _ in range(cell_count)]
+                cells.reverse()
+                if func_id not in self.funcs:
+                    raise UndefinedFunc(line=instr.line, ip=self.ip, msg=f"undefined user function {func_id}")
+                self._push(
+                    Closure(
+                        func_id,
+                        cells,
+                        parameter_names,
+                        defaults,
+                        positional_count,
+                        vararg_name,
+                        kwarg_name,
+                        positional_only_count,
                     )
                 )
                 self.ip += 1

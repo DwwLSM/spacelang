@@ -90,6 +90,8 @@ class _FunctionSignature:
     defaults: dict[str, ast.expr]
     vararg_name: str | None = None
     kwarg_name: str | None = None
+    positional_only_count: int = 0
+    default_temps: dict[str, str] = field(default_factory=dict)
 
     @property
     def parameter_names(self) -> list[str]:
@@ -232,7 +234,7 @@ class PyFront(ast.NodeVisitor):
         for stmt in node.body:
             collector.visit(stmt)
         parameter_names = {
-            arg.arg for arg in [*node.args.args, *node.args.kwonlyargs]
+            arg.arg for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
         }
         if node.args.vararg:
             parameter_names.add(node.args.vararg.arg)
@@ -539,6 +541,11 @@ class PyFront(ast.NodeVisitor):
                 if nested_function is not None:
                     self._compile_nested_function_call(node, nested_function)
                     return
+                if self._has_expanded_arguments(node):
+                    self._compile_expr(node.func)
+                    self._compile_call_argument_containers(node)
+                    _emit(self.instrs, OP.CALL_OBJ_EX, line=getattr(node, "lineno", 0))
+                    return
                 self._compile_expr(node.func)
                 for arg in node.args:
                     self._compile_expr(arg)
@@ -840,13 +847,8 @@ class PyFront(ast.NodeVisitor):
         raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported statement: {type(node).__name__}")
 
     def _compile_function(self, node: ast.FunctionDef, *, nested: bool = False) -> None:
-        if node.args.posonlyargs:
-            raise ParseError(
-                line=getattr(node, "lineno", 0),
-                ip=0,
-                msg="positional-only parameters are unsupported",
-            )
-        positional_names = [arg.arg for arg in node.args.args]
+        positional_only_names = [arg.arg for arg in node.args.posonlyargs]
+        positional_names = [*positional_only_names, *(arg.arg for arg in node.args.args)]
         keyword_only_names = [arg.arg for arg in node.args.kwonlyargs]
         parameter_names = [*positional_names, *keyword_only_names]
         required_count = len(positional_names) - len(node.args.defaults)
@@ -856,12 +858,6 @@ class PyFront(ast.NodeVisitor):
             for name, default in zip(keyword_only_names, node.args.kw_defaults)
             if default is not None
         )
-        if any(not self._is_supported_default(value) for value in defaults.values()):
-            raise ParseError(
-                line=getattr(node, "lineno", 0),
-                ip=0,
-                msg="function defaults must be immutable literals",
-            )
         if any(
             isinstance(child, (ast.AsyncFunctionDef, ast.ClassDef))
             for child in ast.walk(node)
@@ -873,13 +869,34 @@ class PyFront(ast.NodeVisitor):
             self.function_id_by_node[id(node)] = func_id
         if not nested:
             self.function_ids[node.name] = func_id
-            self.function_signatures[node.name] = _FunctionSignature(
-                positional_names,
-                keyword_only_names,
-                defaults,
-                node.args.vararg.arg if node.args.vararg else None,
-                node.args.kwarg.arg if node.args.kwarg else None,
-            )
+            signature = self.function_signatures.get(node.name)
+            if signature is None:
+                signature = _FunctionSignature(
+                    positional_names,
+                    keyword_only_names,
+                    defaults,
+                    node.args.vararg.arg if node.args.vararg else None,
+                    node.args.kwarg.arg if node.args.kwarg else None,
+                    len(positional_only_names),
+                    {parameter_name: self._new_temp_name() for parameter_name in defaults},
+                )
+                self.function_signatures[node.name] = signature
+            signature.positional_names = positional_names
+            signature.keyword_only_names = keyword_only_names
+            signature.defaults = defaults
+            signature.vararg_name = node.args.vararg.arg if node.args.vararg else None
+            signature.kwarg_name = node.args.kwarg.arg if node.args.kwarg else None
+            signature.positional_only_count = len(positional_only_names)
+            for parameter_name, default in zip(
+                positional_names[len(positional_names) - len(node.args.defaults):],
+                node.args.defaults,
+            ):
+                self._compile_expr(default)
+                self._store_name(signature.default_temps[parameter_name], getattr(node, "lineno", 0))
+            for parameter_name, default in zip(keyword_only_names, node.args.kw_defaults):
+                if default is not None:
+                    self._compile_expr(default)
+                    self._store_name(signature.default_temps[parameter_name], getattr(node, "lineno", 0))
         local_parameter_names = [
             *parameter_names,
             *([node.args.vararg.arg] if node.args.vararg else []),
@@ -894,7 +911,7 @@ class PyFront(ast.NodeVisitor):
             scope = self._build_function_scope(node, [])
 
         local_scope: dict[str, int] = {}
-        for idx, arg in enumerate([*node.args.args, *node.args.kwonlyargs]):
+        for idx, arg in enumerate([*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]):
             local_scope[arg.arg] = idx
         if node.args.vararg:
             local_scope[node.args.vararg.arg] = len(local_scope)
@@ -943,13 +960,6 @@ class PyFront(ast.NodeVisitor):
         line = getattr(node, "lineno", 0)
         scope = self.function_scopes[id(node)]
         func_id = self.function_id_by_node[id(node)]
-        if any(not self._is_supported_default(value) for value in node.args.defaults):
-            raise ParseError(
-                line=line,
-                ip=0,
-                msg="function defaults must be immutable literals",
-            )
-
         for name in scope.free_names:
             if (
                 name not in self.global_names_stack[-1]
@@ -967,7 +977,8 @@ class PyFront(ast.NodeVisitor):
                     ip=0,
                     msg=f"cannot capture enclosing name {name!r}",
                 )
-        positional_names = [arg.arg for arg in node.args.args]
+        positional_only_names = [arg.arg for arg in node.args.posonlyargs]
+        positional_names = [*positional_only_names, *(arg.arg for arg in node.args.args)]
         keyword_only_names = [arg.arg for arg in node.args.kwonlyargs]
         parameter_names = [*positional_names, *keyword_only_names]
         keyword_only_defaults = [
@@ -982,7 +993,24 @@ class PyFront(ast.NodeVisitor):
         for name, default in keyword_only_defaults:
             _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
             self._compile_expr(default)
-        if node.args.vararg or node.args.kwarg:
+        if positional_only_names:
+            if node.args.vararg:
+                _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.vararg.arg), line=line)
+            if node.args.kwarg:
+                _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.kwarg.arg), line=line)
+            closure_op = OP.MAKE_CLOSURE_POSONLY
+            closure_args = (
+                func_id,
+                len(scope.free_names),
+                len(positional_only_names),
+                len(positional_names),
+                len(keyword_only_names),
+                len(node.args.defaults),
+                len(keyword_only_defaults),
+                int(node.args.vararg is not None),
+                int(node.args.kwarg is not None),
+            )
+        elif node.args.vararg or node.args.kwarg:
             if node.args.vararg:
                 _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.vararg.arg), line=line)
             if node.args.kwarg:
@@ -1036,7 +1064,8 @@ class PyFront(ast.NodeVisitor):
             self._compile_call_argument_containers(node)
             _emit(self.instrs, OP.CALL_OBJ_EX, line=line)
             return
-        positional_names = [arg.arg for arg in function.args.args]
+        positional_only_names = [arg.arg for arg in function.args.posonlyargs]
+        positional_names = [*positional_only_names, *(arg.arg for arg in function.args.args)]
         keyword_only_names = [arg.arg for arg in function.args.kwonlyargs]
         parameter_names = [*positional_names, *keyword_only_names]
         required_count = len(positional_names) - len(function.args.defaults)
@@ -1057,6 +1086,17 @@ class PyFront(ast.NodeVisitor):
         for keyword in node.keywords:
             if keyword.arg is None:
                 raise ParseError(line=line, ip=0, msg="expanded keyword arguments are unsupported")
+            if keyword.arg in positional_only_names:
+                if function.args.kwarg is None:
+                    raise ParseError(
+                        line=line,
+                        ip=0,
+                        msg=f"positional-only argument {keyword.arg!r} passed as a keyword",
+                    )
+                if keyword.arg in keyword_names:
+                    raise ParseError(line=line, ip=0, msg=f"multiple values for keyword {keyword.arg!r}")
+                keyword_names.add(keyword.arg)
+                continue
             if keyword.arg not in parameter_names and function.args.kwarg is None:
                 raise ParseError(
                     line=line,
@@ -1068,7 +1108,7 @@ class PyFront(ast.NodeVisitor):
             keyword_names.add(keyword.arg)
             ordered_names.append(keyword.arg)
 
-        provided_names.update(keyword_names)
+        provided_names.update(keyword_names - set(positional_only_names))
 
         for parameter_name in parameter_names:
             if parameter_name not in provided_names and parameter_name not in defaults:
@@ -1118,7 +1158,8 @@ class PyFront(ast.NodeVisitor):
             _emit(self.instrs, OP.DICT_MERGE, line=line)
 
     def _compile_function_closure(self, node: ast.FunctionDef, func_id: int, line: int) -> None:
-        positional_names = [arg.arg for arg in node.args.args]
+        positional_only_names = [arg.arg for arg in node.args.posonlyargs]
+        positional_names = [*positional_only_names, *(arg.arg for arg in node.args.args)]
         keyword_only_names = [arg.arg for arg in node.args.kwonlyargs]
         parameter_names = [*positional_names, *keyword_only_names]
         keyword_only_defaults = [
@@ -1128,16 +1169,39 @@ class PyFront(ast.NodeVisitor):
         ]
         for name in parameter_names:
             _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
-        for default in node.args.defaults:
-            self._compile_expr(default)
+        default_parameter_names = positional_names[len(positional_names) - len(node.args.defaults):]
+        signature = self.function_signatures.get(node.name)
+        for parameter_name, default in zip(default_parameter_names, node.args.defaults):
+            if signature is not None and parameter_name in signature.default_temps:
+                self._load_name(signature.default_temps[parameter_name], line)
+            else:
+                self._compile_expr(default)
         for name, default in keyword_only_defaults:
             _emit(self.instrs, OP.PUSH_INT, self._name_id(name), line=line)
-            self._compile_expr(default)
+            if signature is not None and name in signature.default_temps:
+                self._load_name(signature.default_temps[name], line)
+            else:
+                self._compile_expr(default)
         if node.args.vararg:
             _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.vararg.arg), line=line)
         if node.args.kwarg:
             _emit(self.instrs, OP.PUSH_INT, self._name_id(node.args.kwarg.arg), line=line)
-        if node.args.vararg or node.args.kwarg:
+        if positional_only_names:
+            _emit(
+                self.instrs,
+                OP.MAKE_CLOSURE_POSONLY,
+                func_id,
+                0,
+                len(positional_only_names),
+                len(positional_names),
+                len(keyword_only_names),
+                len(node.args.defaults),
+                len(keyword_only_defaults),
+                int(node.args.vararg is not None),
+                int(node.args.kwarg is not None),
+                line=line,
+            )
+        elif node.args.vararg or node.args.kwarg:
             _emit(
                 self.instrs,
                 OP.MAKE_CLOSURE_ARGS,
@@ -1174,15 +1238,6 @@ class PyFront(ast.NodeVisitor):
                 line=line,
             )
 
-    def _is_supported_default(self, node: ast.expr) -> bool:
-        if isinstance(node, ast.Constant):
-            return node.value is None or isinstance(node.value, (bool, int, str))
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
-            return isinstance(node.operand, ast.Constant) and type(node.operand.value) is int
-        if isinstance(node, ast.Tuple):
-            return all(self._is_supported_default(item) for item in node.elts)
-        return False
-
     def _compile_user_function_call(self, node: ast.Call, name: str) -> None:
         line = getattr(node, "lineno", 0)
         if self._has_expanded_arguments(node):
@@ -1194,6 +1249,7 @@ class PyFront(ast.NodeVisitor):
         positional_names = signature.positional_names
         keyword_only_names = signature.keyword_only_names
         parameter_names = signature.parameter_names
+        positional_only_names = set(positional_names[:signature.positional_only_count])
         bound: dict[str, str] = {}
         provided_names = positional_names[:min(len(node.args), len(positional_names))]
         if len(node.args) > len(positional_names) and signature.vararg_name is None:
@@ -1205,6 +1261,17 @@ class PyFront(ast.NodeVisitor):
         for keyword in node.keywords:
             if keyword.arg is None:
                 raise ParseError(line=line, ip=0, msg="expanded keyword arguments are unsupported")
+            if keyword.arg in positional_only_names:
+                if signature.kwarg_name is None:
+                    raise ParseError(
+                        line=line,
+                        ip=0,
+                        msg=f"positional-only argument {keyword.arg!r} passed as a keyword",
+                    )
+                if keyword.arg in keyword_names:
+                    raise ParseError(line=line, ip=0, msg=f"multiple values for keyword {keyword.arg!r}")
+                keyword_names.add(keyword.arg)
+                continue
             if keyword.arg not in parameter_names and signature.kwarg_name is None:
                 raise ParseError(line=line, ip=0, msg=f"unexpected keyword argument {keyword.arg!r} for {name}")
             if keyword.arg in provided_names or keyword.arg in keyword_names:
@@ -1239,10 +1306,10 @@ class PyFront(ast.NodeVisitor):
         extra_keyword_temps = {
             keyword.arg: self._new_temp_name()
             for keyword in node.keywords
-            if keyword.arg not in parameter_names
+            if keyword.arg not in parameter_names or keyword.arg in positional_only_names
         }
         for keyword in node.keywords:
-            temp_name = bound.get(keyword.arg)
+            temp_name = None if keyword.arg in positional_only_names else bound.get(keyword.arg)
             if temp_name is None:
                 temp_name = extra_keyword_temps.get(keyword.arg)
             self._compile_expr(keyword.value)
@@ -1251,7 +1318,7 @@ class PyFront(ast.NodeVisitor):
             if parameter_name in bound:
                 self._load_name(bound[parameter_name], line)
             elif parameter_name in signature.defaults:
-                self._compile_expr(signature.defaults[parameter_name])
+                self._load_name(signature.default_temps[parameter_name], line)
         if signature.vararg_name:
             for temp_name in vararg_temps:
                 self._load_name(temp_name, line)
@@ -1285,7 +1352,8 @@ class PyFront(ast.NodeVisitor):
                 assign_function_ids(scope)
                 self.function_ids[stmt.name] = self.function_id_by_node[id(stmt)]
                 self.function_nodes[stmt.name] = stmt
-                positional_names = [arg.arg for arg in stmt.args.args]
+                positional_only_names = [arg.arg for arg in stmt.args.posonlyargs]
+                positional_names = [*positional_only_names, *(arg.arg for arg in stmt.args.args)]
                 keyword_only_names = [arg.arg for arg in stmt.args.kwonlyargs]
                 required_count = len(positional_names) - len(stmt.args.defaults)
                 defaults = dict(zip(positional_names[required_count:], stmt.args.defaults))
@@ -1300,6 +1368,11 @@ class PyFront(ast.NodeVisitor):
                     defaults,
                     stmt.args.vararg.arg if stmt.args.vararg else None,
                     stmt.args.kwarg.arg if stmt.args.kwarg else None,
+                    len(positional_only_names),
+                    {
+                        parameter_name: self._new_temp_name()
+                        for parameter_name in defaults
+                    },
                 )
         for stmt in self._module.body:
             self._compile_stmt(stmt)

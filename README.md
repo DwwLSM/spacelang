@@ -78,7 +78,10 @@ This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, dictionary and set comprehensions,
 slice assignment, and async syntax are not implemented.
 Functions may collect extra positional arguments with `*args` and extra
-keyword arguments with `**kwargs`. Function defaults must be immutable literals.
+keyword arguments with `**kwargs`. Positional-only parameters (`/`) and
+keyword-only parameters (`*`) are supported. Default expressions use the
+supported expression subset and are evaluated when the function is defined
+(or, for nested functions, when the closure is created).
 Keyword arguments work for top-level functions, builtins, and dynamic
 SpaceLang closures. Calls may expand positional iterables and keyword mappings
 with `*values` and `**options`; ordinary explicit keyword arguments to methods
@@ -86,7 +89,7 @@ remain unsupported. Expressions
 currently do not support floating-point literals, dictionaries, sets, slicing,
 membership or identity comparisons, or operators beyond `+`, `-`, `*`, `/`,
 and `%`. Top-level and nested functions support required and optional positional
-parameters and keyword-only parameters. Defaults must be immutable literals.
+parameters, positional-only parameters, and keyword-only parameters.
 Positional and keyword arguments, including argument expansion, are supported
 for direct calls to known top-level functions. Builtin keyword arguments are supported
 where the target builtin accepts them. Functions use statically determined
@@ -203,6 +206,7 @@ assembler directives, not VM opcodes.
 | 46 | `CALL_BUILTIN_EX` | `func_id` | Call a builtin with a positional list and keyword dictionary. |
 | 47 | `LIST_EXTEND` | none | Extend the list below the stack top with the iterable at the top. |
 | 48 | `DICT_MERGE` | none | Merge the mapping at the stack top into the keyword dictionary below it, rejecting duplicate or non-string keys. |
+| 49 | `MAKE_CLOSURE_POSONLY` | `func_id, cell_count, positional_only_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count, has_varargs, has_kwargs` | Create a closure with positional-only parameter binding metadata. |
 
 `OP` operation IDs:
 

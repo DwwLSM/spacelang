@@ -112,6 +112,7 @@ def test_assemble_and_disassemble_closure_opcodes():
         CALL_BUILTIN_EX 2
         LIST_EXTEND
         DICT_MERGE
+        MAKE_CLOSURE_POSONLY 10000 2 1 2 1 1 1 1 1
         CELLIFY 3
         LOAD_CELL_REF 4
         LOAD_DEREF 5

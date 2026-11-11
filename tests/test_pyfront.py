@@ -330,10 +330,10 @@ def test_pyfront_expanded_keyword_arguments_validate_mapping(source, message, en
 @pytest.mark.parametrize(
     "source",
     [
-        "def f(a, /): return a",
+        "def f(value, /): return value\nf(value=1)",
     ],
 )
-def test_pyfront_rejects_unsupported_function_forms(source):
+def test_pyfront_rejects_keyword_binding_for_positional_only_parameters(source):
     with pytest.raises(ParseError):
         compile_py(source)
 
@@ -346,13 +346,112 @@ def test_pyfront_rejects_unsupported_function_forms(source):
         "def f(a): return a\nf(a=1, a=2)",
         "def f(a): return a\nf(1, a=2)",
         "def f(a): return a\nf(b=1)",
-        "def f(a=[]): return a",
-        "def outer():\n    def inner(value=[]): return value\n    return inner()",
+        "def f(a, /, **options): return options\nf(1, a=2, a=3)",
     ],
 )
 def test_pyfront_rejects_invalid_user_function_bindings(source):
     with pytest.raises(ParseError):
         compile_py(source)
+
+
+@pytest.mark.parametrize("engine", ["py", "cpp"])
+def test_pyfront_positional_only_parameters_and_kwargs(engine):
+    from spacelang.vm_cpp import VM as CppVM
+
+    source = textwrap.dedent("""
+    def format_value(value, /, prefix="v=", *, suffix="!"):
+        return prefix + str(value) + suffix
+
+    def plain(value, /):
+        return value
+
+    def collect(value, /, **options):
+        return value, options
+
+    def make_options(**options):
+        return options
+
+    def make_collector():
+        def inner(value, /, *, suffix="!", **options):
+            return value, suffix, options
+        return inner
+
+    def call_nested():
+        def inner(value, /, **options):
+            return value, options
+        return inner(2, value="nested")
+
+    collector = make_collector()
+    print(plain(*[6]))
+    print(format_value(3), format_value(4, "x=", suffix="?"))
+    print(collect(1, value="extra"))
+    print(collector(*[2], **make_options(suffix="?", value="extra")))
+    print(call_nested())
+    """)
+    vm_type = VM if engine == "py" else CppVM
+    output = StringIO()
+    with redirect_stdout(output):
+        vm_type(compile_py(source)).run()
+    assert output.getvalue() == (
+        "6\n"
+        "v=3! x=4?\n"
+        "(1, {'value': 'extra'})\n"
+        "(2, '?', {'value': 'extra'})\n"
+        "(2, {'value': 'nested'})\n"
+    )
+
+
+@pytest.mark.parametrize("engine", ["py", "cpp"])
+def test_pyfront_expanded_keyword_cannot_bind_positional_only_parameter(engine):
+    from spacelang.vm_cpp import VM as CppVM
+
+    source = (
+        "def f(value, /): return value\n"
+        "def make(**options): return options\n"
+        "f(**make(value=1))"
+    )
+    vm_type = VM if engine == "py" else CppVM
+    with pytest.raises(SpaceError, match="positional-only argument 'value'"):
+        vm_type(compile_py(source)).run()
+
+
+@pytest.mark.parametrize("engine", ["py", "cpp"])
+def test_pyfront_default_expressions_evaluate_at_definition_time(engine):
+    from spacelang.vm_cpp import VM as CppVM
+
+    source = textwrap.dedent("""
+    counter = 0
+    def next_value():
+        global counter
+        counter += 1
+        return counter
+
+    base = 4
+    def top_level(value=next_value(), *, suffix=str(base)):
+        return value, suffix
+    base = 9
+
+    def outer(start):
+        def nested(value=start + 2):
+            return value
+        return nested
+
+    def mutable_default(values=[1]):
+        return values
+
+    first = mutable_default()
+    first[0] = 7
+    print(top_level(), top_level(), counter)
+    first_nested = outer(3)
+    second_nested = outer(8)
+    print(first_nested(), second_nested())
+    print(mutable_default())
+    """)
+    vm_type = VM if engine == "py" else CppVM
+    output = StringIO()
+    with redirect_stdout(output):
+        vm_type(compile_py(source)).run()
+    assert output.getvalue() == "(1, '4') (1, '4') 1\n5 10\n[7]\n"
 
 
 def test_pyfront_nested_functions_capture_and_update_enclosing_locals():
