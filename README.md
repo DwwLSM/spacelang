@@ -69,11 +69,12 @@ names, attributes and indexes, unpacking assignments, supported augmented
 assignments, supported imports, `if`/`else`, `while`, `break`/`continue`, simple
 positional functions, and `for` loops over Python iterables. The reference and
 native VMs share iterator bytecode for lists, tuples, strings, `range(...)`, and
-other Python iterable objects. Sequence indexing and simple single-clause,
-unfiltered list comprehensions are supported.
+other Python iterable objects. Sequence indexing and list comprehensions with
+one or more synchronous `for` clauses, name targets, and `if` filters are
+supported.
 
 This is still a Python subset, not full Python; features such as classes,
-exceptions in source code, generators, nested or filtered comprehensions,
+exceptions in source code, generators, dictionary and set comprehensions,
 starred arguments, keyword-only parameters, slice assignment, and async syntax
 are not implemented. Expressions currently do not support
 floating-point literals, dictionaries, sets, slicing, membership or identity

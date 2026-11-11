@@ -27,6 +27,8 @@ from spacelang.vm_py import VM as PythonVM
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",
         "for value in [1, 2, 3, 4]:\n    if value == 2:\n        continue\n    if value == 4:\n        break\n    print(value)",
         'print([value for value in (1, 2, 3)])\nprint([letter for letter in "ab"])',
+        "print([value for value in range(8) if value % 2 == 0 if value > 2])",
+        "print([(x, y) for x in range(3) if x > 0 for x in [x, x + 10] if x < 10 for y in range(x)])",
         "print(1 < 2 < 3)",
     ],
 )

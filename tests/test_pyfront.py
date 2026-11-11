@@ -321,5 +321,27 @@ def test_pyfront_list_comprehensions_accept_general_iterables():
     ) == "[1, 2]\n['x', 'y']\n"
 
 
+def test_pyfront_list_comprehensions_support_filters():
+    source = textwrap.dedent("""
+    value = 99
+    def selected():
+        return [value for value in range(8) if value % 2 == 0 if value > 2]
+
+    print(selected(), value)
+    """)
+    assert run_source(source) == "[4, 6] 99\n"
+
+
+def test_pyfront_list_comprehensions_support_nested_generators():
+    source = textwrap.dedent("""
+    outer = 99
+    result = [(outer, inner) for outer in range(3) if outer > 0
+              for outer in [outer, outer + 10] if outer < 10
+              for inner in range(outer)]
+    print(result, outer)
+    """)
+    assert run_source(source) == "[(1, 0), (2, 0), (2, 1)] 99\n"
+
+
 def test_pyfront_chained_comparisons_short_circuit_correctly():
     assert run_source("print(1 < 2 < 3)\nprint(1 < 2 > 3)") == "True\nFalse\n"

@@ -595,35 +595,50 @@ class PyFront(ast.NodeVisitor):
 
     def _compile_listcomp(self, node: ast.ListComp) -> None:
         line = getattr(node, "lineno", 0)
-        if (
-            len(node.generators) != 1
-            or node.generators[0].ifs
-            or node.generators[0].is_async
-            or not isinstance(node.generators[0].target, ast.Name)
-        ):
-            raise ParseError(line=line, ip=0, msg="list comprehensions support one unfiltered name target")
-        generator = node.generators[0]
-        iterable = generator.iter
         result_name = self._new_temp_name()
-        target_name = self._new_temp_name()
-        self._compile_expr(iterable)
-        _emit(self.instrs, OP.GET_ITER, line=line)
         _emit(self.instrs, OP.BUILD_LIST, 0, line=line)
         self._store_name(result_name, line)
 
-        loop_label = f"listcomp_loop_{len(self.instrs)}"
-        exit_label = f"listcomp_exit_{len(self.instrs)}"
-        self._emit_label(loop_label)
-        _emit(self.instrs, OP.FOR_ITER, exit_label, line=line)
-        self._store_name(target_name, line)
-        self.name_overrides.append({generator.target.id: target_name})
-        self._load_name(result_name, line)
-        self._compile_expr(node.elt)
-        _emit(self.instrs, OP.CALL_METHOD, self._name_id("append"), 1, line=line)
-        _emit(self.instrs, OP.STACK, 3, line=line)
-        self.name_overrides.pop()
-        _emit(self.instrs, OP.JMP, loop_label, line=line)
-        self._emit_label(exit_label)
+        if any(
+            generator.is_async or not isinstance(generator.target, ast.Name)
+            for generator in node.generators
+        ):
+            raise ParseError(
+                line=line,
+                ip=0,
+                msg="list comprehensions require synchronous name targets",
+            )
+
+        def compile_generator(index: int) -> None:
+            generator = node.generators[index]
+            self._compile_expr(generator.iter)
+            _emit(self.instrs, OP.GET_ITER, line=line)
+
+            loop_label = f"listcomp_loop_{len(self.instrs)}"
+            exit_label = f"listcomp_exit_{len(self.instrs)}"
+            self._emit_label(loop_label)
+            _emit(self.instrs, OP.FOR_ITER, exit_label, line=line)
+            target_name = self._new_temp_name()
+            self._store_name(target_name, line)
+            self.name_overrides.append({generator.target.id: target_name})
+
+            for condition in generator.ifs:
+                self._compile_expr(condition)
+                _emit(self.instrs, OP.JZ, loop_label, line=line)
+
+            if index + 1 == len(node.generators):
+                self._load_name(result_name, line)
+                self._compile_expr(node.elt)
+                _emit(self.instrs, OP.CALL_METHOD, self._name_id("append"), 1, line=line)
+                _emit(self.instrs, OP.STACK, 3, line=line)
+            else:
+                compile_generator(index + 1)
+
+            self.name_overrides.pop()
+            _emit(self.instrs, OP.JMP, loop_label, line=line)
+            self._emit_label(exit_label)
+
+        compile_generator(0)
         self._load_name(result_name, line)
 
     def _compile_stmt(self, node: ast.AST) -> None:
