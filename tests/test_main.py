@@ -83,6 +83,64 @@ def test_compile_py_supports_augmented_assignment(tmp_path):
     assert output.getvalue() == "20\n"
 
 
+def test_compile_py_supports_unpacking_and_index_assignment(tmp_path):
+    source = tmp_path / "assignment_targets.py"
+    destination = tmp_path / "assignment_targets.sp"
+    source.write_text(
+        "values = [1, 2]\n"
+        "first, second = values\n"
+        "values[0] = second\n"
+        "values[1] = first\n"
+        "values[0] += 3\n"
+        "print(values)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "[5, 1]\n"
+
+
+def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
+    source = tmp_path / "function_parameters.py"
+    destination = tmp_path / "function_parameters.sp"
+    source.write_text(
+        "def render(value, prefix='v='):\n"
+        "    return prefix + str(value)\n"
+        "\n"
+        "print(render(3))\n"
+        "print(render(value=4, prefix='x='))\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "v=3\nx=4\n"
+
+
+def test_compile_py_supports_global_declarations_in_sp_file(tmp_path):
+    source = tmp_path / "global_scope.py"
+    destination = tmp_path / "global_scope.sp"
+    source.write_text(
+        "counter = 4\n"
+        "def increment():\n"
+        "    global counter\n"
+        "    counter = counter + 1\n"
+        "    return counter\n"
+        "print(increment(), counter)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    output = StringIO()
+    with redirect_stdout(output):
+        assert main(["run", str(destination), "--engine", "cpp"]) == 0
+    assert output.getvalue() == "5 5\n"
+
+
 def test_compile_py_can_write_compressed_output(tmp_path):
     source = tmp_path / "hello.py"
     destination = tmp_path / "hello.spz"

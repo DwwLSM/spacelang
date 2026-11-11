@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass
 import textwrap
 
 from .errors import ParseError
@@ -33,10 +34,35 @@ def _emit(instrs: list[Instr], op: OP, *args: int | str, line: int = 0) -> None:
 class _LocalNameCollector(ast.NodeVisitor):
     def __init__(self) -> None:
         self.names: list[str] = []
+        self.global_names: set[str] = set()
 
     def visit_Name(self, node: ast.Name) -> None:
         if isinstance(node.ctx, ast.Store) and node.id not in self.names:
             self.names.append(node.id)
+
+    def visit_Global(self, node: ast.Global) -> None:
+        self.global_names.update(node.names)
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        self.visit(node.elt)
+        for generator in node.generators:
+            self.visit(generator.iter)
+            for condition in generator.ifs:
+                self.visit(condition)
+
+
+@dataclass
+class _LoopContext:
+    break_label: str
+    continue_label: str
+    break_drops_iterator: bool
+
+
+@dataclass
+class _FunctionSignature:
+    parameter_names: list[str]
+    defaults: dict[str, ast.expr]
+
 
 class PyFront(ast.NodeVisitor):
     def __init__(self, filename: str = "<stdin>"):
@@ -48,12 +74,15 @@ class PyFront(ast.NodeVisitor):
         self.field_slots: dict[str, int] = {}
         self.funcs: dict[int, tuple[int, int]] = {}
         self.function_ids: dict[str, int] = {}
+        self.function_signatures: dict[str, _FunctionSignature] = {}
         self.function_id_by_node: dict[int, int] = {}
         self.next_func_id = 10000
         self.pending_labels: list[tuple[str, int]] = []
         self.next_temp_id = 0
         self.source_names: set[str] = set()
         self.name_overrides: list[dict[str, str]] = []
+        self.loop_stack: list[_LoopContext] = []
+        self.global_names_stack: list[set[str]] = [set()]
 
     def _next_func_id(self) -> int:
         func_id = self.next_func_id
@@ -104,13 +133,21 @@ class PyFront(ast.NodeVisitor):
             if name in overrides:
                 name = overrides[name]
                 break
-        if len(self.locals_stack) > 1 and name in self.locals_stack[-1]:
+        if (
+            len(self.locals_stack) > 1
+            and name not in self.global_names_stack[-1]
+            and name in self.locals_stack[-1]
+        ):
             _emit(self.instrs, OP.LOAD_LOCAL, self.locals_stack[-1][name], line=line)
         else:
             _emit(self.instrs, OP.LOAD_GLOBAL, self._name_id(name), line=line)
 
     def _store_name(self, name: str, line: int) -> None:
-        if len(self.locals_stack) > 1 and name in self.locals_stack[-1]:
+        if (
+            len(self.locals_stack) > 1
+            and name not in self.global_names_stack[-1]
+            and name in self.locals_stack[-1]
+        ):
             _emit(self.instrs, OP.STORE_LOCAL, self.locals_stack[-1][name], line=line)
         else:
             _emit(self.instrs, OP.STORE_GLOBAL, self._name_id(name), line=line)
@@ -133,7 +170,7 @@ class PyFront(ast.NodeVisitor):
                 if len(chunks) > 1:
                     _emit(self.instrs, OP.CONCAT, len(chunks), line=getattr(node, "lineno", 0))
             elif value is None:
-                _emit(self.instrs, OP.PUSH_INT, 0, line=getattr(node, "lineno", 0))
+                _emit(self.instrs, OP.PUSH_NONE, line=getattr(node, "lineno", 0))
             else:
                 raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported constant: {type(value).__name__}")
             return
@@ -183,18 +220,13 @@ class PyFront(ast.NodeVisitor):
 
         if isinstance(node, ast.Assign):
             self._compile_expr(node.value)
-            if len(node.targets) != 1:
-                raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="multi-target assignment is unsupported")
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                self._store_name(target.id, getattr(node, "lineno", 0))
-            else:
-                raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="unsupported assignment target")
+            for index, target in enumerate(node.targets):
+                if index + 1 < len(node.targets):
+                    _emit(self.instrs, OP.STACK, 1, line=getattr(node, "lineno", 0))
+                self._compile_store_target(target, getattr(node, "lineno", 0))
             return
 
         if isinstance(node, ast.AugAssign):
-            if not isinstance(node.target, ast.Name):
-                raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="augmented assignment target must be a name")
             op_map = {
                 ast.Add: 1,
                 ast.Sub: 2,
@@ -205,10 +237,39 @@ class PyFront(ast.NodeVisitor):
             op = op_map.get(type(node.op))
             if op is None:
                 raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported augmented assignment op: {type(node.op).__name__}")
-            self._load_name(node.target.id, getattr(node, "lineno", 0))
+            line = getattr(node, "lineno", 0)
+            target = node.target
+            if isinstance(target, ast.Name):
+                self._load_name(target.id, line)
+            elif isinstance(target, ast.Attribute):
+                object_name = self._new_temp_name()
+                self._compile_expr(target.value)
+                self._store_name(object_name, line)
+                self._load_name(object_name, line)
+                _emit(self.instrs, OP.GET_ATTR, self._name_id(target.attr), line=line)
+            elif isinstance(target, ast.Subscript) and not isinstance(target.slice, ast.Slice):
+                object_name = self._new_temp_name()
+                index_name = self._new_temp_name()
+                self._compile_expr(target.value)
+                self._store_name(object_name, line)
+                self._compile_expr(target.slice)
+                self._store_name(index_name, line)
+                self._load_name(object_name, line)
+                self._load_name(index_name, line)
+                _emit(self.instrs, OP.INDEX, 0, line=line)
+            else:
+                raise ParseError(line=line, ip=0, msg="unsupported augmented assignment target")
             self._compile_expr(node.value)
             _emit(self.instrs, OP.OP, op, line=getattr(node, "lineno", 0))
-            self._store_name(node.target.id, getattr(node, "lineno", 0))
+            if isinstance(target, ast.Name):
+                self._store_name(target.id, line)
+            elif isinstance(target, ast.Attribute):
+                self._load_name(object_name, line)
+                _emit(self.instrs, OP.STORE_ATTR, self._name_id(target.attr), line=line)
+            else:
+                self._load_name(object_name, line)
+                self._load_name(index_name, line)
+                _emit(self.instrs, OP.STORE_INDEX, line=line)
             return
 
         if isinstance(node, ast.Expr):
@@ -338,15 +399,7 @@ class PyFront(ast.NodeVisitor):
                         _emit(self.instrs, OP.CALL, BUILTIN_IDS[name], len(node.args), line=line)
                     return
                 if name in self.function_ids:
-                    if node.keywords:
-                        raise ParseError(
-                            line=getattr(node, "lineno", 0),
-                            ip=0,
-                            msg="keyword arguments to user functions are unsupported",
-                        )
-                    for arg in node.args:
-                        self._compile_expr(arg)
-                    _emit(self.instrs, OP.CALL, self.function_ids[name], len(node.args), line=getattr(node, "lineno", 0))
+                    self._compile_user_function_call(node, name)
                     return
                 self._compile_expr(node.func)
                 for arg in node.args:
@@ -385,13 +438,13 @@ class PyFront(ast.NodeVisitor):
             return
 
         if isinstance(node, ast.List):
-            for item in reversed(node.elts):
+            for item in node.elts:
                 self._compile_expr(item)
             _emit(self.instrs, OP.BUILD_LIST, len(node.elts), line=getattr(node, "lineno", 0))
             return
 
         if isinstance(node, ast.Tuple):
-            for item in reversed(node.elts):
+            for item in node.elts:
                 self._compile_expr(item)
             _emit(self.instrs, OP.BUILD_TUPLE, len(node.elts), line=getattr(node, "lineno", 0))
             return
@@ -419,16 +472,20 @@ class PyFront(ast.NodeVisitor):
 
         if isinstance(node, ast.While):
             loop_label = f"while_loop_{len(self.instrs)}"
-            exit_label = f"while_exit_{len(self.instrs)}"
+            normal_exit_label = f"while_normal_exit_{len(self.instrs)}"
+            break_label = f"while_break_{len(self.instrs)}"
             self._emit_label(loop_label)
             self._compile_expr(node.test)
-            _emit(self.instrs, OP.JZ, exit_label, line=getattr(node, "lineno", 0))
+            _emit(self.instrs, OP.JZ, normal_exit_label, line=getattr(node, "lineno", 0))
+            self.loop_stack.append(_LoopContext(break_label, loop_label, False))
             for stmt in node.body:
                 self._compile_stmt(stmt)
+            self.loop_stack.pop()
             _emit(self.instrs, OP.JMP, loop_label, line=getattr(node, "lineno", 0))
-            self._emit_label(exit_label)
+            self._emit_label(normal_exit_label)
             for stmt in node.orelse:
                 self._compile_stmt(stmt)
+            self._emit_label(break_label)
             return
 
         if isinstance(node, ast.For):
@@ -464,11 +521,29 @@ class PyFront(ast.NodeVisitor):
             if node.value is not None:
                 self._compile_expr(node.value)
             else:
-                _emit(self.instrs, OP.PUSH_INT, 0, line=getattr(node, "lineno", 0))
+                _emit(self.instrs, OP.PUSH_NONE, line=getattr(node, "lineno", 0))
             _emit(self.instrs, OP.RET, line=getattr(node, "lineno", 0))
             return
 
         if isinstance(node, ast.Pass):
+            return
+
+        if isinstance(node, ast.Global):
+            return
+
+        if isinstance(node, ast.Break):
+            if not self.loop_stack:
+                raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="'break' outside loop")
+            loop = self.loop_stack[-1]
+            if loop.break_drops_iterator:
+                _emit(self.instrs, OP.STACK, 3, line=getattr(node, "lineno", 0))
+            _emit(self.instrs, OP.JMP, loop.break_label, line=getattr(node, "lineno", 0))
+            return
+
+        if isinstance(node, ast.Continue):
+            if not self.loop_stack:
+                raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg="'continue' outside loop")
+            _emit(self.instrs, OP.JMP, self.loop_stack[-1].continue_label, line=getattr(node, "lineno", 0))
             return
 
         raise ParseError(line=getattr(node, "lineno", 0), ip=0, msg=f"unsupported AST node: {type(node).__name__}")
@@ -477,44 +552,46 @@ class PyFront(ast.NodeVisitor):
         line = getattr(node, "lineno", 0)
         if not isinstance(node.target, ast.Name):
             raise ParseError(line=line, ip=0, msg="for-loop target must be a name")
-        if (
-            not isinstance(node.iter, ast.Call)
-            or not isinstance(node.iter.func, ast.Name)
-            or node.iter.func.id != "range"
-            or node.iter.keywords
-            or not 1 <= len(node.iter.args) <= 3
-        ):
-            raise ParseError(line=line, ip=0, msg="for-loops currently require range(...) with 1 to 3 positional arguments")
-
-        iterable_name = self._new_temp_name()
-        index_name = self._new_temp_name()
         self._compile_expr(node.iter)
-        self._store_name(iterable_name, line)
-        _emit(self.instrs, OP.PUSH_INT, 0, line=line)
-        self._store_name(index_name, line)
+        _emit(self.instrs, OP.GET_ITER, line=line)
 
         loop_label = f"for_loop_{len(self.instrs)}"
-        exit_label = f"for_exit_{len(self.instrs)}"
+        normal_exit_label = f"for_normal_exit_{len(self.instrs)}"
+        break_label = f"for_break_{len(self.instrs)}"
         self._emit_label(loop_label)
-        self._load_name(index_name, line)
-        self._load_name(iterable_name, line)
-        _emit(self.instrs, OP.CALL, BUILTIN_IDS["len"], 1, line=line)
-        _emit(self.instrs, OP.OP, 7, line=line)
-        _emit(self.instrs, OP.JZ, exit_label, line=line)
-        self._load_name(iterable_name, line)
-        self._load_name(index_name, line)
-        _emit(self.instrs, OP.INDEX, 0, line=line)
+        _emit(self.instrs, OP.FOR_ITER, normal_exit_label, line=line)
         self._store_name(node.target.id, line)
+        self.loop_stack.append(_LoopContext(break_label, loop_label, True))
         for stmt in node.body:
             self._compile_stmt(stmt)
-        self._load_name(index_name, line)
-        _emit(self.instrs, OP.PUSH_INT, 1, line=line)
-        _emit(self.instrs, OP.OP, 1, line=line)
-        self._store_name(index_name, line)
+        self.loop_stack.pop()
         _emit(self.instrs, OP.JMP, loop_label, line=line)
-        self._emit_label(exit_label)
+        self._emit_label(normal_exit_label)
         for stmt in node.orelse:
             self._compile_stmt(stmt)
+        self._emit_label(break_label)
+
+    def _compile_store_target(self, target: ast.expr, line: int) -> None:
+        if isinstance(target, ast.Name):
+            self._store_name(target.id, line)
+            return
+        if isinstance(target, (ast.Tuple, ast.List)):
+            if any(isinstance(item, ast.Starred) for item in target.elts):
+                raise ParseError(line=line, ip=0, msg="starred assignment targets are unsupported")
+            _emit(self.instrs, OP.UNPACK_SEQUENCE, len(target.elts), line=line)
+            for item in target.elts:
+                self._compile_store_target(item, line)
+            return
+        if isinstance(target, ast.Attribute):
+            self._compile_expr(target.value)
+            _emit(self.instrs, OP.STORE_ATTR, self._name_id(target.attr), line=line)
+            return
+        if isinstance(target, ast.Subscript) and not isinstance(target.slice, ast.Slice):
+            self._compile_expr(target.value)
+            self._compile_expr(target.slice)
+            _emit(self.instrs, OP.STORE_INDEX, line=line)
+            return
+        raise ParseError(line=line, ip=0, msg="unsupported assignment target")
 
     def _compile_listcomp(self, node: ast.ListComp) -> None:
         line = getattr(node, "lineno", 0)
@@ -527,37 +604,17 @@ class PyFront(ast.NodeVisitor):
             raise ParseError(line=line, ip=0, msg="list comprehensions support one unfiltered name target")
         generator = node.generators[0]
         iterable = generator.iter
-        if (
-            not isinstance(iterable, ast.Call)
-            or not isinstance(iterable.func, ast.Name)
-            or iterable.func.id != "range"
-            or iterable.keywords
-            or not 1 <= len(iterable.args) <= 3
-        ):
-            raise ParseError(line=line, ip=0, msg="list comprehensions currently require range(...)")
-
-        iterable_name = self._new_temp_name()
-        index_name = self._new_temp_name()
         result_name = self._new_temp_name()
         target_name = self._new_temp_name()
         self._compile_expr(iterable)
-        self._store_name(iterable_name, line)
-        _emit(self.instrs, OP.PUSH_INT, 0, line=line)
-        self._store_name(index_name, line)
+        _emit(self.instrs, OP.GET_ITER, line=line)
         _emit(self.instrs, OP.BUILD_LIST, 0, line=line)
         self._store_name(result_name, line)
 
         loop_label = f"listcomp_loop_{len(self.instrs)}"
         exit_label = f"listcomp_exit_{len(self.instrs)}"
         self._emit_label(loop_label)
-        self._load_name(index_name, line)
-        self._load_name(iterable_name, line)
-        _emit(self.instrs, OP.CALL, BUILTIN_IDS["len"], 1, line=line)
-        _emit(self.instrs, OP.OP, 7, line=line)
-        _emit(self.instrs, OP.JZ, exit_label, line=line)
-        self._load_name(iterable_name, line)
-        self._load_name(index_name, line)
-        _emit(self.instrs, OP.INDEX, 0, line=line)
+        _emit(self.instrs, OP.FOR_ITER, exit_label, line=line)
         self._store_name(target_name, line)
         self.name_overrides.append({generator.target.id: target_name})
         self._load_name(result_name, line)
@@ -565,10 +622,6 @@ class PyFront(ast.NodeVisitor):
         _emit(self.instrs, OP.CALL_METHOD, self._name_id("append"), 1, line=line)
         _emit(self.instrs, OP.STACK, 3, line=line)
         self.name_overrides.pop()
-        self._load_name(index_name, line)
-        _emit(self.instrs, OP.PUSH_INT, 1, line=line)
-        _emit(self.instrs, OP.OP, 1, line=line)
-        self._store_name(index_name, line)
         _emit(self.instrs, OP.JMP, loop_label, line=line)
         self._emit_label(exit_label)
         self._load_name(result_name, line)
@@ -586,7 +639,10 @@ class PyFront(ast.NodeVisitor):
                 ast.For,
                 ast.Import,
                 ast.ImportFrom,
+                ast.Global,
                 ast.Pass,
+                ast.Break,
+                ast.Continue,
             ),
         ):
             self._compile_expr(node)
@@ -602,13 +658,21 @@ class PyFront(ast.NodeVisitor):
             or node.args.vararg is not None
             or node.args.kwonlyargs
             or node.args.kwarg is not None
-            or node.args.defaults
             or node.args.kw_defaults
         ):
             raise ParseError(
                 line=getattr(node, "lineno", 0),
                 ip=0,
-                msg="functions support required positional arguments only",
+                msg="functions support positional arguments only",
+            )
+        parameter_names = [arg.arg for arg in node.args.args]
+        required_count = len(parameter_names) - len(node.args.defaults)
+        defaults = dict(zip(parameter_names[required_count:], node.args.defaults))
+        if any(not self._is_supported_default(value) for value in defaults.values()):
+            raise ParseError(
+                line=getattr(node, "lineno", 0),
+                ip=0,
+                msg="function defaults must be immutable literals",
             )
         if any(
             isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
@@ -621,6 +685,7 @@ class PyFront(ast.NodeVisitor):
             func_id = self._next_func_id()
             self.function_id_by_node[id(node)] = func_id
         self.function_ids[node.name] = func_id
+        self.function_signatures[node.name] = _FunctionSignature(parameter_names, defaults)
         start_ip = len(self.instrs)
         _emit(self.instrs, OP.DEF, func_id, len(node.args.args), line=getattr(node, "lineno", 0))
         start_ip = len(self.instrs)
@@ -631,17 +696,94 @@ class PyFront(ast.NodeVisitor):
         collector = _LocalNameCollector()
         for stmt in node.body:
             collector.visit(stmt)
+        conflicting_globals = set(parameter_names) & collector.global_names
+        if conflicting_globals:
+            name = sorted(conflicting_globals)[0]
+            raise ParseError(
+                line=getattr(node, "lineno", 0),
+                ip=0,
+                msg=f"parameter {name!r} cannot be declared global",
+            )
         for name in collector.names:
-            if name not in local_scope:
+            if name not in local_scope and name not in collector.global_names:
                 local_scope[name] = len(local_scope)
+        enclosing_loops, self.loop_stack = self.loop_stack, []
         self.locals_stack.append(local_scope)
+        self.global_names_stack.append(collector.global_names)
         for stmt in node.body:
             self._compile_stmt(stmt)
+        self.global_names_stack.pop()
         self.locals_stack.pop()
+        self.loop_stack = enclosing_loops
         self.funcs[func_id] = (start_ip, len(self.instrs))
         _emit(self.instrs, OP.PUSH_INT, 0, line=getattr(node, "lineno", 0))
         _emit(self.instrs, OP.RET, line=getattr(node, "lineno", 0))
         self.funcs[func_id] = (start_ip, len(self.instrs))
+
+    def _is_supported_default(self, node: ast.expr) -> bool:
+        if isinstance(node, ast.Constant):
+            return node.value is None or isinstance(node.value, (bool, int, str))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            return isinstance(node.operand, ast.Constant) and type(node.operand.value) is int
+        if isinstance(node, ast.Tuple):
+            return all(self._is_supported_default(item) for item in node.elts)
+        return False
+
+    def _compile_user_function_call(self, node: ast.Call, name: str) -> None:
+        line = getattr(node, "lineno", 0)
+        signature = self.function_signatures[name]
+        parameter_names = signature.parameter_names
+        bound: dict[str, str] = {}
+        provided_names = parameter_names[:len(node.args)]
+        if len(node.args) > len(parameter_names):
+            raise ParseError(line=line, ip=0, msg=f"too many positional arguments for {name}")
+        if any(isinstance(arg, ast.Starred) for arg in node.args):
+            raise ParseError(line=line, ip=0, msg="expanded positional arguments are unsupported")
+
+        keyword_names: set[str] = set()
+        for keyword in node.keywords:
+            if keyword.arg is None:
+                raise ParseError(line=line, ip=0, msg="expanded keyword arguments are unsupported")
+            if keyword.arg not in parameter_names:
+                raise ParseError(line=line, ip=0, msg=f"unexpected keyword argument {keyword.arg!r} for {name}")
+            if keyword.arg in provided_names or keyword.arg in keyword_names:
+                raise ParseError(line=line, ip=0, msg=f"multiple values for argument {keyword.arg!r}")
+            keyword_names.add(keyword.arg)
+
+        if not node.keywords:
+            for value in node.args:
+                self._compile_expr(value)
+            for parameter_name in parameter_names[len(node.args):]:
+                if parameter_name not in signature.defaults:
+                    raise ParseError(
+                        line=line,
+                        ip=0,
+                        msg=f"missing required argument {parameter_name!r} for {name}",
+                    )
+                self._compile_expr(signature.defaults[parameter_name])
+            _emit(self.instrs, OP.CALL, self.function_ids[name], len(parameter_names), line=line)
+            return
+
+        ordered_values = [*node.args, *(keyword.value for keyword in node.keywords)]
+        ordered_names = [*provided_names, *(keyword.arg for keyword in node.keywords)]
+        for parameter_name, value in zip(ordered_names, ordered_values):
+            temp_name = self._new_temp_name()
+            self._compile_expr(value)
+            self._store_name(temp_name, line)
+            bound[parameter_name] = temp_name
+
+        for parameter_name in parameter_names:
+            if parameter_name in bound:
+                self._load_name(bound[parameter_name], line)
+            elif parameter_name in signature.defaults:
+                self._compile_expr(signature.defaults[parameter_name])
+            else:
+                raise ParseError(
+                    line=line,
+                    ip=0,
+                    msg=f"missing required argument {parameter_name!r} for {name}",
+                )
+        _emit(self.instrs, OP.CALL, self.function_ids[name], len(parameter_names), line=line)
 
     def compile(self) -> Program:
         self.source_names = {
@@ -652,6 +794,12 @@ class PyFront(ast.NodeVisitor):
                 func_id = self._next_func_id()
                 self.function_id_by_node[id(stmt)] = func_id
                 self.function_ids[stmt.name] = func_id
+                parameter_names = [arg.arg for arg in stmt.args.args]
+                required_count = len(parameter_names) - len(stmt.args.defaults)
+                self.function_signatures[stmt.name] = _FunctionSignature(
+                    parameter_names,
+                    dict(zip(parameter_names[required_count:], stmt.args.defaults)),
+                )
         for stmt in self._module.body:
             self._compile_stmt(stmt)
         _emit(self.instrs, OP.HALT)

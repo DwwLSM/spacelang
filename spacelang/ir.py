@@ -37,6 +37,12 @@ class OP(IntEnum):
     END_TRY = 27
     SETUP_WITH = 28
     HALT = 29
+    GET_ITER = 30
+    FOR_ITER = 31
+    STORE_ATTR = 32
+    STORE_INDEX = 33
+    UNPACK_SEQUENCE = 34
+    PUSH_NONE = 35
 
 
 @dataclass(slots=True)

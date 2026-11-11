@@ -49,7 +49,7 @@ def parse(token_stream) -> Program:
         op_code = token_stream[i]
         op_line = token_lines[i]
         i += 1
-        if op_code not in range(30):
+        if op_code not in range(36):
             raise ParseError(line=op_line, ip=op_index, msg=f"unknown opcode {op_code}")
 
         op = OP(op_code)
@@ -66,7 +66,7 @@ def parse(token_stream) -> Program:
         elif op == OP.CALL_OBJ:
             nargs, i = _parse_int_value(token_stream, i, op_line)
             args = [nargs]
-        elif op in {OP.IMPORT, OP.OP, OP.STACK, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.JMP, OP.JZ, OP.JNZ, OP.INDEX, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.CONCAT, OP.PUSH_INT, OP.PUSH_STR, OP.CALL, OP.CALL_KW, OP.CALL_METHOD, OP.DEF, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.JMP, OP.JZ, OP.JNZ}:
+        elif op in {OP.IMPORT, OP.OP, OP.STACK, OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.LOAD_ARG, OP.LOAD_LOCAL, OP.STORE_LOCAL, OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER, OP.INDEX, OP.UNPACK_SEQUENCE, OP.BUILD_LIST, OP.BUILD_TUPLE, OP.CONCAT, OP.PUSH_INT, OP.PUSH_STR, OP.CALL, OP.CALL_KW, OP.CALL_METHOD, OP.DEF}:
             if op == OP.PUSH_INT:
                 value, i = _parse_int_value(token_stream, i, op_line)
                 args = [_decode_zigzag(value)]
@@ -86,7 +86,7 @@ def parse(token_stream) -> Program:
             catch_ip, i = _parse_int_value(token_stream, i, op_line)
             finally_ip, i = _parse_int_value(token_stream, i, op_line)
             args = [catch_ip, finally_ip]
-        elif op in {OP.NOP, OP.RET, OP.RAISE, OP.END_TRY, OP.SETUP_WITH, OP.HALT}:
+        elif op in {OP.NOP, OP.RET, OP.RAISE, OP.END_TRY, OP.SETUP_WITH, OP.HALT, OP.GET_ITER, OP.STORE_INDEX, OP.PUSH_NONE}:
             pass
 
         instrs.append(Instr(op, args, line=op_line))
@@ -109,7 +109,7 @@ def parse(token_stream) -> Program:
 
     for insertion_ip in reversed(implicit_returns):
         for instr in instrs:
-            if instr.op in {OP.JMP, OP.JZ, OP.JNZ} and int(instr.args[0]) >= insertion_ip:
+            if instr.op in {OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER} and int(instr.args[0]) >= insertion_ip:
                 instr.args[0] = int(instr.args[0]) + 2
             elif instr.op == OP.TRY:
                 instr.args[0] = int(instr.args[0]) + (2 if int(instr.args[0]) >= insertion_ip else 0)

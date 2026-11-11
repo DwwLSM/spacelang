@@ -63,6 +63,29 @@ def test_call_kw_roundtrip_has_three_operands():
     assert reparsed.instrs[0].args == [0, 2, 1]
 
 
+def test_iterator_opcodes_roundtrip():
+    program = Program(instrs=[
+        Instr(OP.GET_ITER),
+        Instr(OP.FOR_ITER, [2]),
+        Instr(OP.UNPACK_SEQUENCE, [2]),
+        Instr(OP.PUSH_NONE),
+        Instr(OP.STORE_ATTR, [0]),
+        Instr(OP.STORE_INDEX),
+        Instr(OP.HALT),
+    ])
+    encoded = encode(program)
+    reparsed = parse(tokenize(encoded))
+    assert [(instr.op, instr.args) for instr in reparsed.instrs] == [
+        (OP.GET_ITER, []),
+        (OP.FOR_ITER, [2]),
+        (OP.UNPACK_SEQUENCE, [2]),
+        (OP.PUSH_NONE, []),
+        (OP.STORE_ATTR, [0]),
+        (OP.STORE_INDEX, []),
+        (OP.HALT, []),
+    ]
+
+
 def test_parser_matches_try_catch_finally_end_markers():
     program = parse([
         OP.TRY, 3, 5,

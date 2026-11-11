@@ -25,6 +25,7 @@ class Frame:
     func_id: int
     return_ip: int
     locals: list[Any] = field(default_factory=list)
+    initialized: list[bool] = field(default_factory=list)
 
 
 class VM:
@@ -56,7 +57,12 @@ class VM:
         self.stack.append(value)
 
     def _push_frame(self, func_id: int, args: list[Any], return_ip: int) -> None:
-        frame = Frame(func_id=func_id, return_ip=return_ip, locals=list(args))
+        frame = Frame(
+            func_id=func_id,
+            return_ip=return_ip,
+            locals=list(args),
+            initialized=[True] * len(args),
+        )
         self.call_stack.append(frame)
 
     def _current_frame(self) -> Frame | None:
@@ -194,6 +200,11 @@ class VM:
                 self.ip += 1
                 continue
 
+            if op == OP.PUSH_NONE:
+                self._push(None)
+                self.ip += 1
+                continue
+
             if op == OP.PUSH_STR:
                 payload = list(args[1:])
                 self._push("".join(chr(v) for v in payload))
@@ -231,8 +242,8 @@ class VM:
                 if frame is None:
                     raise UndefinedName(line=0, ip=self.ip, msg="LOAD_LOCAL outside function")
                 slot = int(args[0])
-                if slot >= len(frame.locals) or frame.locals[slot] is None:
-                    raise UndefinedName(line=0, ip=self.ip, msg=f"undefined local slot {slot}")
+                if slot < 0 or slot >= len(frame.locals) or not frame.initialized[slot]:
+                    raise UndefinedName(line=instr.line, ip=self.ip, msg=f"undefined local slot {slot}")
                 self._push(frame.locals[slot])
                 self.ip += 1
                 continue
@@ -245,7 +256,9 @@ class VM:
                 value = self._pop("local value")
                 while len(frame.locals) <= slot:
                     frame.locals.append(None)
+                    frame.initialized.append(False)
                 frame.locals[slot] = value
+                frame.initialized[slot] = True
                 self.ip += 1
                 continue
 
@@ -366,6 +379,62 @@ class VM:
                 container = self._pop("container")
                 self._push(container[key])
                 self.ip += 1
+                continue
+
+            if op == OP.STORE_ATTR:
+                obj = self._pop("attribute object")
+                value = self._pop("attribute value")
+                setattr(obj, self._name(int(args[0])), value)
+                self.ip += 1
+                continue
+
+            if op == OP.STORE_INDEX:
+                key = self._pop("index key")
+                container = self._pop("index container")
+                value = self._pop("index value")
+                container[key] = value
+                self.ip += 1
+                continue
+
+            if op == OP.UNPACK_SEQUENCE:
+                count = int(args[0])
+                value = self._pop("unpack value")
+                iterator = iter(value)
+                items = []
+                for _ in range(count):
+                    try:
+                        items.append(next(iterator))
+                    except StopIteration as exc:
+                        raise ValueError(
+                            f"not enough values to unpack (expected {count}, got {len(items)})"
+                        ) from exc
+                try:
+                    next(iterator)
+                except StopIteration:
+                    self.stack.extend(reversed(items))
+                else:
+                    raise ValueError(f"too many values to unpack (expected {count})")
+                self.ip += 1
+                continue
+
+            if op == OP.GET_ITER:
+                self._push(iter(self._pop("iterable")))
+                self.ip += 1
+                continue
+
+            if op == OP.FOR_ITER:
+                target = int(args[0])
+                if target < 0 or target >= len(self.instrs):
+                    raise JumpOutOfRange(line=instr.line, ip=self.ip, msg=f"jump target {target} out of range")
+                if not self.stack:
+                    raise StackUnderflow(line=0, ip=self.ip, msg="stack underflow while iterating")
+                try:
+                    self._push(next(self.stack[-1]))
+                except StopIteration:
+                    self.stack.pop()
+                    self.ip = target
+                else:
+                    self.ip += 1
                 continue
 
             if op == OP.GET_ATTR:

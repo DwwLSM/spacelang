@@ -14,7 +14,7 @@ def _branch_targets(program: Program) -> set[int]:
     targets = {
         int(instr.args[0])
         for instr in program.instrs
-        if instr.op in {OP.JMP, OP.JZ, OP.JNZ} and instr.args
+        if instr.op in {OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER} and instr.args
     }
     for instr in program.instrs:
         if instr.op == OP.TRY and instr.args:
@@ -37,7 +37,7 @@ def _remap_program(
         return ip
 
     for instr in instrs:
-        if instr.op in {OP.JMP, OP.JZ, OP.JNZ} and instr.args:
+        if instr.op in {OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER} and instr.args:
             instr.args[0] = remap(int(instr.args[0]))
         elif instr.op == OP.TRY:
             instr.args[0] = remap(int(instr.args[0]))
@@ -170,7 +170,7 @@ def _reachable_instructions(program: Program) -> set[int]:
         if op == OP.JMP:
             work.append(int(instr.args[0]))
             continue
-        if op in {OP.JZ, OP.JNZ}:
+        if op in {OP.JZ, OP.JNZ, OP.FOR_ITER}:
             work.append(int(instr.args[0]))
             work.append(ip + 1)
             continue
