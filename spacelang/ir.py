@@ -57,6 +57,7 @@ class OP(IntEnum):
     LIST_EXTEND = 47
     DICT_MERGE = 48
     MAKE_CLOSURE_POSONLY = 49
+    DICT_UPDATE = 50
 
 
 @dataclass(slots=True)

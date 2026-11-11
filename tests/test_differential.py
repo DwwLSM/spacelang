@@ -71,6 +71,8 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "key = 'name'\ndata = {}\ndata[key] = 'Ada'\ndata['count'] = 1\n"
         "data['count'] += 2\ndata.update({'active': True})\n"
         "print(data, data['name'], data['count'], data['active'])",
+        "first = {'value': 1, 'keep': 2}\nsecond = {'value': 3, 4: 'number'}\n"
+        "result = {**first, 'extra': 5, **second, 'last': 6}\nprint(result)",
         "import math\nresult = math.sqrt(81)\nprint(result)",
         'print("left", "right", sep="-")',
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",

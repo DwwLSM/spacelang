@@ -622,16 +622,23 @@ class PyFront(ast.NodeVisitor):
             return
 
         if isinstance(node, ast.Dict):
-            if any(key is None for key in node.keys):
-                raise ParseError(
-                    line=getattr(node, "lineno", 0),
-                    ip=0,
-                    msg="dictionary unpacking is unsupported",
-                )
+            line = getattr(node, "lineno", 0)
+            if all(key is not None for key in node.keys):
+                for key, value in zip(node.keys, node.values):
+                    self._compile_expr(key)
+                    self._compile_expr(value)
+                _emit(self.instrs, OP.BUILD_DICT, len(node.keys), line=line)
+                return
+
+            _emit(self.instrs, OP.BUILD_DICT, 0, line=line)
             for key, value in zip(node.keys, node.values):
-                self._compile_expr(key)
-                self._compile_expr(value)
-            _emit(self.instrs, OP.BUILD_DICT, len(node.keys), line=getattr(node, "lineno", 0))
+                if key is None:
+                    self._compile_expr(value)
+                else:
+                    self._compile_expr(key)
+                    self._compile_expr(value)
+                    _emit(self.instrs, OP.BUILD_DICT, 1, line=line)
+                _emit(self.instrs, OP.DICT_UPDATE, line=line)
             return
 
         if isinstance(node, ast.ListComp):

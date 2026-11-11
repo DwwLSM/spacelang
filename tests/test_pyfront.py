@@ -219,15 +219,14 @@ def test_pyfront_dictionary_literals_lookup_assignment_and_update():
     assert run_source(source) == "{'name': 'Ada', 'count': 3, 'active': True} Ada 3 True\n"
 
 
-@pytest.mark.parametrize(
-    "source",
-    [
-        "data = {**other}",
-    ],
-)
-def test_pyfront_rejects_dictionary_unpacking(source):
-    with pytest.raises(ParseError, match="dictionary unpacking is unsupported"):
-        compile_py(source)
+def test_pyfront_dictionary_unpacking_overwrites_in_order():
+    source = (
+        "first = {'value': 1, 'keep': 2}\n"
+        "second = {'value': 3, 4: 'number'}\n"
+        "result = {**first, 'extra': 5, **second, 'last': 6}\n"
+        "print(result)\n"
+    )
+    assert run_source(source) == "{'value': 3, 'keep': 2, 'extra': 5, 4: 'number', 'last': 6}\n"
 
 
 def test_pyfront_assignment_targets_work_inside_functions():

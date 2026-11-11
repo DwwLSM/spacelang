@@ -307,6 +307,24 @@ class VM:
                 self._push(target)
                 self.ip += 1
                 continue
+            if op == OP.DICT_UPDATE:
+                mapping = self._pop("dictionary mapping")
+                target = self._pop("dictionary")
+                if not isinstance(target, dict):
+                    raise TypeError(line=instr.line, ip=self.ip, msg="DICT_UPDATE target must be a dictionary")
+                try:
+                    keys = mapping.keys()
+                except AttributeError as exc:
+                    raise TypeError(
+                        line=instr.line,
+                        ip=self.ip,
+                        msg="argument after ** must be a mapping",
+                    ) from exc
+                for key in keys:
+                    target[key] = mapping[key]
+                self._push(target)
+                self.ip += 1
+                continue
             if op == OP.DEF:
                 func_id = int(args[0])
                 if func_id in self.funcs:

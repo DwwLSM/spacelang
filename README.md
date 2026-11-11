@@ -76,8 +76,8 @@ supported.
 
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, dictionary and set comprehensions,
-dictionary unpacking in literals, slice assignment, and async syntax are not
-implemented. Dictionary literals, key lookup, assignment, and augmented
+slice assignment, and async syntax are not implemented. Dictionary literals,
+including `**mapping` unpacking, key lookup, assignment, and augmented
 assignment are supported.
 Functions may collect extra positional arguments with `*args` and extra
 keyword arguments with `**kwargs`. Positional-only parameters (`/`) and

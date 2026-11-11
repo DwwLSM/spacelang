@@ -31,6 +31,7 @@ MNEMONICS = {
     "CALL_BUILTIN_EX": OP.CALL_BUILTIN_EX,
     "LIST_EXTEND": OP.LIST_EXTEND,
     "DICT_MERGE": OP.DICT_MERGE,
+    "DICT_UPDATE": OP.DICT_UPDATE,
     "MAKE_CLOSURE_POSONLY": OP.MAKE_CLOSURE_POSONLY,
     "CONCAT": OP.CONCAT,
     "DEF": OP.DEF,
@@ -237,6 +238,7 @@ def assemble(src: str) -> Program:
             OP.CALL_OBJ_EX,
             OP.LIST_EXTEND,
             OP.DICT_MERGE,
+            OP.DICT_UPDATE,
         } and len(args) == 0:
             instrs.append(Instr(op, [], line=source_line))
         else:

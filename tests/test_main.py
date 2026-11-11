@@ -121,6 +121,24 @@ def test_compile_py_supports_dictionary_operations_in_sp_file(tmp_path):
         assert output.getvalue() == "{'name': 'Ada', 'count': 3, 'active': True} Ada 3 True\n"
 
 
+def test_compile_py_supports_dictionary_unpacking_in_sp_file(tmp_path):
+    source = tmp_path / "dictionary_unpacking.py"
+    destination = tmp_path / "dictionary_unpacking.sp"
+    source.write_text(
+        "first = {'value': 1, 'keep': 2}\n"
+        "second = {'value': 3, 4: 'number'}\n"
+        "result = {**first, 'extra': 5, **second, 'last': 6}\n"
+        "print(result)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == "{'value': 3, 'keep': 2, 'extra': 5, 4: 'number', 'last': 6}\n"
+
+
 def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
     source = tmp_path / "function_parameters.py"
     destination = tmp_path / "function_parameters.sp"

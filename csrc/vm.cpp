@@ -64,6 +64,7 @@ enum Opcode : std::uint8_t {
     LIST_EXTEND = 47,
     DICT_MERGE = 48,
     MAKE_CLOSURE_POSONLY = 49,
+    DICT_UPDATE = 50,
 };
 
 bool checked_add(std::int64_t left, std::int64_t right, std::int64_t& result) {
@@ -214,7 +215,7 @@ VM::VM(pybind11::object program) {
     for (const auto item : source) {
         Instr instr;
         const auto opcode = item.attr("op").cast<std::int64_t>();
-        if (opcode < 0 || opcode >= 50) {
+        if (opcode < 0 || opcode >= 51) {
             throw pybind11::value_error("invalid native VM opcode");
         }
         instr.op = static_cast<std::uint8_t>(opcode);
@@ -227,9 +228,9 @@ VM::VM(pybind11::object program) {
         const std::size_t expected[] = {
             0, 2, 3, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1,
             1, 2, 0, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0, 1,
-            1, 0, 1, 0, 3, 1, 1,                         1, 2, 4, 6, 8, 1, 0, 1, 0, 0, 9,
+            1, 0,             1, 0, 3, 1, 1,                         1, 2, 4, 6, 8, 1, 0, 1, 0, 0, 9, 0,
         };
-        if (instr.op >= 50
+        if (instr.op >= 51
             || (instr.op == PUSH_STR
                 ? (instr.args.empty() || instr.args[0] < 0 || instr.args[0] > 1000
                     || instr.args.size() != static_cast<std::size_t>(instr.args[0]) + 1)
@@ -419,6 +420,7 @@ pybind11::object VM::run() {
             &&op_make_closure_sig, &&op_make_closure_kwonly, &&op_make_closure_args,
             &&op_build_dict, &&op_call_obj_ex, &&op_call_builtin_ex,
             &&op_list_extend, &&op_dict_merge, &&op_make_closure_posonly,
+            &&op_dict_update,
         };
         if (instr.op >= sizeof(dispatch_table) / sizeof(dispatch_table[0])) {
             throw pybind11::value_error("unknown native VM opcode");
@@ -992,6 +994,40 @@ pybind11::object VM::run() {
                             instr.line
                         );
                     }
+                    target[key] = mapping[key];
+                }
+                stack_.push_back(Value::from_python(target));
+                ++ip;
+                break;
+            }
+            case DICT_UPDATE: {
+#if defined(__GNUC__) || defined(__clang__)
+            op_dict_update:
+#endif
+                const auto mapping = pop("dictionary mapping").to_python();
+                const auto target_object = pop("dictionary").to_python();
+                if (!PyDict_Check(target_object.ptr())) {
+                    raise_space_error("TypeError", "DICT_UPDATE target must be a dictionary", instr.line);
+                }
+                const int has_keys = PyObject_HasAttrString(mapping.ptr(), "keys");
+                if (has_keys < 0) {
+                    throw pybind11::error_already_set();
+                }
+                if (has_keys == 0) {
+                    raise_space_error(
+                        "TypeError",
+                        "argument after ** must be a mapping",
+                        instr.line
+                    );
+                }
+                PyObject* keys_raw = PyMapping_Keys(mapping.ptr());
+                if (keys_raw == nullptr) {
+                    throw pybind11::error_already_set();
+                }
+                auto keys = pybind11::reinterpret_steal<pybind11::object>(keys_raw);
+                auto target = pybind11::reinterpret_borrow<pybind11::dict>(target_object);
+                for (const auto& key_handle : keys) {
+                    const auto key = pybind11::reinterpret_borrow<pybind11::object>(key_handle);
                     target[key] = mapping[key];
                 }
                 stack_.push_back(Value::from_python(target));
