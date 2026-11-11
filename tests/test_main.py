@@ -248,6 +248,24 @@ def test_compile_py_supports_identity_comparisons_in_sp_file(tmp_path):
         assert output.getvalue() == expected
 
 
+def test_compile_py_supports_floor_division_and_power_in_sp_file(tmp_path):
+    source = tmp_path / "arithmetic_operators.py"
+    destination = tmp_path / "arithmetic_operators.sp"
+    source.write_text(
+        "print(7 // 3, -7 // 3, 7.5 // 2, -7.5 // 2)\n"
+        "print(2 ** 3 ** 2, (2 ** 3) ** 2, 2 ** -2)\n"
+        "print(-2 ** 2, (-2) ** 2, 2 + 3 * 2 ** 2)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    expected = "2 -3 3.0 -4.0\n512 64 0.25\n-4 4 14\n"
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == expected
+
+
 def test_compile_py_supports_function_defaults_and_keyword_arguments(tmp_path):
     source = tmp_path / "function_parameters.py"
     destination = tmp_path / "function_parameters.sp"

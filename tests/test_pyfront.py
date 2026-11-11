@@ -41,6 +41,19 @@ def test_pyfront_floating_point_literals_and_arithmetic():
     )
 
 
+def test_pyfront_floor_division_and_exponentiation():
+    source = (
+        "print(7 // 3, -7 // 3, 7.5 // 2, -7.5 // 2)\n"
+        "print(2 ** 3 ** 2, (2 ** 3) ** 2, 2 ** -2)\n"
+        "print(-2 ** 2, (-2) ** 2, 2 + 3 * 2 ** 2)\n"
+    )
+    assert run_source(source) == (
+        "2 -3 3.0 -4.0\n"
+        "512 64 0.25\n"
+        "-4 4 14\n"
+    )
+
+
 def test_pyfront_identity_comparisons():
     source = (
         "first = []\n"

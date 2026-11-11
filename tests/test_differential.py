@@ -91,6 +91,9 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "sum_value = 0.1 + 0.2\nproduct = 1.5 * 2\n"
         "print(integer_looking, exponential, negative, sum_value, product)\n"
         "print(2.5 > 2, 3 == 3.0)",
+        "print(7 // 3, -7 // 3, 7.5 // 2, -7.5 // 2)\n"
+        "print(2 ** 3 ** 2, (2 ** 3) ** 2, 2 ** -2)\n"
+        "print(-2 ** 2, (-2) ** 2, 2 + 3 * 2 ** 2)",
         "first = []\nalias = first\nother = []\n"
         "print(None is None, None is not False)\n"
         "print(first is alias, first is not other)\n"

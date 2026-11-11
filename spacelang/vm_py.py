@@ -475,6 +475,10 @@ class VM:
                     result = lhs / rhs
                 elif op_id == 5:
                     result = lhs % rhs
+                elif op_id == 16:
+                    result = lhs // rhs
+                elif op_id == 17:
+                    result = lhs ** rhs
                 elif op_id == 6:
                     result = lhs == rhs
                 elif op_id == 7:

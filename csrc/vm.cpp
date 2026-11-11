@@ -204,6 +204,12 @@ Value numeric_binary(std::int64_t op, const Value& left, const Value& right) {
         case 5:
             result = PyNumber_Remainder(left_object.ptr(), right_object.ptr());
             break;
+        case 16:
+            result = PyNumber_FloorDivide(left_object.ptr(), right_object.ptr());
+            break;
+        case 17:
+            result = PyNumber_Power(left_object.ptr(), right_object.ptr(), Py_None);
+            break;
         case 6:
             result = PyObject_RichCompare(left_object.ptr(), right_object.ptr(), Py_EQ);
             break;
@@ -1518,7 +1524,7 @@ pybind11::object VM::run() {
 #endif
                 const auto right = pop("rhs");
                 const auto left = pop("lhs");
-                if (instr.args[0] < 1 || instr.args[0] > 15) {
+                if (instr.args[0] < 1 || instr.args[0] > 17) {
                     raise_space_error("ParseError", "unsupported op_id " + std::to_string(instr.args[0]));
                 }
                 stack_.push_back(numeric_binary(instr.args[0], left, right));

@@ -385,6 +385,8 @@ class PyFront(ast.NodeVisitor):
                 ast.Mult: 3,
                 ast.Div: 4,
                 ast.Mod: 5,
+                ast.FloorDiv: 16,
+                ast.Pow: 17,
             }
             op = op_map.get(type(node.op))
             if op is None:
@@ -438,6 +440,8 @@ class PyFront(ast.NodeVisitor):
                 ast.Mult: 3,
                 ast.Div: 4,
                 ast.Mod: 5,
+                ast.FloorDiv: 16,
+                ast.Pow: 17,
             }
             op = op_map.get(type(node.op))
             if op is None:
