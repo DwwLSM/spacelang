@@ -32,6 +32,27 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
+## OPT_SP visual debugger
+
+The optional OPT_SP debugger serves a browser UI and runs SpaceLang traces in
+Pyodide in the browser. The Python process serves static files; it does not
+execute submitted programs. The editor supports assembly (`.spasm`),
+Python-subset source, and encoded `.sp` files (through the file picker or by
+pasting the space/newline representation). After installing a package build
+that includes the generated Pyodide assets, launch it with:
+
+```python
+from spacelang import opt_sp
+
+opt_sp.server()
+```
+
+Package maintainers can download the pinned Pyodide files and prepare the
+browser-side SpaceLang modules with `python tools/build_static.py` before
+building a distribution. Check the prepared files with
+`python tools/build_static.py --check`. The standalone command
+`spacelang-opt-sp --port 8000 --no-browser` starts the same local server.
+
 ## Run Python-subset source
 
 Compile supported Python syntax to a SpaceLang program, then execute it with

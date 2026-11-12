@@ -6,3 +6,5 @@ venv/
 build/
 dist/
 *.egg-info/
+spacelang/opt_sp/static/pyodide/
+spacelang/opt_sp/static/spacelang_pkg/
