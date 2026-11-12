@@ -166,6 +166,28 @@ def test_native_vm_supports_division_and_comparison():
     assert VM(compared).run() is True
 
 
+def test_native_vm_identity_matches_python_for_scalar_edge_cases():
+    cases = [
+        ("import math\nvalue = math.nan\nresult = value is value\n", {}, True),
+        ("left = 10 ** 100\nright = int(str(left))\nresult = left is right\n", {}, True),
+        (
+            "result = left is right\n",
+            {
+                "left": type("IntSubclass", (int,), {})(1),
+                "right": type("IntSubclass", (int,), {})(1),
+            },
+            False,
+        ),
+    ]
+    for source, globals_, expected in cases:
+        program = compile_py(source)
+        for vm_type in (PythonVM, VM):
+            vm = vm_type(program)
+            vm.globals_.update(globals_)
+            vm.run()
+            assert vm.globals_["result"] is expected
+
+
 def test_native_vm_calls_python_builtins_methods_and_user_functions(capsys):
     VM(compile_py('print("hello")')).run()
     assert capsys.readouterr().out == "hello\n"

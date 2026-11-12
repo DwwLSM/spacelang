@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cmath>
 #include <utility>
 
 #include <Python.h>
@@ -37,7 +38,7 @@ struct Value {
         if (PyBool_Check(value.ptr())) {
             return Value(value.ptr() == Py_True);
         }
-        if (PyLong_Check(value.ptr())) {
+        if (PyLong_CheckExact(value.ptr())) {
             const auto integer = PyLong_AsLongLong(value.ptr());
             if (PyErr_Occurred()) {
                 PyErr_Clear();
@@ -45,8 +46,11 @@ struct Value {
                 return Value(static_cast<std::int64_t>(integer));
             }
         }
-        if (PyFloat_Check(value.ptr())) {
-            return Value(PyFloat_AS_DOUBLE(value.ptr()));
+        if (PyFloat_CheckExact(value.ptr())) {
+            const auto floating = PyFloat_AS_DOUBLE(value.ptr());
+            if (!std::isnan(floating)) {
+                return Value(floating);
+            }
         }
         Value result;
         result.tag = Tag::PYOBJ;

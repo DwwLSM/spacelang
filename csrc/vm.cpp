@@ -174,6 +174,15 @@ Value numeric_binary(std::int64_t op, const Value& left, const Value& right) {
                     break;
                 case Value::Tag::PYOBJ:
                     identical = left.data.obj == right.data.obj;
+                    if (!identical
+                        && Py_TYPE(left.data.obj) == Py_TYPE(right.data.obj)
+                        && (PyLong_CheckExact(left.data.obj) || PyFloat_CheckExact(left.data.obj))) {
+                        const int equal = PyObject_RichCompareBool(left.data.obj, right.data.obj, Py_EQ);
+                        if (equal < 0) {
+                            throw pybind11::error_already_set();
+                        }
+                        identical = equal != 0;
+                    }
                     break;
             }
         }
