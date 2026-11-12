@@ -34,7 +34,7 @@ def disassemble(program: Program) -> str:
         op_name = OP_NAMES.get(int(instr.op), str(int(instr.op)))
         rendered: list[str] = []
         for arg in instr.args:
-            if instr.op in {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.CALL_METHOD}:
+            if instr.op in {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.CALL_METHOD}:
                 rendered.append(reverse_names.get(int(arg), str(arg)))
             elif instr.op == OP.PUSH_STR and arg == instr.args[0]:
                 chars = instr.args[1:]
@@ -45,7 +45,7 @@ def disassemble(program: Program) -> str:
         if instr.op == OP.PUSH_STR:
             payload = instr.args[1:]
             rendered = [_string_literal(payload)]
-        if instr.op in {OP.JMP, OP.JZ, OP.JNZ}:
+        if instr.op in {OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER}:
             target = instr.args[0]
             rendered = [labels.get(int(target), str(target))]
         if instr.op == OP.TRY:

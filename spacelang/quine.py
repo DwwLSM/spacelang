@@ -121,9 +121,15 @@ _HOOK_INSTRS = (
 )
 
 
-def _load_name_table(src: Path, referenced_ids: set[int]) -> dict[str, int]:
+def _load_name_table(
+    src: Path,
+    referenced_ids: set[int],
+    embedded_names: dict[str, int],
+) -> dict[str, int]:
     sidecar = src.with_suffix(".names.json")
-    if sidecar.exists():
+    if embedded_names:
+        names = dict(embedded_names)
+    elif sidecar.exists():
         try:
             data = json.loads(sidecar.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -144,7 +150,7 @@ def _load_name_table(src: Path, referenced_ids: set[int]) -> dict[str, int]:
 
 
 def _referenced_name_ids(program: Program) -> set[int]:
-    name_ops = {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.CALL_METHOD}
+    name_ops = {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.CALL_METHOD}
     return {
         int(instr.args[0])
         for instr in program.instrs
@@ -154,8 +160,8 @@ def _referenced_name_ids(program: Program) -> set[int]:
 
 def _shift_program(program: Program, instruction_offset: int, name_offset: int) -> list[Instr]:
     shifted: list[Instr] = []
-    name_ops = {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.CALL_METHOD}
-    jump_ops = {OP.JMP, OP.JZ, OP.JNZ}
+    name_ops = {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.CALL_METHOD}
+    jump_ops = {OP.JMP, OP.JZ, OP.JNZ, OP.FOR_ITER}
     for instr in program.instrs:
         args = list(instr.args)
         if instr.op in name_ops:
@@ -184,7 +190,7 @@ def _space_quine(src: Path, dst: Path, data: bytes) -> None:
         raise EncodingError(line=0, ip=0, msg=f"invalid SpaceLang source: {exc}") from exc
 
     referenced_ids = _referenced_name_ids(original)
-    source_names = _load_name_table(src, referenced_ids)
+    source_names = _load_name_table(src, referenced_ids, original.names)
     name_offset = max(source_names.values(), default=-1) + 1
     instruction_offset = len(_HOOK_INSTRS)
     shifted_instrs = _shift_program(original, instruction_offset, 0)
@@ -193,7 +199,7 @@ def _space_quine(src: Path, dst: Path, data: bytes) -> None:
             instr.op,
             [
                 int(arg) + name_offset
-                if instr.op in {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.CALL_METHOD}
+                if instr.op in {OP.LOAD_GLOBAL, OP.STORE_GLOBAL, OP.GET_ATTR, OP.STORE_ATTR, OP.CALL_METHOD}
                 and index == 0
                 else arg
                 for index, arg in enumerate(instr.args)
@@ -220,7 +226,10 @@ def _space_quine(src: Path, dst: Path, data: bytes) -> None:
         )
         for try_ip, end_ip, catch_ip, finally_ip in original.try_table
     ]
-    encoded = encode(Program(instrs, names, labels, funcs, try_table)).encode("ascii")
+    encoded = encode(
+        Program(instrs, names, labels, funcs, try_table),
+        include_names=True,
+    ).encode("ascii")
     if dst.suffix.lower() == ".spz":
         encoded = gzip.compress(encoded, mtime=0)
     dst.parent.mkdir(parents=True, exist_ok=True)

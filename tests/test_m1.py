@@ -63,6 +63,61 @@ def test_call_kw_roundtrip_has_three_operands():
     assert reparsed.instrs[0].args == [0, 2, 1]
 
 
+def test_iterator_opcodes_roundtrip():
+    program = Program(instrs=[
+        Instr(OP.GET_ITER),
+        Instr(OP.FOR_ITER, [2]),
+        Instr(OP.UNPACK_SEQUENCE, [2]),
+        Instr(OP.PUSH_NONE),
+        Instr(OP.STORE_ATTR, [0]),
+        Instr(OP.STORE_INDEX),
+        Instr(OP.MAKE_CLOSURE, [10000, 2, 3]),
+        Instr(OP.MAKE_CLOSURE_SIG, [10000, 2, 3, 1]),
+        Instr(OP.MAKE_CLOSURE_KWONLY, [10000, 2, 2, 1, 1, 1]),
+        Instr(OP.MAKE_CLOSURE_ARGS, [10000, 2, 2, 1, 1, 1, 1, 1]),
+        Instr(OP.BUILD_DICT, [2]),
+        Instr(OP.CALL_OBJ_KW, [2, 1]),
+        Instr(OP.CALL_OBJ_EX),
+        Instr(OP.CALL_BUILTIN_EX, [2]),
+        Instr(OP.LIST_EXTEND),
+        Instr(OP.DICT_MERGE),
+        Instr(OP.BUILD_SET, [3]),
+        Instr(OP.BUILD_SLICE),
+        Instr(OP.MAKE_CLOSURE_POSONLY, [10000, 2, 1, 2, 1, 1, 1, 1, 1]),
+        Instr(OP.CELLIFY, [3]),
+        Instr(OP.LOAD_CELL_REF, [4]),
+        Instr(OP.LOAD_DEREF, [5]),
+        Instr(OP.HALT),
+    ])
+    encoded = encode(program)
+    reparsed = parse(tokenize(encoded))
+    assert [(instr.op, instr.args) for instr in reparsed.instrs] == [
+        (OP.GET_ITER, []),
+        (OP.FOR_ITER, [2]),
+        (OP.UNPACK_SEQUENCE, [2]),
+        (OP.PUSH_NONE, []),
+        (OP.STORE_ATTR, [0]),
+        (OP.STORE_INDEX, []),
+        (OP.MAKE_CLOSURE, [10000, 2, 3]),
+        (OP.MAKE_CLOSURE_SIG, [10000, 2, 3, 1]),
+        (OP.MAKE_CLOSURE_KWONLY, [10000, 2, 2, 1, 1, 1]),
+        (OP.MAKE_CLOSURE_ARGS, [10000, 2, 2, 1, 1, 1, 1, 1]),
+        (OP.BUILD_DICT, [2]),
+        (OP.CALL_OBJ_KW, [2, 1]),
+        (OP.CALL_OBJ_EX, []),
+        (OP.CALL_BUILTIN_EX, [2]),
+        (OP.LIST_EXTEND, []),
+        (OP.DICT_MERGE, []),
+        (OP.BUILD_SET, [3]),
+        (OP.BUILD_SLICE, []),
+        (OP.MAKE_CLOSURE_POSONLY, [10000, 2, 1, 2, 1, 1, 1, 1, 1]),
+        (OP.CELLIFY, [3]),
+        (OP.LOAD_CELL_REF, [4]),
+        (OP.LOAD_DEREF, [5]),
+        (OP.HALT, []),
+    ]
+
+
 def test_parser_matches_try_catch_finally_end_markers():
     program = parse([
         OP.TRY, 3, 5,

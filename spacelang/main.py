@@ -24,7 +24,7 @@ def _load_program(path: Path) -> Program:
         data = unpack_bytes(data)
     program = parse(tokenize(data.decode("ascii")))
     names_path = path.with_suffix(".names.json")
-    if names_path.exists():
+    if names_path.exists() and not program.names:
         names = json.loads(names_path.read_text(encoding="utf-8"))
         if not isinstance(names, dict) or any(
             not isinstance(name, str) or not isinstance(name_id, int)
@@ -36,15 +36,11 @@ def _load_program(path: Path) -> Program:
 
 
 def _write_program(program: Program, path: Path) -> None:
-    encoded = encode(program).encode("ascii")
+    encoded = encode(program, include_names=True).encode("ascii")
     if path.suffix.lower() == ".spz":
         encoded = gzip.compress(encoded, mtime=0)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(encoded)
-    path.with_suffix(".names.json").write_text(
-        json.dumps(program.names, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
 
 
 def _build_parser() -> argparse.ArgumentParser:

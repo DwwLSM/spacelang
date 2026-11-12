@@ -63,14 +63,43 @@ Output:
 4
 ```
 
-The current frontend handles basic integer, boolean, and string constants,
-arithmetic, comparisons, boolean expressions, calls, assignments, supported
-imports, `if`/`else`, `while`, simple positional functions, and `for` loops
-over `range(...)`. Sequence indexing is supported for indexable values.
+The current frontend handles integer, boolean, string, and `None` constants,
+basic arithmetic and comparisons, boolean expressions, calls, assignment to
+names, attributes and indexes, unpacking assignments, supported augmented
+assignments, supported imports, `if`/`else`, `while`, `break`/`continue`, simple
+positional functions including nested functions, captured variables and
+`nonlocal`, and `for` loops over Python iterables. The reference and
+native VMs share iterator bytecode for lists, tuples, strings, `range(...)`, and
+other Python iterable objects. `for` loops and list, dictionary, and set
+comprehensions support synchronous iteration with name or unpacking targets
+and `if` filters. Sequence indexing and slicing, including slice assignment,
+are supported.
 
 This is still a Python subset, not full Python; features such as classes,
-exceptions in source code, generators, nested or filtered comprehensions,
-keyword arguments to user functions, and general iterator protocols are not implemented.
+exceptions in source code, generators, set unpacking, and async syntax are not
+implemented. Set literals, `set()`, membership checks, and set comprehensions
+are supported. Dictionary literals, including `**mapping` unpacking, key
+lookup, assignment, and augmented assignment are supported. Dictionary
+comprehensions support synchronous `for` clauses with name or unpacking
+targets and `if` filters. Starred loop and comprehension targets are not
+supported.
+Functions may collect extra positional arguments with `*args` and extra
+keyword arguments with `**kwargs`. Positional-only parameters (`/`) and
+keyword-only parameters (`*`) are supported. Default expressions use the
+supported expression subset and are evaluated when the function is defined
+(or, for nested functions, when the closure is created).
+Keyword arguments work for top-level functions, builtins, and dynamic
+SpaceLang closures. Calls may expand positional iterables and keyword mappings
+with `*values` and `**options`; ordinary explicit keyword arguments to methods
+remain unsupported. Arithmetic expressions support `+`, `-`, `*`, `/`, `%`,
+`//`, and `**`; identity comparisons (`is` and `is not`) are supported.
+Top-level and nested functions support required and optional positional
+parameters, positional-only parameters, and keyword-only parameters.
+Positional and keyword arguments, including argument expansion, are supported
+for direct calls to known top-level functions. Builtin keyword arguments are
+supported where the target builtin accepts them. Functions use statically determined
+local variables; `global` declarations and lexical closures with `nonlocal`
+updates are supported.
 Unsupported syntax raises an error rather than being silently compiled.
 
 ## Run a `.sp` program
@@ -110,6 +139,10 @@ of argument tokens required by that opcode. For example, `PUSH_INT 2` is encoded
 as the tokens `7` (the `PUSH_INT` opcode) and `4` (zig-zag encoded integer 2).
 `OP 1` is the tokens `5` (`OP`) and `1` (addition). The VM executes the resulting
 instructions; spaces are not executed one at a time.
+
+Compiled files may end with a name-table metadata trailer after `HALT`. This
+keeps the name IDs and their text in the same `.sp` or `.spz` file without
+adding executable instructions.
 
 For the example above, the token values are:
 
@@ -163,6 +196,26 @@ assembler directives, not VM opcodes.
 | 27 | `END_TRY` | none | Close a try/catch/finally region and continue its control flow. |
 | 28 | `SETUP_WITH` | none | Pop a value onto the VM's with-stack; this alone does not implement Python's full `with` protocol. |
 | 29 | `HALT` | none | Stop execution; if the stack is non-empty, pop its top as the run result. |
+| 30 | `GET_ITER` | none | Pop an iterable and push its iterator. |
+| 31 | `FOR_ITER` | `target_ip` | Advance the iterator at the top of the stack and push its next value; on exhaustion, pop it and jump to `target_ip`. |
+| 32 | `STORE_ATTR` | `name_id` | Pop an object and value, then assign the value to the named attribute. |
+| 33 | `STORE_INDEX` | none | Pop a key, container, and value, then assign `container[key] = value`. |
+| 34 | `UNPACK_SEQUENCE` | `count` | Unpack exactly `count` values from an iterable onto the stack. |
+| 35 | `PUSH_NONE` | none | Push Python's `None` value. |
+| 36 | `MAKE_CLOSURE` | `func_id, cell_count, arg_count` | Pop captured cells and push a legacy positional-only closure. |
+| 37 | `CELLIFY` | `local_slot` | Wrap a local slot in a shared closure cell. |
+| 38 | `LOAD_CELL_REF` | `local_slot` | Push the cell object stored in a local slot. |
+| 39 | `LOAD_DEREF` | `closure_index` | Push a captured cell reference from the current closure. |
+| 40 | `CALL_OBJ_KW` | `positional_count, keyword_count` | Call a dynamic callable with positional and named arguments. |
+| 41 | `MAKE_CLOSURE_SIG` | `func_id, cell_count, arg_count, default_count` | Pop captured cells and signature metadata, then push a closure. |
+| 42 | `MAKE_CLOSURE_KWONLY` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count` | Create a closure with positional and keyword-only parameter metadata. |
+| 43 | `MAKE_CLOSURE_ARGS` | `func_id, cell_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count, has_varargs, has_kwargs` | Create a closure with variadic argument metadata. |
+| 44 | `BUILD_DICT` | `count` | Pop `count` key/value pairs and push a dictionary. |
+| 45 | `CALL_OBJ_EX` | none | Call a dynamic callable with a positional list and keyword dictionary. |
+| 46 | `CALL_BUILTIN_EX` | `func_id` | Call a builtin with a positional list and keyword dictionary. |
+| 47 | `LIST_EXTEND` | none | Extend the list below the stack top with the iterable at the top. |
+| 48 | `DICT_MERGE` | none | Merge the mapping at the stack top into the keyword dictionary below it, rejecting duplicate or non-string keys. |
+| 49 | `MAKE_CLOSURE_POSONLY` | `func_id, cell_count, positional_only_count, positional_count, keyword_only_count, positional_default_count, keyword_default_count, has_varargs, has_kwargs` | Create a closure with positional-only parameter binding metadata. |
 
 `OP` operation IDs:
 
@@ -252,6 +305,9 @@ spacelang disasm example.sp
 spacelang pack example.sp
 spacelang run example.spz
 ```
+
+Compiled `.sp` and `.spz` files embed their name tables, so compiling a Python
+file creates only the requested output file.
 
 The module form remains available when invoking the source checkout directly:
 

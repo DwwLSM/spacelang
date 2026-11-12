@@ -64,6 +64,66 @@ def test_assemble_call_kw_operands():
     assert program.instrs[0].args == [0, 2, 1]
 
 
+def test_assemble_and_disassemble_iterator_branch():
+    program = assemble(
+        """
+        PUSH_STR "ab"
+        GET_ITER
+        .label loop
+        FOR_ITER done
+        STACK 3
+        JMP loop
+        .label done
+        HALT
+        """
+    )
+    assert (program.instrs[2].op, program.instrs[2].args) == (OP.FOR_ITER, [5])
+    restored = assemble(disasm(program))
+    assert [(instr.op, instr.args) for instr in restored.instrs] == [
+        (instr.op, instr.args) for instr in program.instrs
+    ]
+
+
+def test_assemble_and_disassemble_assignment_opcodes():
+    program = assemble(
+        """
+        STORE_ATTR value
+        STORE_INDEX
+        UNPACK_SEQUENCE 2
+        PUSH_NONE
+        HALT
+        """
+    )
+    assert [(instr.op, instr.args) for instr in assemble(disasm(program)).instrs] == [
+        (instr.op, instr.args) for instr in program.instrs
+    ]
+
+
+def test_assemble_and_disassemble_closure_opcodes():
+    program = assemble(
+        """
+        MAKE_CLOSURE 10000 2 3
+        MAKE_CLOSURE_SIG 10000 2 3 1
+        MAKE_CLOSURE_KWONLY 10000 2 2 1 1 1
+        MAKE_CLOSURE_ARGS 10000 2 2 1 1 1 1 1
+        BUILD_DICT 2
+        CALL_OBJ_KW 2 1
+        CALL_OBJ_EX
+        CALL_BUILTIN_EX 2
+        LIST_EXTEND
+        DICT_MERGE
+        MAKE_CLOSURE_POSONLY 10000 2 1 2 1 1 1 1 1
+        CELLIFY 3
+        LOAD_CELL_REF 4
+        LOAD_DEREF 5
+        HALT
+        """
+    )
+    assert [(instr.op, instr.args) for instr in assemble(disasm(program)).instrs] == [
+        (instr.op, instr.args) for instr in program.instrs
+    ]
+
+
 def test_assembler_supports_quoted_strings_inline_comments_and_name_declarations():
     program = assemble(
         """

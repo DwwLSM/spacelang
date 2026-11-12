@@ -27,6 +27,7 @@ private:
         std::int64_t return_ip;
         std::vector<Value> locals;
         std::vector<bool> initialized;
+        pybind11::list closure_cells = pybind11::list();
     };
 
     struct TryFrame {

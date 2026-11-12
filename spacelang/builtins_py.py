@@ -25,6 +25,7 @@ def _builtin_names():
         13: callable,
         14: repr,
         15: isinstance,
+        16: set,
     }
 
 
