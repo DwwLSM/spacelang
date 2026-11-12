@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPT_SP — SpaceLang Visual Debugger</title>
+  <link rel="stylesheet" href="/css/opt-sp.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body data-page="visualize">
+  <header class="app-header">
+    <h1>OPT_SP — SpaceLang Visual Debugger</h1>
+    <a class="back-link" href="/">← Back to editor</a>
+  </header>
+  <main id="viz-root" class="viz-layout">
+    <section class="code-panel panel">
+      <h2>Program</h2>
+      <pre id="code-view" class="code-view"></pre>
+    </section>
+    <section class="state-panels">
+      <details id="call-stack" class="panel" open>
+        <summary>Call Stack</summary>
+        <div class="panel-content"></div>
+      </details>
+      <details id="operand-stack" class="panel" open>
+        <summary>Operand Stack</summary>
+        <div class="panel-content"></div>
+      </details>
+      <details id="heap" class="panel" open>
+        <summary>Heap / Objects</summary>
+        <div class="panel-content"></div>
+      </details>
+      <details id="output" class="panel" open>
+        <summary>Printed Output</summary>
+        <div class="panel-content"></div>
+      </details>
+    </section>
+    <nav class="step-controls" aria-label="Trace controls">
+      <button type="button" data-step="first" aria-label="First step">⏮</button>
+      <button type="button" data-step="back" aria-label="Previous step">⏪</button>
+      <button type="button" data-step="forward" aria-label="Next step">⏩</button>
+      <button type="button" data-step="last" aria-label="Last step">⏭</button>
+      <input id="step-slider" type="range" min="0" max="0" value="0" aria-label="Trace step">
+      <output id="step-label">Step 0 / 0</output>
+    </nav>
+  </main>
+</body>
+</html>

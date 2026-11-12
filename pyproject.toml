@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "spacelanguage"
-version = "0.1.4"
+version = "0.1.5"
 description = "SpaceLang core package"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,9 +12,11 @@ dependencies = []
 
 [project.scripts]
 spacelang = "spacelang.main:main"
+spacelang-opt-sp = "spacelang.opt_sp.server:_cli"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+test = ["pytest>=8"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -23,4 +25,11 @@ testpaths = ["tests"]
 [tool.scikit-build]
 wheel.packages = ["spacelang"]
 cmake.build-type = "Release"
-sdist.include = ["csrc/**", "CMakeLists.txt"]
+sdist.include = [
+  "csrc/**",
+  "CMakeLists.txt",
+  "spacelang/opt_sp/static/**",
+  "tools/build_static.py",
+  "MANIFEST.in",
+  ".github/workflows/opt-sp-smoke.yml",
+]

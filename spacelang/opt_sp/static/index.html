@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPT_SP — SpaceLang Visual Debugger</title>
+  <link rel="stylesheet" href="/css/opt-sp.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body data-page="editor">
+  <header class="app-header">
+    <h1>OPT_SP — SpaceLang Visual Debugger</h1>
+  </header>
+  <main class="editor-page">
+    <section class="editor-panel">
+      <label for="code-editor">SpaceLang program</label>
+      <textarea id="code-editor" spellcheck="false">PUSH_INT 2
+PUSH_INT 3
+OP 1
+      CALL 0 1
+HALT</textarea>
+      <div class="editor-controls">
+        <fieldset class="mode-toggle">
+          <legend>Source language</legend>
+                <label><input type="radio" name="source-mode" value="asm" checked> Assembly (.spasm)</label>
+                <label><input type="radio" name="source-mode" value="sp"> Encoded .sp</label>
+          <label><input type="radio" name="source-mode" value="python"> Python</label>
+        </fieldset>
+              <label class="file-label" for="sp-file">Open .sp file</label>
+              <input id="sp-file" type="file" accept=".sp,text/plain">
+        <label for="example-select">Load example</label>
+        <select id="example-select">
+          <option value="">Choose an example…</option>
+          <option value="asm">Assembly: add two numbers</option>
+          <option value="python">Python: sum and print</option>
+        </select>
+        <button id="run-button" type="button">Run and Visualize</button>
+      </div>
+      <p class="editor-hint">Encoded .sp uses spaces and newlines; upload a .sp file or paste its contents into the editor.</p>
+      <div id="editor-message" aria-live="polite"></div>
+    </section>
+  </main>
+</body>
+</html>

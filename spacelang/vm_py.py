@@ -71,6 +71,19 @@ class VM:
         self.funcs = program.funcs
         self.names = {value: key for key, value in program.names.items()}
         self._return_value: Any = None
+        self._pending_instr: Instr | None = None
+
+    def _before_step(self, instr: Instr) -> None:
+        pass
+
+    def _after_step(self, instr: Instr, error: Exception | None = None) -> None:
+        pass
+
+    def _complete_step(self, error: Exception | None = None) -> None:
+        instr = self._pending_instr
+        self._pending_instr = None
+        if instr is not None:
+            self._after_step(instr, error)
 
     def _name(self, name_id: int) -> str:
         name = self.names.get(name_id)
@@ -249,8 +262,11 @@ class VM:
     def run(self) -> Any:
         while True:
             try:
-                return self._run()
+                result = self._run()
+                self._complete_step()
+                return result
             except Exception as exc:
+                self._complete_step(exc)
                 runtime_exc = (
                     exc
                     if isinstance(exc, SpaceError)
@@ -268,9 +284,12 @@ class VM:
 
     def _run(self) -> Any:
         while self.ip < len(self.instrs):
+            self._complete_step()
             instr = self.instrs[self.ip]
             op = OP(instr.op)
             args = list(instr.args)
+            self._pending_instr = instr
+            self._before_step(instr)
 
             if op == OP.NOP:
                 self.ip += 1
