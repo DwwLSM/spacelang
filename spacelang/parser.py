@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import json
+
 from .errors import ParseError
 from .ir import Instr, OP, Program
+from .names import NameTable
+
+NAME_TABLE_OPCODE = 53
 
 
 def _decode_zigzag(value: int) -> int:
@@ -42,6 +47,7 @@ def parse(token_stream) -> Program:
     """
     token_stream, token_lines = _normalize_tokens(token_stream)
     instrs: list[Instr] = []
+    names: dict[str, int] = {}
     i = 0
 
     while i < len(token_stream):
@@ -49,6 +55,33 @@ def parse(token_stream) -> Program:
         op_code = token_stream[i]
         op_line = token_lines[i]
         i += 1
+        if op_code == NAME_TABLE_OPCODE:
+            if not instrs or instrs[-1].op != OP.HALT:
+                raise ParseError(
+                    line=op_line,
+                    ip=op_index,
+                    msg="embedded name table must follow HALT",
+                )
+            length, i = _parse_int_value(token_stream, i, op_line)
+            if length != len(token_stream) - i:
+                raise ParseError(
+                    line=op_line,
+                    ip=op_index,
+                    msg="invalid embedded name table length",
+                )
+            try:
+                name_data = "".join(chr(value) for value in token_stream[i:])
+                parsed_names = json.loads(name_data)
+                if not isinstance(parsed_names, dict):
+                    raise ValueError("name table must be an object")
+                names = NameTable.from_dict(parsed_names).to_dict()
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                raise ParseError(
+                    line=op_line,
+                    ip=op_index,
+                    msg=f"invalid embedded name table: {exc}",
+                ) from exc
+            break
         if op_code not in range(53):
             raise ParseError(line=op_line, ip=op_index, msg=f"unknown opcode {op_code}")
 
@@ -242,4 +275,4 @@ def parse(token_stream) -> Program:
         last_line = instrs[-1].line if instrs else 0
         raise ParseError(line=last_line, ip=len(instrs), msg="TRY without END_TRY")
 
-    return Program(instrs=instrs, names={}, labels={}, funcs=funcs, try_table=try_table)
+    return Program(instrs=instrs, names=names, labels={}, funcs=funcs, try_table=try_table)

@@ -140,6 +140,10 @@ as the tokens `7` (the `PUSH_INT` opcode) and `4` (zig-zag encoded integer 2).
 `OP 1` is the tokens `5` (`OP`) and `1` (addition). The VM executes the resulting
 instructions; spaces are not executed one at a time.
 
+Compiled files may end with a name-table metadata trailer after `HALT`. This
+keeps the name IDs and their text in the same `.sp` or `.spz` file without
+adding executable instructions.
+
 For the example above, the token values are:
 
 | Assembly | Space-count tokens |
@@ -301,6 +305,9 @@ spacelang disasm example.sp
 spacelang pack example.sp
 spacelang run example.spz
 ```
+
+Compiled `.sp` and `.spz` files embed their name tables, so compiling a Python
+file creates only the requested output file.
 
 The module form remains available when invoking the source checkout directly:
 

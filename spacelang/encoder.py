@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
+
 from .errors import EncodingError
 from .ir import Instr, OP, Program
+from .names import NameTable
 
 MAX_LINE = 65535
 MAX_STRING_CHUNK = 1000
+NAME_TABLE_OPCODE = 53
 
 
 def _encode_zigzag(value: int) -> int:
@@ -17,7 +21,7 @@ def decode(value: int) -> int:
     return value // 2 if value % 2 == 0 else -(value + 1) // 2
 
 
-def encode(program: Program) -> str:
+def encode(program: Program, *, include_names: bool = False) -> str:
     """Encode a Program back to canonical SpaceLang token stream."""
     instrs = list(program.instrs)
     if not instrs or instrs[-1].op != OP.HALT:
@@ -127,5 +131,22 @@ def encode(program: Program) -> str:
             raise EncodingError(line=instr.line, ip=ip, msg=f"token exceeds MAX_LINE ({MAX_LINE})")
 
         lines.extend(" " * value + "\n" for value in token_values)
+
+    if include_names and program.names:
+        try:
+            NameTable.from_dict(program.names)
+        except (TypeError, ValueError) as exc:
+            raise EncodingError(line=0, ip=len(instrs), msg=f"invalid name table: {exc}") from exc
+        name_data = json.dumps(program.names, ensure_ascii=True, separators=(",", ":"))
+        if len(name_data) > MAX_LINE:
+            raise EncodingError(
+                line=0,
+                ip=len(instrs),
+                msg=f"embedded name table exceeds {MAX_LINE} characters",
+            )
+        lines.extend(
+            " " * value + "\n"
+            for value in (NAME_TABLE_OPCODE, len(name_data), *(ord(char) for char in name_data))
+        )
 
     return "".join(lines)

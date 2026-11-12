@@ -70,10 +70,12 @@ def test_sp_roundtrip_preserves_names_and_function_metadata(tmp_path):
     source_path.write_text(SOURCE, encoding="utf-8")
 
     assert main(["compile-py", str(source_path), str(sp_path)]) == 0
-    names_path = sp_path.with_suffix(".names.json")
-    names = json.loads(names_path.read_text(encoding="utf-8"))
+    names = spacelang.parse(
+        spacelang.tokenize(sp_path.read_bytes().decode("ascii"))
+    ).names
     assert {"values", "lookup", "selected"} <= names.keys()
     assert len(set(names.values())) == len(names)
+    assert not sp_path.with_suffix(".names.json").exists()
     _assert_program_runs_on_both_engines(sp_path)
 
 
@@ -103,7 +105,7 @@ def test_spz_roundtrip_runs_compiled_program_on_both_engines(tmp_path):
 
     assert main(["compile-py", str(source_path), str(spz_path)]) == 0
     assert spacelang.unpack_bytes(spz_path.read_bytes()).startswith(b" ")
-    assert spz_path.with_suffix(".names.json").exists()
+    assert not spz_path.with_suffix(".names.json").exists()
     _assert_program_runs_on_both_engines(spz_path)
 
 
@@ -114,10 +116,7 @@ def test_spasm_roundtrip_preserves_names_and_function_metadata(tmp_path):
     source_path.write_text(SOURCE, encoding="utf-8")
     original_path = tmp_path / "original.sp"
     assert main(["compile-py", str(source_path), str(original_path)]) == 0
-    original = spacelang.parse(
-        spacelang.tokenize(original_path.read_bytes().decode("ascii"))
-    )
-    original.names = json.loads(original_path.with_suffix(".names.json").read_text(encoding="utf-8"))
+    original = spacelang.parse(spacelang.tokenize(original_path.read_bytes().decode("ascii")))
     spasm_path.write_text(spacelang.disassemble(original), encoding="utf-8")
 
     assert main(["asm", str(spasm_path), str(reassembled_path)]) == 0

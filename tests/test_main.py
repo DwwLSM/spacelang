@@ -2,7 +2,7 @@ from contextlib import redirect_stdout
 import gzip
 from io import StringIO
 
-from spacelang.main import main
+from spacelang.main import _load_program, main
 
 
 def test_function_roundtrip_through_compiled_sp_file(tmp_path):
@@ -31,10 +31,12 @@ def test_function_roundtrip_through_compiled_sp_file(tmp_path):
 def test_compile_run_and_disassemble_commands(tmp_path):
     source = tmp_path / "program.py"
     compiled = tmp_path / "program.sp"
-    source.write_text("print(1 + 1)\n")
+    source.write_text("answer = 1 + 1\nprint(answer)\n")
 
     assert main(["compile-py", str(source), str(compiled)]) == 0
-    assert compiled.with_suffix(".names.json").exists()
+    assert compiled.exists()
+    assert not compiled.with_suffix(".names.json").exists()
+    assert _load_program(compiled).names
 
     output = StringIO()
     with redirect_stdout(output):
@@ -50,6 +52,22 @@ def test_compile_run_and_disassemble_commands(tmp_path):
     with redirect_stdout(output):
         assert main(["run", str(compiled), "--engine", "cpp"]) == 0
     assert output.getvalue() == "2\n"
+
+
+def test_compile_py_embeds_name_table_in_single_sp_file(tmp_path):
+    source = tmp_path / "program.py"
+    compiled = tmp_path / "program.sp"
+    source.write_text("answer = 42\nprint(answer)\n")
+
+    assert main(["compile-py", str(source), str(compiled)]) == 0
+    assert compiled.exists()
+    assert not compiled.with_suffix(".names.json").exists()
+    assert _load_program(compiled).names["answer"] == 0
+
+    output = StringIO()
+    with redirect_stdout(output):
+        assert main(["run", str(compiled)]) == 0
+    assert output.getvalue() == "42\n"
 
 
 def test_pack_and_run_compressed_program(tmp_path):

@@ -87,6 +87,19 @@ def test_sp_quine_copies_generated_program_and_name_table(tmp_path):
     assert (tmp_path / "generated.copy.copy.sp").read_bytes() == copy.read_bytes()
 
 
+def test_sp_quine_reads_embedded_name_table(tmp_path):
+    source = tmp_path / "source.sp"
+    destination = tmp_path / "generated.sp"
+    source.write_text(encode(compile_py("answer = 41\nprint(answer + 1)\n"), include_names=True))
+
+    quine(source, destination)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        assert spacelang_main(["run", str(destination)]) == 0
+    assert output.getvalue() == "42\n"
+
+
 def test_sp_quine_shifts_names_jumps_and_functions(tmp_path):
     source = tmp_path / "named.sp"
     destination = tmp_path / "named_q.sp"
