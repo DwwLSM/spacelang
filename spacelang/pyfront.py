@@ -788,8 +788,6 @@ class PyFront(ast.NodeVisitor):
 
     def _compile_for(self, node: ast.For) -> None:
         line = getattr(node, "lineno", 0)
-        if not isinstance(node.target, ast.Name):
-            raise ParseError(line=line, ip=0, msg="for-loop target must be a name")
         self._compile_expr(node.iter)
         _emit(self.instrs, OP.GET_ITER, line=line)
 
@@ -798,7 +796,7 @@ class PyFront(ast.NodeVisitor):
         break_label = f"for_break_{len(self.instrs)}"
         self._emit_label(loop_label)
         _emit(self.instrs, OP.FOR_ITER, normal_exit_label, line=line)
-        self._store_name(node.target.id, line)
+        self._compile_store_target(node.target, line)
         self.loop_stack.append(_LoopContext(break_label, loop_label, True))
         for stmt in node.body:
             self._compile_stmt(stmt)
@@ -811,7 +809,12 @@ class PyFront(ast.NodeVisitor):
 
     def _compile_store_target(self, target: ast.expr, line: int) -> None:
         if isinstance(target, ast.Name):
-            self._store_name(target.id, line)
+            name = target.id
+            for overrides in reversed(self.name_overrides):
+                if name in overrides:
+                    name = overrides[name]
+                    break
+            self._store_name(name, line)
             return
         if isinstance(target, (ast.Tuple, ast.List)):
             if any(isinstance(item, ast.Starred) for item in target.elts):
@@ -874,15 +877,29 @@ class PyFront(ast.NodeVisitor):
         item: ast.expr | tuple[ast.expr, ast.expr],
         kind: str = "list",
     ) -> None:
-        if any(
-            generator.is_async or not isinstance(generator.target, ast.Name)
-            for generator in generators
-        ):
+        if any(generator.is_async for generator in generators):
             kind_name = {"list": "list", "dict": "dictionary", "set": "set"}[kind]
             raise ParseError(
                 line=line,
                 ip=0,
-                msg=f"{kind_name} comprehensions require synchronous name targets",
+                msg=f"{kind_name} comprehensions require synchronous generators",
+            )
+
+        def target_names(target: ast.expr) -> list[str]:
+            if isinstance(target, ast.Name):
+                return [target.id]
+            if isinstance(target, (ast.Tuple, ast.List)):
+                names: list[str] = []
+                for element in target.elts:
+                    if isinstance(element, ast.Starred):
+                        raise ParseError(line=line, ip=0, msg="starred comprehension targets are unsupported")
+                    names.extend(target_names(element))
+                return names
+            kind_name = {"list": "list", "dict": "dictionary", "set": "set"}[kind]
+            raise ParseError(
+                line=line,
+                ip=0,
+                msg=f"{kind_name} comprehension targets must be names or unpacking targets",
             )
 
         def compile_generator(index: int) -> None:
@@ -894,9 +911,9 @@ class PyFront(ast.NodeVisitor):
             exit_label = f"comprehension_exit_{len(self.instrs)}"
             self._emit_label(loop_label)
             _emit(self.instrs, OP.FOR_ITER, exit_label, line=line)
-            target_name = self._new_temp_name()
-            self._store_name(target_name, line)
-            self.name_overrides.append({generator.target.id: target_name})
+            overrides = {name: self._new_temp_name() for name in target_names(generator.target)}
+            self.name_overrides.append(overrides)
+            self._compile_store_target(generator.target, line)
 
             for condition in generator.ifs:
                 self._compile_expr(condition)

@@ -102,6 +102,15 @@ from spacelang.vm_py import Closure, VM as PythonVM
         "import math\nresult = math.sqrt(81)\nprint(result)",
         'print("left", "right", sep="-")',
         "result = 0\nfor value in range(5):\n    result = result + value\nprint(result)",
+        "pairs = [('a', (2, 3)), ('b', (4, 5))]\n"
+        "result = []\n"
+        "for key, (left, right) in pairs:\n"
+        "    result.append(key)\n"
+        "    result.append(left + right)\n"
+        "values = [left + right for left, right in [(1, 2), (3, 4), (5, 6)] if left > 1]\n"
+        "mapping = {left: right for left, right in [(1, 2), (3, 4)]}\n"
+        "selected = {left for left, right in [(1, 2), (3, 6)] if right > 4}\n"
+        "print(result, values, mapping, selected)",
         "for value in [1, 2, 3, 4]:\n    if value == 2:\n        continue\n    if value == 4:\n        break\n    print(value)",
         'print([value for value in (1, 2, 3)])\nprint([letter for letter in "ab"])',
         "print([value for value in range(8) if value % 2 == 0 if value > 2])",

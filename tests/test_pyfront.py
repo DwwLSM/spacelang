@@ -110,6 +110,43 @@ def test_pyfront_for_range_and_sequence_indexing():
     assert run_source(src) == "2\n4\n6\n2\n"
 
 
+def test_pyfront_for_loops_support_nested_unpacking_targets():
+    source = textwrap.dedent("""
+    pairs = [("a", (2, 3)), ("b", (4, 5))]
+    result = []
+    for key, (left, right) in pairs:
+        result.append(key)
+        result.append(left + right)
+    print(result)
+    """)
+    assert run_source(source) == "['a', 5, 'b', 9]\n"
+
+
+def test_pyfront_comprehensions_support_unpacking_targets_without_leaking_names():
+    source = textwrap.dedent("""
+    pairs = [(1, 2), (3, 4), (5, 6)]
+    left = 99
+    right = 88
+    values = [left + right for left, right in pairs if left > 1]
+    mapping = {left: right for left, right in pairs}
+    selected = {left for left, right in pairs if right > 4}
+    print(values, mapping, selected, left, right)
+    """)
+    assert run_source(source) == "[7, 11] {1: 2, 3: 4, 5: 6} {5} 99 88\n"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "for first, *rest in [(1, 2)]:\n    pass",
+        "[first for first, *rest in [(1, 2)]]",
+    ],
+)
+def test_pyfront_rejects_starred_loop_and_comprehension_targets(source):
+    with pytest.raises(ParseError, match="starred"):
+        compile_py(source)
+
+
 def test_pyfront_for_loops_use_general_iterators_and_support_loop_control():
     source = textwrap.dedent("""
     for value in [1, 2, 3, 4]:

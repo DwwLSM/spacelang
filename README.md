@@ -70,17 +70,19 @@ assignments, supported imports, `if`/`else`, `while`, `break`/`continue`, simple
 positional functions including nested functions, captured variables and
 `nonlocal`, and `for` loops over Python iterables. The reference and
 native VMs share iterator bytecode for lists, tuples, strings, `range(...)`, and
-other Python iterable objects. Sequence indexing and slicing, including slice
-assignment, and list comprehensions with one or more synchronous `for` clauses,
-name targets, and `if` filters are supported.
+other Python iterable objects. `for` loops and list, dictionary, and set
+comprehensions support synchronous iteration with name or unpacking targets
+and `if` filters. Sequence indexing and slicing, including slice assignment,
+are supported.
 
 This is still a Python subset, not full Python; features such as classes,
 exceptions in source code, generators, set unpacking, and async syntax are not
 implemented. Set literals, `set()`, membership checks, and set comprehensions
 are supported. Dictionary literals, including `**mapping` unpacking, key
 lookup, assignment, and augmented assignment are supported. Dictionary
-comprehensions support synchronous `for` clauses with name targets and `if`
-filters.
+comprehensions support synchronous `for` clauses with name or unpacking
+targets and `if` filters. Starred loop and comprehension targets are not
+supported.
 Functions may collect extra positional arguments with `*args` and extra
 keyword arguments with `**kwargs`. Positional-only parameters (`/`) and
 keyword-only parameters (`*`) are supported. Default expressions use the

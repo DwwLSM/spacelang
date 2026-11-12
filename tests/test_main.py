@@ -103,6 +103,30 @@ def test_compile_py_supports_unpacking_and_index_assignment(tmp_path):
         assert output.getvalue() == "[5, 1]\n"
 
 
+def test_compile_py_supports_unpacking_loop_and_comprehension_targets(tmp_path):
+    source = tmp_path / "unpacking_targets.py"
+    destination = tmp_path / "unpacking_targets.sp"
+    source.write_text(
+        "pairs = [('a', (2, 3)), ('b', (4, 5))]\n"
+        "result = []\n"
+        "for key, (left, right) in pairs:\n"
+        "    result.append(key)\n"
+        "    result.append(left + right)\n"
+        "values = [left + right for left, right in [(1, 2), (3, 4), (5, 6)] if left > 1]\n"
+        "mapping = {left: right for left, right in [(1, 2), (3, 4)]}\n"
+        "selected = {left for left, right in [(1, 2), (3, 6)] if right > 4}\n"
+        "print(result, values, mapping, selected)\n"
+    )
+
+    assert main(["compile-py", str(source), str(destination)]) == 0
+    expected = "['a', 5, 'b', 9] [7, 11] {1: 2, 3: 4} {3}\n"
+    for engine in ("py", "cpp"):
+        output = StringIO()
+        with redirect_stdout(output):
+            assert main(["run", str(destination), "--engine", engine]) == 0
+        assert output.getvalue() == expected
+
+
 def test_compile_py_supports_dictionary_operations_in_sp_file(tmp_path):
     source = tmp_path / "dictionary.py"
     destination = tmp_path / "dictionary.sp"
