@@ -117,7 +117,7 @@ def test_server_background_cli_start_and_stop():
         command + ["--port", str(port), "--background", "--no-browser"],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=20,
     )
     try:
         assert start.returncode == 0, start.stderr

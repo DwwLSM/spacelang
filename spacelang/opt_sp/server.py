@@ -380,13 +380,20 @@ def _control_url(host: str, port: int, endpoint: str) -> str:
     return f"http://{netloc}:{port}/{endpoint}"
 
 
-def _control_request(host: str, port: int, endpoint: str, token: str, method: str) -> dict:
+def _control_request(
+    host: str,
+    port: int,
+    endpoint: str,
+    token: str,
+    method: str,
+    timeout: float = 1,
+) -> dict:
     request = Request(
         _control_url(host, port, endpoint),
         headers={"Authorization": f"Bearer {token}"},
         method=method,
     )
-    with urlopen(request, timeout=1) as response:
+    with urlopen(request, timeout=timeout) as response:
         return json.load(response)
 
 
@@ -476,21 +483,29 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
                 stderr=subprocess.STDOUT,
                 **process_options,
             )
-        for _ in range(50):
+        startup_deadline = time.monotonic() + 15
+        while time.monotonic() < startup_deadline:
             if process.poll() is not None:
                 raise RuntimeError(
                     f"OPT_SP failed to start. See server log: {log_file}"
                 )
             try:
-                _control_request(host, port, "__opt_sp/status", token, "GET")
+                _control_request(
+                    host,
+                    port,
+                    "__opt_sp/status",
+                    token,
+                    "GET",
+                    timeout=min(0.25, startup_deadline - time.monotonic()),
+                )
                 break
             except URLError:
-                time.sleep(0.1)
+                time.sleep(min(0.1, max(0, startup_deadline - time.monotonic())))
         else:
             process.terminate()
             process.wait(timeout=2)
             raise RuntimeError(
-                f"OPT_SP did not start within 5 seconds. See server log: {log_file}"
+                f"OPT_SP did not start within 15 seconds. See server log: {log_file}"
             )
     except Exception:
         state_file.unlink(missing_ok=True)
