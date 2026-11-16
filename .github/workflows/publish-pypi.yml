@@ -126,7 +126,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist
-          pattern: "*"
+          pattern: "wheels-*"
           merge-multiple: true
 
       - name: Validate all distributions
