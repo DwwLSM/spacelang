@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import tarfile
 import tempfile
 from urllib.request import urlretrieve
@@ -89,10 +90,13 @@ def _copy_pyodide_distribution() -> None:
 def _copy_spacelang_modules() -> None:
     destination = STATIC / "spacelang_pkg" / "spacelang"
     destination.mkdir(parents=True, exist_ok=True)
+    cache = destination / "__pycache__"
+    if cache.is_dir():
+        shutil.rmtree(cache)
     manifest = []
     for source in sorted(PACKAGE.glob("*.py")):
         if source.name == "__init__.py":
-            contents = "__version__ = '0.1.7'\n"
+            contents = "__version__ = '0.1.8'\n"
         else:
             contents = source.read_text(encoding="utf-8")
         target = destination / source.name
