@@ -455,6 +455,7 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
         json.dump({"token": token}, state)
 
     log_file = state_file.with_suffix(".log")
+    process = None
     command = [
         sys.executable,
         "-c",
@@ -484,6 +485,7 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
                 **process_options,
             )
         startup_deadline = time.monotonic() + 15
+        last_error = None
         while time.monotonic() < startup_deadline:
             if process.poll() is not None:
                 raise RuntimeError(
@@ -499,16 +501,23 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
                     timeout=min(0.25, startup_deadline - time.monotonic()),
                 )
                 break
-            except URLError:
+            except HTTPError as error:
+                raise RuntimeError(
+                    f"OPT_SP rejected its startup check with HTTP {error.code}."
+                ) from error
+            except URLError as error:
+                last_error = error
                 time.sleep(min(0.1, max(0, startup_deadline - time.monotonic())))
         else:
-            process.terminate()
-            process.wait(timeout=2)
             raise RuntimeError(
-                f"OPT_SP did not start within 15 seconds. See server log: {log_file}"
+                "OPT_SP did not start within 15 seconds"
+                f" (last status-check error: {last_error}). See server log: {log_file}"
             )
     except Exception:
         state_file.unlink(missing_ok=True)
+        if process is not None and process.poll() is None:
+            process.terminate()
+            process.wait(timeout=2)
         raise
 
     url = _control_url(host, port, "").rstrip("/")
