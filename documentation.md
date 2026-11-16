@@ -45,9 +45,11 @@ to explore programming-language construction. It provides:
 
 The package metadata names the distribution `spacelanguage`, currently at
 version `0.1.7`, and the import package `spacelang`. The project requires Python
-3.10 or later. Building the native extension requires CMake 3.18 or later, a
-C++17-capable compiler, and pybind11 (provided by the package build
-configuration).
+3.10 or later. PyPI provides prebuilt wheels for CPython 3.10–3.14 on x64
+Windows, x86-64 and ARM64 Linux, and universal2 macOS (Intel and Apple Silicon).
+Installing one of these wheels does not require a local compiler. Building the
+native extension from source requires CMake 3.18 or later, a C++17-capable
+compiler, and pybind11 (provided by the package build configuration).
 
 The implementation is experimental. The compiler does not accept arbitrary
 Python programs, and the native VM is not a drop-in replacement for the
@@ -87,6 +89,14 @@ multiple layers that are often taught separately:
 
 ## Quick start
 
+### Install from PyPI
+
+For supported CPython and platform combinations, install the prebuilt wheel:
+
+```bash
+python -m pip install spacelanguage
+```
+
 ### Install from a checkout
 
 ```bash
@@ -96,9 +106,10 @@ python -m pip install -e ".[dev]"
 ```
 
 Editable installation builds the C++ extension as part of package
-installation. A usable C++17 toolchain and CMake 3.18+ therefore matter even
-when the Python VM will be used for normal work. To install without editable
-mode, use `python -m pip install .`.
+installation, so a usable C++17 toolchain and CMake 3.18+ are required. The
+same applies when installing from a source distribution or local checkout
+without editable mode (`python -m pip install .`); supported PyPI wheel installs
+do not need these build tools.
 
 ### Compile a Python-subset file
 
@@ -803,10 +814,13 @@ loads Pyodide and executes the traced Python implementation in-browser. The
 server is not a remote code execution API. Binding it to a non-loopback host
 changes network exposure and should be done intentionally.
 
+Published PyPI wheels include the prepared browser assets, so no asset build
+step is needed after a wheel installation.
+
 ### Prepare browser assets
 
-Generated Pyodide and SpaceLang module assets are excluded from Git. Package
-maintainers or contributors working on the browser bundle prepare them with:
+Generated Pyodide and SpaceLang module assets are excluded from Git. Contributors
+working from a source checkout prepare them from the repository root with:
 
 ```bash
 python tools/build_static.py
@@ -922,6 +936,10 @@ also kept in `test_spaclang/`.
 - `.github/workflows/publish-testpypi.yml` is manually dispatched. It prepares
   static assets, runs tests, builds distributions, validates them with Twine,
   and publishes to TestPyPI using a repository secret.
+- `.github/workflows/publish-pypi.yml` builds and tests the source distribution
+  and wheels for CPython 3.10–3.14 on Linux x86-64/ARM64, Windows x64, and
+  universal2 macOS. It validates packaged assets and smoke-tests each wheel;
+  publishing is a separate, explicitly enabled workflow step.
 
 CI describes configured coverage, not certification or a guarantee that every
 optional toolchain is installed on every contributor machine.
@@ -942,6 +960,12 @@ python -m pip install build
 python -m build
 ```
 
+The wheel built locally targets the current Python and platform. Release wheels
+for supported platforms and Python versions are built by
+`.github/workflows/publish-pypi.yml`. Building from source requires the native
+compiler toolchain described above; installing a matching published wheel does
+not.
+
 To inspect package contents, validate that the expected Python modules,
 compiled extension, and any prepared static assets are included. Static
 debugger assets must be generated before a release build if that distribution
@@ -958,8 +982,8 @@ they are already implemented:
 - Extend native/reference differential tests whenever VM features change.
 - Decide and document whether opcode encoding remains backwards compatible
   when the instruction set grows.
-- Test installable artifacts and the packaged OPT_SP UI, not only the source
-  checkout.
+- Expand installed-wheel tests to cover user-facing CLI behavior and execution,
+  in addition to the current native-extension and OPT_SP asset smoke checks.
 - Document platform/compiler combinations for the C++ extension and benchmark
   reproducibility more fully.
 - Keep the language subset and package maturity clearly stated for users.

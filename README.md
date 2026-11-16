@@ -103,14 +103,23 @@ encoded `.sp` program. It shows the instruction trace, operand and call stacks,
 globals, heap objects, and printed output. Its local Python server serves the
 interface; execution and tracing happen in the browser with Pyodide.
 
+If you installed `spacelanguage` from PyPI, its browser assets are included.
+Start the debugger directly:
+
+```bash
+spacelang-opt-sp --port 8000
+```
+
+When running from a source checkout, first prepare the assets from the
+repository root:
+
 ```bash
 python tools/build_static.py
 spacelang-opt-sp --port 8000
 ```
 
-The first command downloads the pinned Pyodide files and prepares the browser
-assets; you only need to repeat it when rebuilding those assets.
-`python tools/build_static.py --check` verifies that they are present.
+The build command downloads the pinned Pyodide files and prepares the browser
+assets. `python tools/build_static.py --check` verifies that they are present.
 
 ## Development
 
@@ -142,8 +151,9 @@ are observations, not performance guarantees.
 4. Explain the whitespace format, optimizer, automated tests, and current
    limitations.
 
-Prepare the optional browser assets before the demonstration with
-`python tools/build_static.py`.
+If using a PyPI installation, OPT_SP's browser assets are already included.
+When demonstrating from a source checkout, prepare them first with
+`python tools/build_static.py` from the repository root.
 
 ## Showcase materials
 
