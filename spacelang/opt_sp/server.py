@@ -19,7 +19,7 @@ import time
 from threading import Thread, Timer
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener, urlopen
 import webbrowser
 
 from ._locate import static_dir
@@ -393,7 +393,7 @@ def _control_request(
         headers={"Authorization": f"Bearer {token}"},
         method=method,
     )
-    with urlopen(request, timeout=timeout) as response:
+    with build_opener(ProxyHandler({})).open(request, timeout=timeout) as response:
         return json.load(response)
 
 

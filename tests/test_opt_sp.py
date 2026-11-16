@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -113,11 +114,16 @@ def test_server_background_cli_start_and_stop():
         "from spacelang.opt_sp.server import _cli; _cli()",
     ]
     state_file = _management_file(port)
+    environment = os.environ.copy()
+    environment["http_proxy"] = "http://127.0.0.1:1"
+    environment.pop("no_proxy", None)
+    environment.pop("NO_PROXY", None)
     start = subprocess.run(
         command + ["--port", str(port), "--background", "--no-browser"],
         capture_output=True,
         text=True,
         timeout=20,
+        env=environment,
     )
     try:
         assert start.returncode == 0, start.stderr
@@ -127,6 +133,7 @@ def test_server_background_cli_start_and_stop():
             capture_output=True,
             text=True,
             timeout=10,
+            env=environment,
         )
         assert stop.returncode == 0, stop.stderr
         assert f"stopped on port {port}" in stop.stdout
@@ -142,6 +149,7 @@ def test_server_background_cli_start_and_stop():
             capture_output=True,
             text=True,
             timeout=10,
+            env=environment,
         )
         state_file.unlink(missing_ok=True)
         state_file.with_suffix(".log").unlink(missing_ok=True)
