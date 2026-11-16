@@ -33,8 +33,16 @@ development notes, see [the project documentation](documentation.md).
 
 ## Try it
 
-Python 3.10 or later is required. Building the package also builds the native
-extension, so a C++17 compiler and CMake 3.18+ are required.
+Python 3.10 or later is required. PyPI provides prebuilt wheels for CPython
+3.10–3.14 on x64 Windows, x86-64 and ARM64 Linux, and Intel/Apple Silicon
+macOS. These installs do not need a local C++ toolchain:
+
+```bash
+python -m pip install spacelanguage
+```
+
+For other Python implementations or platforms, pip builds from the source
+distribution; a C++17 compiler and CMake 3.18+ are then required.
 
 ```bash
 git clone https://github.com/DwwLSM/spacelang.git

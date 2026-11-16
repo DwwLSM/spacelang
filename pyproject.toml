@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "spacelanguage"
-version = "0.1.6"
+version = "0.1.7"
 description = "SpaceLang core package"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,3 +35,6 @@ sdist.include = [
   "MANIFEST.in",
   ".github/workflows/opt-sp-smoke.yml",
 ]
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"

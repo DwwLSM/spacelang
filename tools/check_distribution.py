@@ -47,8 +47,21 @@ def main() -> int:
     parser.add_argument("archives", nargs="+", type=Path)
     args = parser.parse_args()
 
-    required = _static_files()
+    archives = []
     for path in args.archives:
+        if path.is_dir():
+            archives.extend(
+                archive
+                for archive in path.iterdir()
+                if archive.suffix == ".whl" or archive.name.endswith((".tar.gz", ".tgz"))
+            )
+        else:
+            archives.append(path)
+
+    required = _static_files()
+    if not archives:
+        parser.error("no distribution archives found")
+    for path in archives:
         present = _archive_files(path)
         missing = sorted(required - present)
         if missing:
