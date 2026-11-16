@@ -313,6 +313,15 @@ def open_browser(port: int = 8000) -> None:
     webbrowser.open(f"http://127.0.0.1:{port}/")
 
 
+class _OPTSPHTTPServer(ThreadingHTTPServer):
+    ready_file: Path | None = None
+
+    def service_actions(self) -> None:
+        if self.ready_file is not None:
+            self.ready_file.touch()
+            self.ready_file = None
+
+
 def server(
     port: int = 8000,
     host: str = "127.0.0.1",
@@ -320,6 +329,7 @@ def server(
     blocking: bool = True,
     allow_project_files: bool | None = None,
     _stop_token: str | None = None,
+    _ready_file: Path | None = None,
 ) -> tuple[ThreadingHTTPServer, str] | None:
     if _stop_token is None:
         _stop_token = secrets.token_urlsafe(32)
@@ -335,7 +345,8 @@ def server(
         project_files_enabled=allow_project_files,
         stop_token=_stop_token,
     )
-    httpd = ThreadingHTTPServer((host, port), handler)
+    httpd = _OPTSPHTTPServer((host, port), handler)
+    httpd.ready_file = _ready_file
     url = f"http://{host}:{httpd.server_address[1]}"
     if open_browser:
         Timer(0.8, webbrowser.open, args=(url + "/",)).start()
@@ -408,7 +419,12 @@ def _load_management_file(path: Path) -> str:
         raise RuntimeError(f"Could not read OPT_SP server state at {path}: {error}") from error
 
 
-def _serve_background(host: str, port: int, state_file: Path) -> None:
+def _serve_background(
+    host: str,
+    port: int,
+    state_file: Path,
+    ready_file: Path,
+) -> None:
     token = _load_management_file(state_file)
     try:
         server(
@@ -417,8 +433,10 @@ def _serve_background(host: str, port: int, state_file: Path) -> None:
             open_browser=False,
             blocking=True,
             _stop_token=token,
+            _ready_file=ready_file,
         )
     finally:
+        ready_file.unlink(missing_ok=True)
         try:
             current_state = state_file.read_text(encoding="utf-8")
         except FileNotFoundError:
@@ -455,6 +473,8 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
         json.dump({"token": token}, state)
 
     log_file = state_file.with_suffix(".log")
+    ready_file = state_file.with_suffix(".ready")
+    ready_file.unlink(missing_ok=True)
     process = None
     command = [
         sys.executable,
@@ -466,6 +486,8 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
         str(port),
         "--_background-token-file",
         str(state_file),
+        "--_background-ready-file",
+        str(ready_file),
     ]
     try:
         if os.name == "nt":
@@ -485,36 +507,19 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
                 **process_options,
             )
         startup_deadline = time.monotonic() + 15
-        last_error = None
-        while time.monotonic() < startup_deadline:
+        while not ready_file.exists() and time.monotonic() < startup_deadline:
             if process.poll() is not None:
                 raise RuntimeError(
                     f"OPT_SP failed to start. See server log: {log_file}"
                 )
-            try:
-                _control_request(
-                    host,
-                    port,
-                    "__opt_sp/status",
-                    token,
-                    "GET",
-                    timeout=min(0.25, startup_deadline - time.monotonic()),
-                )
-                break
-            except HTTPError as error:
-                raise RuntimeError(
-                    f"OPT_SP rejected its startup check with HTTP {error.code}."
-                ) from error
-            except URLError as error:
-                last_error = error
-                time.sleep(min(0.1, max(0, startup_deadline - time.monotonic())))
-        else:
+            time.sleep(0.05)
+        if not ready_file.exists():
             raise RuntimeError(
-                "OPT_SP did not start within 15 seconds"
-                f" (last status-check error: {last_error}). See server log: {log_file}"
+                f"OPT_SP did not become ready within 15 seconds. See server log: {log_file}"
             )
     except Exception:
         state_file.unlink(missing_ok=True)
+        ready_file.unlink(missing_ok=True)
         if process is not None and process.poll() is None:
             process.terminate()
             process.wait(timeout=2)
@@ -577,9 +582,17 @@ def _cli() -> None:
         help="Allow project file browsing when binding to a non-loopback host.",
     )
     parser.add_argument("--_background-token-file", help=argparse.SUPPRESS)
+    parser.add_argument("--_background-ready-file", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args._background_token_file:
-        _serve_background(args.host, args.port, Path(args._background_token_file))
+        if not args._background_ready_file:
+            parser.error("Background server readiness file is required.")
+        _serve_background(
+            args.host,
+            args.port,
+            Path(args._background_token_file),
+            Path(args._background_ready_file),
+        )
         return
     if args.stop:
         _stop_background(args.host, args.port)

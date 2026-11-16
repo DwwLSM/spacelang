@@ -153,6 +153,7 @@ def test_server_background_cli_start_and_stop():
         )
         state_file.unlink(missing_ok=True)
         state_file.with_suffix(".log").unlink(missing_ok=True)
+        state_file.with_suffix(".ready").unlink(missing_ok=True)
 
 
 def test_server_lists_and_reads_project_files(tmp_path, monkeypatch):
