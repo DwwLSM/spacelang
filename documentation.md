@@ -779,7 +779,42 @@ OPT_SP is the browser-based visual debugger. It offers input modes for:
 
 The editor can load built-in examples. The visualizer presents program text,
 call stack, operand stack, heap/object graph, printed output, and controls for
-moving through the trace.
+moving through the trace. Drag the vertical divider between the Program and
+state panels to adjust their widths, or drag the dividers between state panels
+to adjust their heights. Focused dividers can also be resized with the arrow
+keys. Long printed output can be scrolled independently. Select **Live edit**
+to edit the source beside the trace; OPT_SP automatically refreshes the
+visualization after edits. Select **Exit live edit** to return to the
+read-only program view. Live editing uses the source mode selected in the
+editor. In either editor, typing `(`, `[`, `{`, `'`, or `"` inserts the
+matching closer; typing one of these characters with text selected wraps that
+selection. Typing an existing closer skips over it, and Backspace removes an
+empty pair. Tab inserts four spaces; with lines selected, Tab indents each line
+and Shift+Tab removes up to one indentation level (four spaces or one tab).
+Shift+Tab also outdents the current line when there is no selection. Drag
+selected text with the mouse to move it
+to another position in either editor. A shadowed copy follows the pointer, and
+pausing briefly previews
+the drop position without moving the editor text until you release the mouse;
+the original text stays highlighted throughout the drag. Small pointer
+movements do not dismiss the preview; moving outside the editor hides the drag
+feedback until the pointer returns. Undo with `Ctrl+Z` (or `Cmd+Z`
+on macOS); redo with `Ctrl+Shift+Z` / `Cmd+Shift+Z` or `Ctrl+Y`. Undo and redo
+also work in Live edit.
+
+The editor lists `.py`, `.sp`, and `.spasm` files under the directory where
+the OPT_SP server was started, including files in subfolders. The first file
+in the list is loaded automatically. Hidden files and common environment or
+dependency folders, including generated Pyodide module copies, are excluded.
+Project-file access is limited to UTF-8 `.py`, `.sp`, and `.spasm` files up to
+1 MiB beneath that directory. **Download** saves the current editor contents
+to your browser's downloads. **Overwrite** replaces the currently loaded
+project file after confirmation. Files opened from your computer can also be
+overwritten after confirmation in browsers that support the File System Access
+API; otherwise, use Download to save an edited copy. In Live edit, Overwrite is
+available while editing a loaded file and writes the live editor contents to
+that source after confirmation. The overwrite action is unavailable for
+examples.
 
 ### Start the server
 
@@ -794,7 +829,16 @@ Useful options:
 ```bash
 spacelang-opt-sp --help
 spacelang-opt-sp --host 127.0.0.1 --port 8000 --no-browser
+spacelang-opt-sp --background --port 8000
+spacelang-opt-sp --stop --port 8000
 ```
+
+Stop a foreground server from either debugger page with **Stop server** or
+**Ctrl+Alt+Q** (**Cmd+Option+Q** on macOS); confirm the prompt, then close the
+tab. **Ctrl+C** in the terminal remains available. Use `--background` to
+detach the server; `--stop` shuts down the background server on the specified
+port. Background mode is limited to loopback hosts, and its log is written to
+the system temporary directory.
 
 From Python:
 
@@ -811,8 +855,17 @@ for closing the returned server when finished.
 
 The server process serves files from `spacelang/opt_sp/static`; the browser
 loads Pyodide and executes the traced Python implementation in-browser. The
-server is not a remote code execution API. Binding it to a non-loopback host
-changes network exposure and should be done intentionally.
+server is not a remote code execution API. Its project file picker is enabled
+by default only when bound to loopback. Binding to a non-loopback host changes
+network exposure; enable project file access there only if intended:
+
+```bash
+spacelang-opt-sp --host 0.0.0.0 --allow-project-files
+```
+
+The file picker exposes supported source files beneath the server's working
+directory to clients that can reach it. Avoid enabling it on an untrusted
+network.
 
 Published PyPI wheels include the prepared browser assets, so no asset build
 step is needed after a wheel installation.

@@ -101,13 +101,25 @@ This prints `42`. Assembly makes the operand stack and operations explicit;
 The OPT_SP browser debugger can visualize Python-subset source, assembly, or an
 encoded `.sp` program. It shows the instruction trace, operand and call stacks,
 globals, heap objects, and printed output. Its local Python server serves the
-interface; execution and tracing happen in the browser with Pyodide.
+interface; execution and tracing happen in the browser with Pyodide. Edited
+source can be downloaded from the editor or live visualizer. The editor also
+supports explicitly overwriting a loaded source file after confirmation.
 
 If you installed `spacelanguage` from PyPI, its browser assets are included.
 Start the debugger directly:
 
 ```bash
 spacelang-opt-sp --port 8000
+```
+
+Stop the foreground server from the debugger with **Stop server** or
+**Ctrl+Alt+Q** (**Cmd+Option+Q** on macOS); you can close the tab after it
+confirms shutdown. **Ctrl+C** in the terminal still stops it as well. To run
+the server in the background and stop it later:
+
+```bash
+spacelang-opt-sp --background --port 8000
+spacelang-opt-sp --stop --port 8000
 ```
 
 When running from a source checkout, first prepare the assets from the
