@@ -2,6 +2,12 @@ name: Publish to PyPI
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the verified artifacts to PyPI
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -101,6 +107,7 @@ jobs:
 
   publish:
     name: Publish distributions
+    if: ${{ inputs.publish }}
     needs: [build-sdist, build-wheels]
     runs-on: ubuntu-latest
     steps:
