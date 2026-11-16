@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "spacelanguage"
-version = "0.1.5"
+version = "0.1.6"
 description = "SpaceLang core package"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,6 +31,7 @@ sdist.include = [
   "CMakeLists.txt",
   "spacelang/opt_sp/static/**",
   "tools/build_static.py",
+  "tools/check_distribution.py",
   "MANIFEST.in",
   ".github/workflows/opt-sp-smoke.yml",
 ]

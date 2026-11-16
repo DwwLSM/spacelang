@@ -44,7 +44,7 @@ to explore programming-language construction. It provides:
 - An optional browser visualizer, benchmark, and introduction animation.
 
 The package metadata names the distribution `spacelanguage`, currently at
-version `0.1.5`, and the import package `spacelang`. The project requires Python
+version `0.1.6`, and the import package `spacelang`. The project requires Python
 3.10 or later. Building the native extension requires CMake 3.18 or later, a
 C++17-capable compiler, and pybind11 (provided by the package build
 configuration).
