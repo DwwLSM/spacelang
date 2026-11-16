@@ -17,6 +17,7 @@ spacelang-opt-sp = "spacelang.opt_sp.server:_cli"
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 test = ["pytest>=8"]
+animation = ["manim>=0.19,<1.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
