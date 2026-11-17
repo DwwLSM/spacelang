@@ -75,6 +75,7 @@ if (page === "editor") {
   const message = document.querySelector("#editor-message");
   const projectFileSelect = document.querySelector("#project-file-select");
   const projectFileSearch = document.querySelector("#project-file-search");
+  const projectFileSearchLabel = document.querySelector('label[for="project-file-search"]');
   const projectFileStatus = document.querySelector("#project-file-status");
   const sourceModeSelect = document.querySelector("#source-mode");
   const downloadButton = document.querySelector("#download-button");
@@ -193,9 +194,28 @@ if (page === "editor") {
   }
 
   projectFileSelect.addEventListener("change", () => {
-    if (!projectFileSelect.value) return;
+    if (!projectFileSelect.value) {
+      selectedProjectFilePath = null;
+      projectFilePath = null;
+      localFileHandle = null;
+      localFileHandleId = null;
+      localFileName = null;
+      suggestedFilename = "program";
+      editor.value = "";
+      resetUndoHistory();
+      message.replaceChildren();
+      updateOverwriteButton();
+      projectFileStatus.classList.remove("error", "empty");
+      projectFileStatus.removeAttribute("title");
+      projectFileStatus.textContent = `No file selected · ${projectFileSummary}`;
+      return;
+    }
     selectedProjectFilePath = projectFileSelect.value;
     loadProjectFile(selectedProjectFilePath);
+  });
+  projectFileSelect.addEventListener("focus", () => {
+    projectFileSearchLabel.hidden = false;
+    projectFileSearch.hidden = false;
   });
   projectFileSearch.addEventListener("input", renderProjectFileOptions);
   loadProjectFileList();
