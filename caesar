@@ -1,0 +1,66 @@
+import secrets
+
+#caeser
+def caesar(ch, shift):
+    if not ch.isalpha():
+        return ch
+
+    if ch.isupper():
+        base = ord('A')
+    else:
+        base = ord('a')
+
+    pos = ord(ch) - base
+    new_pos = (pos + shift) % 26
+    return chr(base + new_pos)
+
+def caesar_encrption(t,s):
+    result=""
+    for i in range(0,len(t),1):
+        result+=caesar(t[i],s)
+    return result
+def caesar_decrypt(t, s):
+    result = ""
+    for i in range(len(t)):
+        result += caesar(t[i], -s) #minus
+    return result
+def addsalt(t, salt):
+    result = ""
+    for i in range(len(t)):
+        salt_char = salt[i % len(salt)]
+        salt_shift = ord(salt_char.lower()) - ord('a')
+        result += caesar(t[i], salt_shift)
+    return result
+def unsalt(t, salt):
+    result = ""
+    for i in range(len(t)):
+        salt_char = salt[i % len(salt)]
+        salt_shift = ord(salt_char.lower()) - ord('a')
+        result += caesar(t[i], -salt_shift)#minus
+    return result
+def addwithpevious(t):
+    result = t[0]
+    for i in range(1,len(t),1):
+        last_char = t[i-1]
+        prev_shift = ord(last_char.lower()) - ord('a')
+        result += caesar(t[i], prev_shift)
+    return result
+def unchain(t):
+    if not t:
+        return ""
+    result = t[0]  
+    for i in range(1, len(t)):
+        last_decrypted = result[i-1]#so start to decrpt with the first character which is never encrpted
+        prev_shift = ord(last_decrypted.lower()) - ord('a')
+        result += caesar(t[i], -prev_shift)  # 
+    return result
+
+def make_random_key(length):
+    key = ""
+    for i in range(length):
+        rand_num = secrets.randbelow(26)
+        rand_letter = chr(ord('a') + rand_num)
+        key+=rand_letter
+    return key
+t="any_piece_of_text"  
+addsalt(t,make_random_key(10))
