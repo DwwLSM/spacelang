@@ -21,8 +21,8 @@ body {
   height: 100vh;
 }
 
-button, select, textarea { font: inherit; }
-button, select {
+button, select, textarea, input { font: inherit; }
+button, select, input[type="search"] {
   color: var(--text);
   background:
     linear-gradient(135deg, #ffffff08, transparent 62%),
@@ -237,6 +237,11 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
 #project-file-select {
   grid-column: 2;
   flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+#project-file-search {
+  grid-column: 2;
   min-width: 0;
   width: 100%;
 }

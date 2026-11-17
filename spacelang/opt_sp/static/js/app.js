@@ -74,6 +74,7 @@ if (page === "editor") {
   const editor = document.querySelector("#code-editor");
   const message = document.querySelector("#editor-message");
   const projectFileSelect = document.querySelector("#project-file-select");
+  const projectFileSearch = document.querySelector("#project-file-search");
   const projectFileStatus = document.querySelector("#project-file-status");
   const sourceModeSelect = document.querySelector("#source-mode");
   const downloadButton = document.querySelector("#download-button");
@@ -81,6 +82,9 @@ if (page === "editor") {
   const localFileInput = document.querySelector("#sp-file");
   const openLocalFileButton = document.querySelector("#open-local-file");
   let projectFileSummary = "";
+  let projectFiles = [];
+  let selectedProjectFilePath = null;
+  let isProjectFileLoading = false;
   let suggestedFilename = "program";
   let projectFilePath = null;
   let localFileHandle = null;
@@ -102,7 +106,32 @@ if (page === "editor") {
     }
   }
 
+  function renderProjectFileOptions() {
+    const query = projectFileSearch.value.trim().toLowerCase();
+    const files = projectFiles.filter((file) => file.path.toLowerCase().includes(query));
+    projectFileSelect.replaceChildren();
+
+    if (!files.length) {
+      projectFileSelect.add(new Option(
+        query ? "No matching files" : "No supported source files found",
+        "",
+      ));
+      projectFileSelect.disabled = true;
+      return;
+    }
+
+    projectFileSelect.add(new Option("Select a file…", ""));
+    for (const file of files) {
+      projectFileSelect.add(new Option(file.path, file.path));
+    }
+    projectFileSelect.value = files.some((file) => file.path === selectedProjectFilePath)
+      ? selectedProjectFilePath
+      : "";
+    projectFileSelect.disabled = isProjectFileLoading;
+  }
+
   async function loadProjectFile(path) {
+    isProjectFileLoading = true;
     projectFileSelect.disabled = true;
     projectFilePath = null;
     localFileHandle = null;
@@ -129,7 +158,8 @@ if (page === "editor") {
       projectFileStatus.textContent = "Could not load file.";
       projectFileStatus.title = error.message || String(error);
     } finally {
-      projectFileSelect.disabled = false;
+      isProjectFileLoading = false;
+      renderProjectFileOptions();
     }
   }
 
@@ -138,25 +168,24 @@ if (page === "editor") {
       const response = await fetch("api/files");
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
-      projectFileSelect.replaceChildren();
-      if (!result.files.length) {
-        projectFileSelect.add(new Option("No supported source files found", ""));
-        projectFileSelect.disabled = true;
+      projectFiles = result.files;
+      if (!projectFiles.length) {
+        renderProjectFileOptions();
+        projectFileSearch.disabled = true;
         projectFileStatus.classList.add("empty");
         projectFileStatus.textContent = `No .py, .sp, or .spasm files in ${result.root}.`;
         return;
       }
 
-      for (const file of result.files) {
-        projectFileSelect.add(new Option(file.path, file.path));
-      }
-
-      projectFileSummary = `${result.files.length} source file${result.files.length === 1 ? "" : "s"} in ${result.root}`;
-      projectFileSelect.value = result.files[0].path;
-      await loadProjectFile(result.files[0].path);
+      projectFileSearch.disabled = false;
+      projectFileSummary = `${projectFiles.length} source file${projectFiles.length === 1 ? "" : "s"} in ${result.root}`;
+      selectedProjectFilePath = projectFiles[0].path;
+      renderProjectFileOptions();
+      await loadProjectFile(selectedProjectFilePath);
     } catch (error) {
       projectFileSelect.replaceChildren(new Option("Project files unavailable", ""));
       projectFileSelect.disabled = true;
+      projectFileSearch.disabled = true;
       projectFileStatus.classList.add("error");
       projectFileStatus.textContent = "Project file list unavailable.";
       projectFileStatus.title = error.message || String(error);
@@ -164,8 +193,11 @@ if (page === "editor") {
   }
 
   projectFileSelect.addEventListener("change", () => {
-    if (projectFileSelect.value) loadProjectFile(projectFileSelect.value);
+    if (!projectFileSelect.value) return;
+    selectedProjectFilePath = projectFileSelect.value;
+    loadProjectFile(selectedProjectFilePath);
   });
+  projectFileSearch.addEventListener("input", renderProjectFileOptions);
   loadProjectFileList();
 
   openLocalFileButton.addEventListener("click", async () => {
