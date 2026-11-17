@@ -61,6 +61,27 @@ def test_server_returns_url():
         httpd.server_close()
 
 
+def test_server_assets_use_paths_relative_to_app():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/") as response:
+            page = response.read().decode("utf-8")
+        assert 'href="css/opt-sp.css"' in page
+        assert 'src="js/app.js"' in page
+
+        with urlopen(f"{url}/js/app.js") as response:
+            app = response.read().decode("utf-8")
+        assert 'fetch("api/files")' in app
+        assert 'fetch("__opt_sp/stop"' in app
+
+        with urlopen(f"{url}/js/spacelang-kernel.js") as response:
+            kernel = response.read().decode("utf-8")
+        assert 'fetch("spacelang_pkg/manifest.json")' in kernel
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_server_does_not_require_reverse_dns(monkeypatch):
     monkeypatch.setattr(
         socket,

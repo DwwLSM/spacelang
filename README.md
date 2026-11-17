@@ -132,6 +132,9 @@ spacelang-opt-sp --port 8000
 
 The build command downloads the pinned Pyodide files and prepares the browser
 assets. `python tools/build_static.py --check` verifies that they are present.
+The interface assets and requests use paths relative to the app, so the
+debugger also works when served behind a URL path prefix (such as a hosted
+VS Code port proxy).
 
 ## Development
 

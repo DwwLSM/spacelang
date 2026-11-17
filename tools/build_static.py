@@ -49,6 +49,12 @@ def _check() -> int:
     if not manifest:
         print("SpaceLang module manifest is empty.")
         return 1
+    if any(
+        not isinstance(entry.get("url"), str) or entry["url"].startswith("/")
+        for entry in manifest
+    ):
+        print("SpaceLang module manifest URLs must be relative.")
+        return 1
     for entry in manifest:
         module = STATIC / "spacelang_pkg" / entry["path"]
         if not module.is_file() or module.stat().st_size == 0:
@@ -96,7 +102,7 @@ def _copy_spacelang_modules() -> None:
     manifest = []
     for source in sorted(PACKAGE.glob("*.py")):
         if source.name == "__init__.py":
-            contents = "__version__ = '0.1.8'\n"
+            contents = "__version__ = '0.1.9'\n"
         else:
             contents = source.read_text(encoding="utf-8")
         target = destination / source.name
@@ -104,7 +110,7 @@ def _copy_spacelang_modules() -> None:
         relative = f"spacelang/{source.name}"
         manifest.append({
             "path": relative,
-            "url": f"/spacelang_pkg/{relative}",
+            "url": f"spacelang_pkg/{relative}",
         })
     manifest_path = STATIC / "spacelang_pkg" / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

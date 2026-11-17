@@ -4,11 +4,13 @@ let py;
 let initialization;
 
 async function initialize() {
-  py = await loadPyodide({ indexURL: "/pyodide/" });
+  py = await loadPyodide({
+    indexURL: new URL("../pyodide/", import.meta.url).href,
+  });
   if (!py.FS.analyzePath("/spacelang_pkg").exists) {
     py.FS.mkdirTree("/spacelang_pkg");
   }
-  const response = await fetch("/spacelang_pkg/manifest.json");
+  const response = await fetch("spacelang_pkg/manifest.json");
   if (!response.ok) {
     throw new Error(`Could not load SpaceLang module manifest (${response.status}).`);
   }

@@ -22,7 +22,7 @@ if (stopServerButton) {
     }
     stopServerButton.disabled = true;
     try {
-      const response = await fetch("/__opt_sp/stop", {
+      const response = await fetch("__opt_sp/stop", {
         method: "POST",
         headers: { Authorization: `Bearer ${controlToken}` },
       });
@@ -113,7 +113,7 @@ if (page === "editor") {
     projectFileStatus.removeAttribute("title");
     projectFileStatus.textContent = `Loading ${path}…`;
     try {
-      const response = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+      const response = await fetch(`api/file?path=${encodeURIComponent(path)}`);
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
       editor.value = result.code;
@@ -135,7 +135,7 @@ if (page === "editor") {
 
   async function loadProjectFileList() {
     try {
-      const response = await fetch("/api/files");
+      const response = await fetch("api/files");
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
       projectFileSelect.replaceChildren();
@@ -265,7 +265,7 @@ if (page === "editor") {
     overwriteButton.disabled = true;
     try {
       if (projectFilePath) {
-        const response = await fetch("/api/file", {
+        const response = await fetch("api/file", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: projectFilePath, code: editor.value }),
@@ -322,7 +322,7 @@ if (page === "editor") {
         localFileHandleId,
         localFileName,
       }));
-      location.href = "/visualize.html";
+      location.href = "visualize.html";
     } catch (error) {
       const details = error.message || String(error);
       showError(message, `Pyodide failed to load. Run tools/build_static.py.\n${details}`);
@@ -336,7 +336,7 @@ if (page === "editor") {
   const root = document.querySelector("#viz-root");
   const raw = sessionStorage.getItem("opt-sp-trace");
   if (!raw) {
-    location.href = "/";
+    location.href = "./";
   } else {
     let payload;
     try {
@@ -372,7 +372,7 @@ if (page === "editor") {
         overwriteButton.disabled = true;
         try {
           if (visualizer.projectFilePath) {
-            const response = await fetch("/api/file", {
+            const response = await fetch("api/file", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
