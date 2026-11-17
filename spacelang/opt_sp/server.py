@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+from socketserver import TCPServer
 import stat
 import subprocess
 import sys
@@ -309,6 +310,13 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         })
 
 
+class _OPTSPHTTPServer(ThreadingHTTPServer):
+    def server_bind(self) -> None:
+        TCPServer.server_bind(self)
+        self.server_name = self.server_address[0]
+        self.server_port = self.server_address[1]
+
+
 def open_browser(port: int = 8000) -> None:
     webbrowser.open(f"http://127.0.0.1:{port}/")
 
@@ -336,14 +344,13 @@ def server(
         project_files_enabled=allow_project_files,
         stop_token=_stop_token,
     )
-    httpd = ThreadingHTTPServer((host, port), handler)
+    httpd = _OPTSPHTTPServer((host, port), handler)
     if _ready_file is not None:
         try:
             _ready_file.touch()
         except OSError:
             httpd.server_close()
             raise
-        print(f"OPT_SP listener bound at {host}:{httpd.server_address[1]}.", flush=True)
     url = f"http://{host}:{httpd.server_address[1]}"
     if open_browser:
         Timer(0.8, webbrowser.open, args=(url + "/",)).start()
@@ -422,9 +429,7 @@ def _serve_background(
     state_file: Path,
     ready_file: Path,
 ) -> None:
-    print("OPT_SP background worker started.", flush=True)
     token = _load_management_file(state_file)
-    print("OPT_SP background worker loaded its state.", flush=True)
     try:
         server(
             port=port,
@@ -477,9 +482,7 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
     process = None
     command = [
         sys.executable,
-        "-u",
         "-c",
-        "print('OPT_SP background process launched.', flush=True); "
         "from spacelang.opt_sp.server import _cli; _cli()",
         "--host",
         host,

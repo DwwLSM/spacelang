@@ -61,6 +61,17 @@ def test_server_returns_url():
         httpd.server_close()
 
 
+def test_server_does_not_require_reverse_dns(monkeypatch):
+    monkeypatch.setattr(
+        socket,
+        "getfqdn",
+        lambda host: pytest.fail("OPT_SP server binding must not perform reverse DNS"),
+    )
+    httpd, _ = server(open_browser=False, blocking=False, port=0)
+    httpd.shutdown()
+    httpd.server_close()
+
+
 def test_server_page_can_stop_server_with_control_token():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:
