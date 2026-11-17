@@ -313,15 +313,6 @@ def open_browser(port: int = 8000) -> None:
     webbrowser.open(f"http://127.0.0.1:{port}/")
 
 
-class _OPTSPHTTPServer(ThreadingHTTPServer):
-    ready_file: Path | None = None
-
-    def service_actions(self) -> None:
-        if self.ready_file is not None:
-            self.ready_file.touch()
-            self.ready_file = None
-
-
 def server(
     port: int = 8000,
     host: str = "127.0.0.1",
@@ -345,8 +336,13 @@ def server(
         project_files_enabled=allow_project_files,
         stop_token=_stop_token,
     )
-    httpd = _OPTSPHTTPServer((host, port), handler)
-    httpd.ready_file = _ready_file
+    httpd = ThreadingHTTPServer((host, port), handler)
+    if _ready_file is not None:
+        try:
+            _ready_file.touch()
+        except OSError:
+            httpd.server_close()
+            raise
     url = f"http://{host}:{httpd.server_address[1]}"
     if open_browser:
         Timer(0.8, webbrowser.open, args=(url + "/",)).start()
