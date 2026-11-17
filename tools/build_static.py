@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import tarfile
 import tempfile
 from urllib.request import urlretrieve
@@ -30,6 +31,9 @@ def _check() -> int:
         STATIC / "visualize.html",
         STATIC / "css" / "opt-sp.css",
         STATIC / "js" / "app.js",
+        STATIC / "js" / "download.js",
+        STATIC / "js" / "editor.js",
+        STATIC / "js" / "file-handles.js",
         STATIC / "js" / "pyodide-loader.js",
         STATIC / "js" / "visualizer.js",
         STATIC / "js" / "spacelang-kernel.js",
@@ -44,6 +48,12 @@ def _check() -> int:
     manifest = json.loads((STATIC / "spacelang_pkg" / "manifest.json").read_text())
     if not manifest:
         print("SpaceLang module manifest is empty.")
+        return 1
+    if any(
+        not isinstance(entry.get("url"), str) or entry["url"].startswith("/")
+        for entry in manifest
+    ):
+        print("SpaceLang module manifest URLs must be relative.")
         return 1
     for entry in manifest:
         module = STATIC / "spacelang_pkg" / entry["path"]
@@ -86,10 +96,13 @@ def _copy_pyodide_distribution() -> None:
 def _copy_spacelang_modules() -> None:
     destination = STATIC / "spacelang_pkg" / "spacelang"
     destination.mkdir(parents=True, exist_ok=True)
+    cache = destination / "__pycache__"
+    if cache.is_dir():
+        shutil.rmtree(cache)
     manifest = []
     for source in sorted(PACKAGE.glob("*.py")):
         if source.name == "__init__.py":
-            contents = "__version__ = '0.1.5'\n"
+            contents = "__version__ = '0.1.9'\n"
         else:
             contents = source.read_text(encoding="utf-8")
         target = destination / source.name
@@ -97,7 +110,7 @@ def _copy_spacelang_modules() -> None:
         relative = f"spacelang/{source.name}"
         manifest.append({
             "path": relative,
-            "url": f"/spacelang_pkg/{relative}",
+            "url": f"spacelang_pkg/{relative}",
         })
     manifest_path = STATIC / "spacelang_pkg" / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
