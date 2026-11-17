@@ -510,8 +510,15 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
                 )
             time.sleep(0.05)
         if not ready_file.exists():
+            try:
+                log_output = log_file.read_text(encoding="utf-8").strip()
+            except OSError as error:
+                log_output = f"Could not read server log: {error}"
+            if not log_output:
+                log_output = "(server log is empty)"
             raise RuntimeError(
-                f"OPT_SP did not become ready within 15 seconds. See server log: {log_file}"
+                "OPT_SP did not become ready within 15 seconds."
+                f" See server log: {log_file}\n{log_output}"
             )
     except Exception:
         state_file.unlink(missing_ok=True)
