@@ -95,7 +95,7 @@ jobs:
 
       - name: Install and smoke-test wheel
         run: |
-          python -m pip install --no-index --find-links "${{ github.workspace }}/wheelhouse" spacelanguage==0.1.9
+          python -m pip install --no-index --find-links "${{ github.workspace }}/wheelhouse" spacelanguage==0.1.10
           python -c "import spacelang._spacelang_cpp; from spacelang.opt_sp._locate import static_dir; assert (static_dir() / 'pyodide/pyodide.js').is_file()"
         working-directory: ${{ runner.temp }}
 
