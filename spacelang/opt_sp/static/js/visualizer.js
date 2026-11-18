@@ -10,12 +10,16 @@ export class Visualizer {
     this.localFileHandleId = overwriteTarget.localFileHandleId ?? null;
     this.localFileName = overwriteTarget.localFileName ?? null;
     this.stepIndex = 0;
+    this.autoplayTimer = null;
     this.liveMode = false;
     this.liveRevision = 0;
     this.liveTimer = null;
     this.kernelPromise = null;
     this.slider = this.root.querySelector("#step-slider");
     this.label = this.root.querySelector("#step-label");
+    this.autoplayButton = this.root.querySelector("#autoplay-button");
+    this.autoplaySpeed = this.root.querySelector("#autoplay-speed");
+    this.autoplaySpeedLabel = this.root.querySelector("#autoplay-speed-label");
     this.liveToggle = this.root.querySelector("#live-edit-toggle");
     this.liveEditor = this.root.querySelector("#live-editor");
     this.liveStatus = this.root.querySelector("#live-status");
@@ -114,6 +118,10 @@ export class Visualizer {
     outputPanel.scrollTop = previousScrollTop;
     this.slider.value = String(this.stepIndex);
     this.label.textContent = `Step ${this.stepIndex + 1} / ${this.trace.length}`;
+    this.autoplayButton.disabled = this.stepIndex === this.trace.length - 1;
+    if (this.autoplayButton.disabled && this.autoplayTimer !== null) {
+      this.stopAutoplay();
+    }
     const previousError = this.root.querySelector(".trace-error");
     if (previousError) previousError.remove();
     if (step.error) {
@@ -128,9 +136,49 @@ export class Visualizer {
     this.root.querySelector('[data-step="forward"]').addEventListener("click", () => this.render(this.stepIndex + 1));
     this.root.querySelector('[data-step="last"]').addEventListener("click", () => this.render(this.trace.length - 1));
     this.slider.addEventListener("input", () => this.render(Number(this.slider.value)));
+    this.autoplayButton.addEventListener("click", () => {
+      if (this.autoplayTimer === null) this.startAutoplay();
+      else this.stopAutoplay();
+    });
+    this.autoplaySpeed.addEventListener("input", () => {
+      const seconds = Number(this.autoplaySpeed.value) / 1000;
+      this.autoplaySpeedLabel.textContent = `${seconds.toFixed(1)} s / step`;
+    });
     this.bindColumnResizer();
     this.bindPanelResizers();
     this.bindLiveEditing();
+  }
+
+  startAutoplay() {
+    if (this.stepIndex >= this.trace.length - 1) return;
+    this.autoplayButton.textContent = "⏸";
+    this.autoplayButton.setAttribute("aria-label", "Stop autoplay");
+    this.autoplayButton.title = "Stop autoplay";
+    this.autoplayButton.setAttribute("aria-pressed", "true");
+    this.scheduleAutoplayStep();
+  }
+
+  scheduleAutoplayStep() {
+    const interval = Number(this.autoplaySpeed.value);
+    this.autoplayTimer = setTimeout(() => {
+      this.autoplayTimer = null;
+      if (this.stepIndex >= this.trace.length - 1) {
+        this.stopAutoplay();
+        return;
+      }
+      this.render(this.stepIndex + 1);
+      if (this.stepIndex < this.trace.length - 1) this.scheduleAutoplayStep();
+      else this.stopAutoplay();
+    }, interval);
+  }
+
+  stopAutoplay() {
+    if (this.autoplayTimer !== null) clearTimeout(this.autoplayTimer);
+    this.autoplayTimer = null;
+    this.autoplayButton.textContent = "▶";
+    this.autoplayButton.setAttribute("aria-label", "Autoplay");
+    this.autoplayButton.title = "Autoplay";
+    this.autoplayButton.setAttribute("aria-pressed", "false");
   }
 
   bindColumnResizer() {
