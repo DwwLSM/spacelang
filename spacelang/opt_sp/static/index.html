@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="opt-sp-control-token" content="__OPT_SP_CONTROL_TOKEN__">
   <title>OPT_SP — SpaceLang Visual Debugger</title>
-  <link rel="stylesheet" href="css/opt-sp.css">
-  <script type="module" src="js/app.js"></script>
+  <link rel="stylesheet" href="css/opt-sp.css?v=5">
+  <script type="module" src="js/app.js?v=5"></script>
 </head>
 <body data-page="editor">
   <header class="app-header">
@@ -25,17 +25,11 @@ OP 1
 HALT</textarea>
       <div class="editor-controls">
         <div class="editor-toolbar">
-    <div class="project-file-picker">
-      <label for="project-file-search" hidden>Search</label>
-      <input id="project-file-search" type="search" placeholder="Filter files…" aria-label="Search project files" disabled hidden>
-      <label for="project-file-select">File</label>
-      <select id="project-file-select" aria-describedby="project-file-status">
-        <option value="">Loading…</option>
-      </select>
-      <span id="project-file-status" class="visually-hidden" role="status" aria-live="polite">Scanning files…</span>
-    </div>
+          <div class="project-file-picker">
+            <button id="open-project-file-browser" type="button" disabled>Search files</button>
+          </div>
     <div class="editor-tools">
-      <label class="toolbar-label" for="source-mode">Mode</label>
+          <label class="toolbar-label" for="source-mode">Mode</label>
             <select id="source-mode" aria-label="Source mode">
               <option value="asm">Assembly</option>
               <option value="sp">Encoded</option>
@@ -61,6 +55,19 @@ HALT</textarea>
         </details>
       </div>
       <div id="editor-message" aria-live="polite"></div>
+    </section>
+    <section id="project-file-browser" class="project-file-browser" aria-labelledby="project-file-browser-title" hidden>
+      <div class="project-file-browser-header">
+        <h2 id="project-file-browser-title">Project files</h2>
+        <button id="close-project-file-browser" type="button">Close</button>
+      </div>
+      <label for="project-file-search">Search files</label>
+      <input id="project-file-search" type="search" placeholder="Filter files…" aria-label="Search project files" disabled>
+      <label for="project-file-select">Choose a file</label>
+      <select id="project-file-select" size="14" aria-describedby="project-file-status" disabled>
+        <option value="">Loading…</option>
+      </select>
+      <span id="project-file-status" role="status" aria-live="polite">Scanning files…</span>
     </section>
   </main>
 </body>

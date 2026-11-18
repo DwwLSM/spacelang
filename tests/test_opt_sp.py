@@ -66,13 +66,19 @@ def test_server_assets_use_paths_relative_to_app():
     try:
         with urlopen(f"{url}/") as response:
             page = response.read().decode("utf-8")
-        assert 'href="css/opt-sp.css"' in page
-        assert 'src="js/app.js"' in page
+        assert 'href="css/opt-sp.css?v=5"' in page
+        assert 'src="js/app.js?v=5"' in page
+        assert 'id="open-project-file-browser"' in page
+        assert 'id="project-file-browser"' in page
+        assert 'id="close-project-file-browser"' in page
 
         with urlopen(f"{url}/js/app.js") as response:
             app = response.read().decode("utf-8")
         assert 'fetch("api/files")' in app
         assert 'fetch("__opt_sp/stop"' in app
+        assert 'openProjectFileBrowserButton.addEventListener("click"' in app
+        assert 'closeProjectFileBrowserButton.addEventListener("click"' in app
+        assert 'function setProjectFileButtonLabel(filename = "")' in app
 
         with urlopen(f"{url}/js/spacelang-kernel.js") as response:
             kernel = response.read().decode("utf-8")
