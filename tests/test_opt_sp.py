@@ -66,8 +66,9 @@ def test_server_assets_use_paths_relative_to_app():
     try:
         with urlopen(f"{url}/") as response:
             page = response.read().decode("utf-8")
-        assert 'href="css/opt-sp.css?v=5"' in page
-        assert 'src="js/app.js?v=5"' in page
+        assert 'href="css/opt-sp.css?v=6"' in page
+        assert 'src="js/app.js?v=6"' in page
+        assert 'for="open-project-file-browser">File</label>' in page
         assert 'id="open-project-file-browser"' in page
         assert 'id="project-file-browser"' in page
         assert 'id="close-project-file-browser"' in page

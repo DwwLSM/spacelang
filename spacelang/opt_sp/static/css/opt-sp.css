@@ -226,15 +226,18 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
   to { opacity: 1; }
 }
 .project-file-picker {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: .4rem;
+  gap: .35rem .5rem;
   min-width: 0;
 }
-.project-file-picker { min-width: 0; }
+.project-file-picker > label,
+.toolbar-label { color: var(--muted); }
 #open-project-file-browser {
-  min-width: 12rem;
-  max-width: min(24rem, 40vw);
+  grid-column: 2;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
   padding-right: 2.35rem;
   text-align: left;
@@ -255,7 +258,6 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
     linear-gradient(180deg, #2a3949, #202c39);
 }
 .project-file-picker button { min-width: 0; }
-.toolbar-label { color: var(--muted); }
 .project-file-browser {
   height: 100%;
   min-height: 0;
@@ -759,13 +761,14 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
 
 @media (max-width: 900px) and (min-width: 761px) {
   .editor-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .project-file-picker { grid-column: 1 / -1; }
 }
 
 @media (max-width: 760px) {
   body { height: auto; min-height: 100vh; }
   .editor-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .project-file-picker { width: 100%; }
   .editor-tools { flex-wrap: wrap; }
-  #open-project-file-browser { max-width: 100%; }
   #example-select { flex: 1; max-width: none; }
   .editor-actions button,
   .editor-actions .file-open { flex: 1; }
