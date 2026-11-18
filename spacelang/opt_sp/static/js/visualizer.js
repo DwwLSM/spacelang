@@ -399,19 +399,35 @@ export class Visualizer {
       const target = document.elementFromPoint(clientX, clientY)?.closest(".panel");
       if (!target || target === panel || target.parentElement !== container) return;
 
-      const orderedPanels = panels().filter((item) => item !== panel);
+      const currentPanels = panels();
+      const orderedPanels = currentPanels.filter((item) => item !== panel);
       const targetIndex = orderedPanels.indexOf(target);
       const targetBounds = target.getBoundingClientRect();
       const insertAfter = clientY >= targetBounds.top + targetBounds.height / 2;
       orderedPanels.splice(targetIndex + Number(insertAfter), 0, panel);
-      if (panels().some((item, index) => item !== orderedPanels[index])) {
+      if (currentPanels.some((item, index) => item !== orderedPanels[index])) {
+        const previousTops = new Map(
+          currentPanels.map((item) => [item, item.getBoundingClientRect().top]),
+        );
         placePanels(orderedPanels);
+        if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          panels().forEach((item) => {
+            if (item === panel) return;
+            const offset = previousTops.get(item) - item.getBoundingClientRect().top;
+            if (Math.abs(offset) < 1) return;
+            item.animate(
+              [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0)" }],
+              { duration: 180, easing: "cubic-bezier(.2, .75, .3, 1)" },
+            );
+          });
+        }
       }
     };
 
     const stopDragging = (event) => {
       if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
-      activeDrag.panel.classList.remove("dragging");
+      activeDrag.panel.classList.remove("drag-placeholder");
+      activeDrag.preview?.remove();
       container.classList.remove("reordering");
       if (activeDrag.moved) {
         event.preventDefault();
@@ -422,12 +438,33 @@ export class Visualizer {
 
     window.addEventListener("pointermove", (event) => {
       if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
-      if (!activeDrag.moved && Math.abs(event.clientY - activeDrag.startY) < 6) return;
+      if (!activeDrag.moved
+        && Math.hypot(event.clientX - activeDrag.startX, event.clientY - activeDrag.startY) < 6) return;
       activeDrag.moved = true;
       suppressToggle = true;
       event.preventDefault();
       container.classList.add("reordering");
-      activeDrag.panel.classList.add("dragging");
+      if (!activeDrag.preview) {
+        const bounds = activeDrag.panel.getBoundingClientRect();
+        const preview = activeDrag.panel.cloneNode(true);
+        preview.removeAttribute("id");
+        preview.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+        preview.setAttribute("aria-hidden", "true");
+        preview.inert = true;
+        preview.classList.add("drag-preview");
+        Object.assign(preview.style, {
+          left: `${bounds.left}px`,
+          top: `${bounds.top}px`,
+          width: `${bounds.width}px`,
+          height: `${bounds.height}px`,
+          margin: "0",
+        });
+        document.body.append(preview);
+        activeDrag.preview = preview;
+        activeDrag.panel.classList.add("drag-placeholder");
+      }
+      activeDrag.preview.style.left = `${event.clientX - activeDrag.grabOffsetX}px`;
+      activeDrag.preview.style.top = `${event.clientY - activeDrag.grabOffsetY}px`;
       reorderAt(activeDrag.panel, event.clientX, event.clientY);
     });
     window.addEventListener("pointerup", stopDragging);
@@ -439,10 +476,14 @@ export class Visualizer {
 
       summary.addEventListener("pointerdown", (event) => {
         if (event.button !== 0 || activeDrag) return;
+        const bounds = panel.getBoundingClientRect();
         activeDrag = {
           panel,
           pointerId: event.pointerId,
+          startX: event.clientX,
           startY: event.clientY,
+          grabOffsetX: event.clientX - bounds.left,
+          grabOffsetY: event.clientY - bounds.top,
           moved: false,
         };
       });

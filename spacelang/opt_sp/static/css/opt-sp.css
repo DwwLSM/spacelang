@@ -516,7 +516,8 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
   height: calc((100% - 1.4rem - 12px) / 4);
   min-height: 120px;
   overflow: hidden;
-  transition: border-color .16s ease, box-shadow .16s ease;
+  transition: border-color .16s ease, box-shadow .16s ease, opacity .16s ease,
+    transform .16s ease;
 }
 .state-panels .panel:not([open]) {
   flex: 0 0 max-content;
@@ -607,7 +608,19 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
 }
 .state-panels.reordering { user-select: none; }
 .state-panels.reordering summary { cursor: grabbing; }
-.state-panels .panel.dragging { opacity: .65; }
+.state-panels .panel.drag-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+}
+.panel.drag-preview {
+  position: fixed;
+  z-index: 1000;
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px #0008, 0 0 0 1px #58a6ff55;
+  opacity: .94;
+  transform: translateY(-2px) scale(1.01);
+  pointer-events: none;
+}
 .state-panels summary::-webkit-details-marker {
   display: none;
 }
@@ -636,6 +649,9 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
 .state-panels .panel[open] > summary::before {
   border-color: var(--accent);
   transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .state-panels .panel { transition: none; }
 }
 .panel-content {
   position: absolute;
