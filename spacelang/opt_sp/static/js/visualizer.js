@@ -146,6 +146,7 @@ export class Visualizer {
     });
     this.bindColumnResizer();
     this.bindPanelResizers();
+    this.bindPanelReordering();
     this.bindLiveEditing();
   }
 
@@ -305,8 +306,9 @@ export class Visualizer {
     const resizers = [...this.root.querySelectorAll(".panel-resizer")];
     const syncResizerAvailability = () => {
       resizers.forEach((handle) => {
-        const available = handle.previousElementSibling.open &&
-          handle.nextElementSibling.open;
+        const upper = handle.previousElementSibling;
+        const lower = handle.nextElementSibling;
+        const available = upper?.open && lower?.open;
         handle.classList.toggle("disabled", !available);
         handle.setAttribute("aria-disabled", String(!available));
       });
@@ -317,10 +319,7 @@ export class Visualizer {
     });
 
     resizers.forEach((handle) => {
-      const upper = handle.previousElementSibling;
-      const lower = handle.nextElementSibling;
-
-      const setUpperHeight = (height, total) => {
+      const setUpperHeight = (upper, lower, height, total) => {
         const upperHeight = Math.max(minHeight, Math.min(total - minHeight, height));
         upper.style.height = `${upperHeight}px`;
         lower.style.height = `${total - upperHeight}px`;
@@ -332,11 +331,15 @@ export class Visualizer {
       handle.addEventListener("pointerdown", (event) => {
         if (event.button !== 0 || handle.getAttribute("aria-disabled") === "true") return;
         event.preventDefault();
+        const upper = handle.previousElementSibling;
+        const lower = handle.nextElementSibling;
         const startY = event.clientY;
         const upperHeight = upper.getBoundingClientRect().height;
         const total = upperHeight + lower.getBoundingClientRect().height;
         handle.setPointerCapture(event.pointerId);
         const move = (moveEvent) => setUpperHeight(
+          upper,
+          lower,
           upperHeight + moveEvent.clientY - startY,
           total,
         );
@@ -356,11 +359,116 @@ export class Visualizer {
         if (!delta) return;
         event.preventDefault();
         event.stopPropagation();
+        const upper = handle.previousElementSibling;
+        const lower = handle.nextElementSibling;
         const upperHeight = upper.getBoundingClientRect().height;
         const total = upperHeight + lower.getBoundingClientRect().height;
-        setUpperHeight(upperHeight + delta, total);
+        setUpperHeight(upper, lower, upperHeight + delta, total);
       });
     });
     syncResizerAvailability();
+  }
+
+  bindPanelReordering() {
+    const container = this.root.querySelector(".state-panels");
+    const panels = () => [...container.querySelectorAll(":scope > .panel")];
+    const resizers = [...container.querySelectorAll(":scope > .panel-resizer")];
+    let activeDrag = null;
+    let suppressToggle = false;
+
+    const updateResizerLabels = () => {
+      resizers.forEach((handle) => {
+        const upper = handle.previousElementSibling.querySelector("summary").textContent;
+        const lower = handle.nextElementSibling.querySelector("summary").textContent;
+        handle.setAttribute("aria-label", `Resize ${upper} and ${lower} panels`);
+        const available = handle.previousElementSibling.open && handle.nextElementSibling.open;
+        handle.classList.toggle("disabled", !available);
+        handle.setAttribute("aria-disabled", String(!available));
+      });
+    };
+
+    const placePanels = (orderedPanels) => {
+      const children = orderedPanels.flatMap((panel, index) => (
+        index < resizers.length ? [panel, resizers[index]] : [panel]
+      ));
+      container.append(...children);
+      updateResizerLabels();
+    };
+
+    const reorderAt = (panel, clientX, clientY) => {
+      const target = document.elementFromPoint(clientX, clientY)?.closest(".panel");
+      if (!target || target === panel || target.parentElement !== container) return;
+
+      const orderedPanels = panels().filter((item) => item !== panel);
+      const targetIndex = orderedPanels.indexOf(target);
+      const targetBounds = target.getBoundingClientRect();
+      const insertAfter = clientY >= targetBounds.top + targetBounds.height / 2;
+      orderedPanels.splice(targetIndex + Number(insertAfter), 0, panel);
+      if (panels().some((item, index) => item !== orderedPanels[index])) {
+        placePanels(orderedPanels);
+      }
+    };
+
+    const stopDragging = (event) => {
+      if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
+      activeDrag.panel.classList.remove("dragging");
+      container.classList.remove("reordering");
+      if (activeDrag.moved) {
+        event.preventDefault();
+        setTimeout(() => { suppressToggle = false; }, 0);
+      }
+      activeDrag = null;
+    };
+
+    window.addEventListener("pointermove", (event) => {
+      if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
+      if (!activeDrag.moved && Math.abs(event.clientY - activeDrag.startY) < 6) return;
+      activeDrag.moved = true;
+      suppressToggle = true;
+      event.preventDefault();
+      container.classList.add("reordering");
+      activeDrag.panel.classList.add("dragging");
+      reorderAt(activeDrag.panel, event.clientX, event.clientY);
+    });
+    window.addEventListener("pointerup", stopDragging);
+    window.addEventListener("pointercancel", stopDragging);
+
+    container.querySelectorAll(":scope > .panel > summary").forEach((summary) => {
+      const panel = summary.parentElement;
+      summary.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
+
+      summary.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || activeDrag) return;
+        activeDrag = {
+          panel,
+          pointerId: event.pointerId,
+          startY: event.clientY,
+          moved: false,
+        };
+      });
+
+      summary.addEventListener("keydown", (event) => {
+        if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+        const orderedPanels = panels();
+        const index = orderedPanels.indexOf(panel);
+        const destination = Math.max(
+          0,
+          Math.min(orderedPanels.length - 1, index + (event.key === "ArrowUp" ? -1 : 1)),
+        );
+        if (destination === index) return;
+        event.preventDefault();
+        orderedPanels.splice(index, 1);
+        orderedPanels.splice(destination, 0, panel);
+        placePanels(orderedPanels);
+        summary.focus({ preventScroll: true });
+      });
+    });
+
+    container.addEventListener("click", (event) => {
+      if (!suppressToggle) return;
+      event.preventDefault();
+      event.stopPropagation();
+      suppressToggle = false;
+    }, true);
   }
 }
