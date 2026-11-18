@@ -74,13 +74,21 @@ if (page === "editor") {
   const editor = document.querySelector("#code-editor");
   const message = document.querySelector("#editor-message");
   const projectFileSelect = document.querySelector("#project-file-select");
+  const projectFileSearch = document.querySelector("#project-file-search");
+  const projectFileBrowser = document.querySelector("#project-file-browser");
+  const openProjectFileBrowserButton = document.querySelector("#open-project-file-browser");
+  const closeProjectFileBrowserButton = document.querySelector("#close-project-file-browser");
   const projectFileStatus = document.querySelector("#project-file-status");
+  const editorPanel = document.querySelector(".editor-panel");
   const sourceModeSelect = document.querySelector("#source-mode");
   const downloadButton = document.querySelector("#download-button");
   const overwriteButton = document.querySelector("#overwrite-button");
   const localFileInput = document.querySelector("#sp-file");
   const openLocalFileButton = document.querySelector("#open-local-file");
   let projectFileSummary = "";
+  let projectFiles = [];
+  let selectedProjectFilePath = null;
+  let isProjectFileLoading = false;
   let suggestedFilename = "program";
   let projectFilePath = null;
   let localFileHandle = null;
@@ -102,7 +110,43 @@ if (page === "editor") {
     }
   }
 
+  function setProjectFileButtonLabel(filename = "") {
+    const label = filename || "Search files";
+    openProjectFileBrowserButton.textContent = label;
+    openProjectFileBrowserButton.title = filename
+      ? `Currently open: ${filename}. Click to search project files.`
+      : "Search project files";
+    openProjectFileBrowserButton.setAttribute(
+      "aria-label",
+      filename ? `Currently open: ${filename}. Search project files` : "Search project files",
+    );
+  }
+
+  function renderProjectFileOptions() {
+    const query = projectFileSearch.value.trim().toLowerCase();
+    const files = projectFiles.filter((file) => file.path.toLowerCase().includes(query));
+    projectFileSelect.replaceChildren();
+
+    if (!files.length) {
+      const option = new Option(
+        query ? "No matching files" : "No supported source files found",
+        "",
+      );
+      option.disabled = true;
+      projectFileSelect.add(option);
+      projectFileSelect.disabled = true;
+      return;
+    }
+
+    for (const file of files) {
+      projectFileSelect.add(new Option(file.path, file.path));
+    }
+    projectFileSelect.selectedIndex = -1;
+    projectFileSelect.disabled = isProjectFileLoading;
+  }
+
   async function loadProjectFile(path) {
+    isProjectFileLoading = true;
     projectFileSelect.disabled = true;
     projectFilePath = null;
     localFileHandle = null;
@@ -121,6 +165,7 @@ if (page === "editor") {
       suggestedFilename = result.path;
       projectFilePath = result.path;
       setSourceMode(result.mode);
+      setProjectFileButtonLabel(result.path);
       updateOverwriteButton();
       message.replaceChildren();
       projectFileStatus.textContent = `Loaded ${result.path} · ${projectFileSummary}`;
@@ -129,7 +174,8 @@ if (page === "editor") {
       projectFileStatus.textContent = "Could not load file.";
       projectFileStatus.title = error.message || String(error);
     } finally {
-      projectFileSelect.disabled = false;
+      isProjectFileLoading = false;
+      renderProjectFileOptions();
     }
   }
 
@@ -138,34 +184,59 @@ if (page === "editor") {
       const response = await fetch("api/files");
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
-      projectFileSelect.replaceChildren();
-      if (!result.files.length) {
-        projectFileSelect.add(new Option("No supported source files found", ""));
-        projectFileSelect.disabled = true;
+      projectFiles = result.files;
+      if (!projectFiles.length) {
+        renderProjectFileOptions();
+        projectFileSearch.disabled = true;
+        openProjectFileBrowserButton.disabled = true;
+        setProjectFileButtonLabel();
         projectFileStatus.classList.add("empty");
         projectFileStatus.textContent = `No .py, .sp, or .spasm files in ${result.root}.`;
         return;
       }
 
-      for (const file of result.files) {
-        projectFileSelect.add(new Option(file.path, file.path));
-      }
-
-      projectFileSummary = `${result.files.length} source file${result.files.length === 1 ? "" : "s"} in ${result.root}`;
-      projectFileSelect.value = result.files[0].path;
-      await loadProjectFile(result.files[0].path);
+      projectFileSearch.disabled = false;
+      openProjectFileBrowserButton.disabled = false;
+      setProjectFileButtonLabel();
+      projectFileSummary = `${projectFiles.length} source file${projectFiles.length === 1 ? "" : "s"} in ${result.root}`;
+      selectedProjectFilePath = projectFiles[0].path;
+      renderProjectFileOptions();
+      await loadProjectFile(selectedProjectFilePath);
     } catch (error) {
       projectFileSelect.replaceChildren(new Option("Project files unavailable", ""));
       projectFileSelect.disabled = true;
+      projectFileSearch.disabled = true;
+      openProjectFileBrowserButton.disabled = true;
+      setProjectFileButtonLabel();
       projectFileStatus.classList.add("error");
       projectFileStatus.textContent = "Project file list unavailable.";
       projectFileStatus.title = error.message || String(error);
     }
   }
 
-  projectFileSelect.addEventListener("change", () => {
-    if (projectFileSelect.value) loadProjectFile(projectFileSelect.value);
+  function closeProjectFileBrowser() {
+    projectFileSearch.value = "";
+    renderProjectFileOptions();
+    projectFileBrowser.hidden = true;
+    editorPanel.hidden = false;
+    (openProjectFileBrowserButton.disabled ? editor : openProjectFileBrowserButton).focus();
+  }
+
+  openProjectFileBrowserButton.addEventListener("click", () => {
+    projectFileSearch.value = "";
+    renderProjectFileOptions();
+    projectFileBrowser.hidden = false;
+    editorPanel.hidden = true;
+    projectFileSearch.focus();
   });
+  closeProjectFileBrowserButton.addEventListener("click", closeProjectFileBrowser);
+  projectFileSelect.addEventListener("change", async () => {
+    if (!projectFileSelect.value) return;
+    selectedProjectFilePath = projectFileSelect.value;
+    await loadProjectFile(selectedProjectFilePath);
+    if (projectFilePath) closeProjectFileBrowser();
+  });
+  projectFileSearch.addEventListener("input", renderProjectFileOptions);
   loadProjectFileList();
 
   openLocalFileButton.addEventListener("click", async () => {
@@ -198,6 +269,7 @@ if (page === "editor") {
       }
       localFileName = file.name;
       suggestedFilename = file.name;
+      setProjectFileButtonLabel(file.name);
       const extension = file.name.split(".").pop().toLowerCase();
       setSourceMode(extension === "sp" ? "sp" : extension === "spasm" ? "asm" : "python");
       updateOverwriteButton();
@@ -219,6 +291,7 @@ if (page === "editor") {
       localFileHandleId = null;
       localFileName = file.name;
       suggestedFilename = file.name;
+      setProjectFileButtonLabel(file.name);
       const extension = file.name.split(".").pop().toLowerCase();
       setSourceMode(extension === "sp" ? "sp" : extension === "spasm" ? "asm" : "python");
       updateOverwriteButton();
@@ -237,6 +310,7 @@ if (page === "editor") {
       localFileHandle = null;
       localFileHandleId = null;
       localFileName = null;
+      setProjectFileButtonLabel("example.spasm");
       updateOverwriteButton();
       suggestedFilename = "example.spasm";
       setSourceMode("asm");
@@ -247,6 +321,7 @@ if (page === "editor") {
       localFileHandle = null;
       localFileHandleId = null;
       localFileName = null;
+      setProjectFileButtonLabel("example.py");
       updateOverwriteButton();
       suggestedFilename = "example.py";
       setSourceMode("python");
@@ -293,6 +368,7 @@ if (page === "editor") {
         }
         localFileHandle = handle;
         localFileName = handle.name;
+        setProjectFileButtonLabel(handle.name);
         showStatus(message, `Overwrote ${localFileName}.`);
       }
     } catch (error) {
