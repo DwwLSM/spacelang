@@ -967,3 +967,191 @@ class SpacelangIntroEnglishWithSubtitle(SpacelangIntroWithSubtitle):
 
 class SpacelangIntroEnglishWithoutSubtitle(SpacelangIntroEnglishWithSubtitle):
     show_subtitles = False
+
+
+class TribonacciVivid(Scene):
+    def construct(self):
+        self.camera.background_color = BG
+
+        title = Text(
+            "Tribonacci — Three Values Move Forward",
+            font="Noto Sans CJK SC",
+            font_size=34,
+            color=TEXT,
+        ).to_edge(UP, buff=0.45)
+
+        code_lines = (
+            "def tribonacci(n):",
+            "    if n == 0:",
+            "        return 0",
+            "    if n in (1, 2):",
+            "        return 1",
+            "",
+            "    a, b, c = 0, 1, 1",
+            "    for i in range(3, n + 1):",
+            "        a, b, c = b, c, a + b + c",
+            "    return c",
+        )
+        code = VGroup(
+            *[
+                Text(
+                    line or " ",
+                    font="DejaVu Sans Mono",
+                    font_size=19,
+                    color=TEXT,
+                )
+                for line in code_lines
+            ]
+        ).arrange(DOWN, aligned_edge=LEFT, buff=0.17)
+        code_panel = RoundedRectangle(
+            corner_radius=0.09,
+            width=6.1,
+            height=5.7,
+            fill_color=PANEL,
+            fill_opacity=1,
+            stroke_color=PANEL_EDGE,
+            stroke_width=2,
+        ).move_to(LEFT * 3.55 + DOWN * 0.15)
+        code.move_to(code_panel.get_center() + UP * 0.12)
+
+        def state_card(label, value, color, position):
+            card = RoundedRectangle(
+                corner_radius=0.12,
+                width=1.65,
+                height=1.25,
+                fill_color=color,
+                fill_opacity=0.13,
+                stroke_color=color,
+                stroke_width=3,
+            ).move_to(position)
+            name = Text(label, font="DejaVu Sans Mono", font_size=18, color=color)
+            name.move_to(card.get_center() + UP * 0.34)
+            number = Text(str(value), font="DejaVu Sans Mono", font_size=34, color=TEXT)
+            number.move_to(card.get_center() + DOWN * 0.23)
+            return VGroup(card, name, number), card
+
+        a_group, a_card = state_card("a", 0, CYAN, RIGHT * 4.7 + UP * 1.05)
+        b_group, b_card = state_card("b", 1, GOLD, RIGHT * 4.7 + DOWN * 0.65)
+        c_group, c_card = state_card("c", 1, GREEN, RIGHT * 4.7 + DOWN * 2.35)
+
+        plus_arrow = Arrow(
+            a_card.get_top(),
+            b_card.get_top(),
+            color=MUTED,
+            buff=0.12,
+        )
+
+        n_badge = RoundedRectangle(
+            corner_radius=0.08,
+            width=1.45,
+            height=0.55,
+            fill_color="#18352B",
+            fill_opacity=1,
+            stroke_color=GREEN,
+            stroke_width=2,
+        ).move_to(RIGHT * 2.15 + UP * 2.75)
+        n_text = Text("n = 15", font="DejaVu Sans Mono", font_size=18, color=GREEN)
+        n_text.move_to(n_badge)
+
+        result_badge = RoundedRectangle(
+            corner_radius=0.12,
+            width=3.1,
+            height=0.82,
+            fill_color="#10261D",
+            fill_opacity=1,
+            stroke_color=GREEN,
+            stroke_width=3,
+        ).move_to(RIGHT * 3.9 + DOWN * 3.25)
+        result_text = Text(
+            "result = 3136",
+            font="DejaVu Sans Mono",
+            font_size=24,
+            color=GREEN,
+        ).move_to(result_badge)
+        result_badge.set_opacity(0)
+        result_text.set_opacity(0)
+
+        sequence_title = Text(
+            "sequence",
+            font="DejaVu Sans Mono",
+            font_size=14,
+            color=MUTED,
+        ).move_to(RIGHT * 2.15 + UP * 2.02)
+        sequence = VGroup(
+            *[
+                Text(str(value), font="DejaVu Sans Mono", font_size=15, color=MUTED)
+                for value in (0, 1, 1)
+            ]
+        ).arrange(RIGHT, buff=0.25)
+        sequence.move_to(RIGHT * 2.15 + UP * 1.55)
+
+        self.play(FadeIn(title), run_time=0.8)
+        self.play(
+            FadeIn(code_panel),
+            Write(code),
+            FadeIn(n_badge),
+            FadeIn(n_text),
+            run_time=1.8,
+        )
+        self.play(
+            FadeIn(a_group),
+            FadeIn(b_group),
+            FadeIn(c_group),
+            FadeIn(sequence_title),
+            FadeIn(sequence),
+            run_time=1.2,
+        )
+
+        loop_line = code[7]
+        update_line = code[8]
+        return_line = code[9]
+
+        self.play(Indicate(loop_line, color=GOLD, scale_factor=1.05), run_time=0.6)
+        self.play(Indicate(update_line, color=CYAN, scale_factor=1.05), run_time=0.6)
+
+        a, b, c = 0, 1, 1
+        for index in range(3, 16):
+            new_a, new_b, new_c = b, c, a + b + c
+
+            new_a_group, _ = state_card("a", new_a, CYAN, a_card)
+            new_b_group, _ = state_card("b", new_b, GOLD, b_card)
+            new_c_group, _ = state_card("c", new_c, GREEN, c_card)
+
+            moving_sum = Text(
+                f"{a} + {b} + {c} = {new_c}",
+                font="DejaVu Sans Mono",
+                font_size=16,
+                color=GOLD,
+            ).move_to(RIGHT * 2.15 + DOWN * 0.05)
+
+            if index <= 6:
+                new_dot = Text(
+                    str(new_c),
+                    font="DejaVu Sans Mono",
+                    font_size=15,
+                    color=CYAN,
+                )
+                sequence.add(new_dot)
+                sequence.arrange(RIGHT, buff=0.25)
+                sequence.move_to(RIGHT * 2.15 + UP * 1.55)
+
+            self.play(
+                Transform(a_group, new_a_group),
+                Transform(b_group, new_b_group),
+                Transform(c_group, new_c_group),
+                FadeIn(moving_sum),
+                Indicate(update_line, color=GREEN),
+                run_time=0.48,
+            )
+            self.play(FadeOut(moving_sum), run_time=0.18)
+
+            a, b, c = new_a, new_b, new_c
+
+        self.play(Indicate(return_line, color=GREEN, scale_factor=1.08), run_time=0.7)
+        self.play(
+            FadeIn(result_badge),
+            FadeIn(result_text),
+            Flash(c_card, color=GREEN, line_length=0.35, num_lines=16),
+            run_time=1.2,
+        )
+        self.wait(2.0)
