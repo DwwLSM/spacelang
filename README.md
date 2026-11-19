@@ -27,9 +27,19 @@ showcase of compiler, runtime, packaging, testing, and developer-tool work.
 - **Tools for learning and demonstration:** a command-line interface, a
   step-by-step browser visualizer, benchmarks, tests, and an optional Manim
   introduction animation.
+- **A self-hosting experiment:** a SpaceLang virtual machine written in
+  SpaceLang, compiled to `.sp`, that can execute a compiled copy of itself — see
+  [bootstrap/](bootstrap/README.md).
+- **A native runner and compiler:** `native/spvm.cpp` executes `.sp` programs
+  with no Python at runtime, `native/compiler.exe` compiles Python source using
+  a compiler written in SpaceLang, and either can fold a program into a single
+  executable — see [native/](native/README.md).
 
 For the full architecture, language reference, instruction set, APIs, and
 development notes, see [the project documentation](documentation.md).
+
+For self-hosting, the Python-free runner, and the SpaceLang compiler, see the
+complete guide: [SELFHOSTING.md](SELFHOSTING.md).
 
 ## Try it
 
@@ -203,6 +213,8 @@ demonstration, but it should not be treated as a security boundary.
 | `csrc/`, `spacelang/vm_cpp.py` | Native C++ VM and Python wrapper |
 | `spacelang/peephole.py` | Program optimization passes |
 | `spacelang/opt_sp/`, `spacelang/vm_trace.py` | Browser debugger and trace support |
+| `bootstrap/` | Self-hosted VM (`sp` running `sp`) and its driver |
+| `native/` | Standalone Python-free runner and SpaceLang compiler for `.sp` |
 | `tests/` | Automated tests and language examples |
 | `benchmarks/` | Python-versus-C++ VM benchmark |
 | `scene.py` | Optional introduction animation |

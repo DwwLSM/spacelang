@@ -63,6 +63,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run_command = commands.add_parser("run", help="run a .sp or .spz program")
     run_command.add_argument("src", type=Path)
+    run_command.add_argument(
+        "args",
+        nargs="*",
+        help="extra arguments exposed to the program as the __argv__ global",
+    )
     run_command.add_argument("--engine", choices=("py", "cpp"), default="py")
 
     pack_command = commands.add_parser("pack", help="compress a .sp file into .spz")
@@ -106,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
             SelectedVM = VM
         vm = SelectedVM(_load_program(args.src))
         vm.globals_["__file__"] = str(args.src)
+        vm.globals_["__argv__"] = [str(args.src), *args.args]
         vm.run()
         return 0
 
