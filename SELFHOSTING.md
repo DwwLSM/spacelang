@@ -1,5 +1,10 @@
 # Self-hosting SpaceLang — the complete guide
 
+SpaceLang is a programming language whose source language is `.sp`. The `.py` form is an optional surface syntax that is lowered to `.sp`.
+
+`.sp` is the SpaceLang source language. `.py` is an optional surface syntax lowered to `.sp`.
+Supporting `.py` input does not make SpaceLang Python.
+
 This document explains the three things added on top of the original project, how
 they work, and exactly how to run them. It is written to be read top to bottom;
 afterwards you should be able to explain the whole pipeline to someone else.
@@ -35,8 +40,8 @@ The project has **one language** and now **three programs written in it**.
 | Name | What it is | Written in | Runs on |
 | --- | --- | --- | --- |
 | `spacelang` (the CLI) | The original toolchain: compiler, assembler, disassembler, Python VM | Python | CPython |
-| `sp_vm.sp` | An **interpreter** for SpaceLang bytecode | SpaceLang's Python subset (`sp_vm.py`) | CPython *or* itself |
-| `spc.sp` | A **compiler** from a small Python subset to SpaceLang bytecode | SpaceLang's Python subset (`spc.py`) | CPython *or* `spvm.exe` |
+| `sp_vm.sp` | An execution engine for `.sp` source | `.py` implementation lowered to `.sp` (`sp_vm.py`) | CPython or another `.sp` runtime |
+| `spc.sp` | A compiler artifact that reads source according to its frontend | `.py` implementation lowered to `.sp` (`spc.py`) | CPython or `spvm.exe` |
 
 Three consequences, in increasing order of impressiveness:
 
@@ -44,17 +49,15 @@ Three consequences, in increasing order of impressiveness:
    SpaceLang programs.
 2. **`sp` runs `sp` runs `sp`** — feed `sp_vm.sp` to itself and it executes a
    compiled copy of itself. This is the self-hosting demonstration.
-3. **A compiler written in `sp` compiles Python** — `compiler.exe` contains
-   `spc.sp`; it reads `program.py`, emits `program.sp`, and runs it, with no
-   Python installed.
+3. **A compiler written in `.sp` lowers optional `.py` frontend input** — `compiler.exe`
+   can contain an `.sp` compiler implementation and, where applicable, accept `.py`,
+   lower it to `.sp`, and run or emit the result with no Python installed.
 
-Important distinction, because the words are overloaded:
+Important distinction:
 
-* **Runtime self-hosting** = the *interpreter* is written in the language it
-  interprets. ✅ Done (`sp_vm.sp`).
-* **Compiler self-hosting** = the *compiler* is written in the language it
-  compiles. ✅ Done for a small input language (`spc.sp` → `compiler.exe`), ❌
-  not yet able to compile *itself* (see [§12](#12-limitations-and-roadmap)).
+* **Runtime self-hosting** = an execution engine is written in `.sp` and executes `.sp`.
+* **Compiler self-hosting** = a compiler written in `.sp` reads `.sp` source and produces
+  `.sp` or executable artifacts. Status: `AUTHOR_CONFIRMATION_REQUIRED`.
 
 Everything else — the original compiler, VM, tests, CLI — is untouched except
 for six lines in `spacelang/main.py` (see [§15](#15-merging-into-your-repository)).
@@ -84,7 +87,7 @@ for six lines in `spacelang/main.py` (see [§15](#15-merging-into-your-repositor
   depth-2 self-hosting chain                                   program.sp ──► runs
 ```
 
-Three runtimes execute `.sp` bytecode. They must agree; the test suite checks it:
+Three runtimes execute `.sp` artifacts. They must agree; the test suite checks it:
 
 | Runtime | Language | Needs Python? | Needs a compiler? |
 | --- | --- | --- | --- |
@@ -99,7 +102,7 @@ calls back into CPython, so it does not count as Python-free.
 
 ## 3. Concepts you need
 
-### 3.1 Bytecode
+### 3.1 The `.sp` instruction model
 
 SpaceLang source is compiled to a flat list of instructions over a value stack.
 Each instruction is `op, arg, arg…`, e.g. `PUSH_INT 2`, `OP 3` (multiply),
@@ -282,7 +285,7 @@ py -m spacelang.main compile-py my.py my.sp
 py -m spacelang.main run bootstrap/sp_vm.sp my.sp
 ```
 
-The source must be in the supported Python subset (`documentation.md` §Python
+The source must be in the supported `.py` frontend surface (`documentation.md` §Python
 subset reference). Closures, comprehensions, dicts, slicing, `*args`/`**kwargs`
 all work.
 
@@ -372,7 +375,7 @@ That script performs the stage-0 bootstrap and then links:
 3. g++ -O2 -std=c++17 -static -o native/compiler.exe native/compiler.cpp
 ```
 
-`compiler.exe` is 5.6 MB (2.9 MB of that is the embedded compiler bytecode).
+`compiler.exe` is 5.6 MB (2.9 MB of that is the embedded compiler `.sp` artifact).
 `spc.sp` and `spc_blob.h` are build outputs and gitignored; step 0 replaces
 Python entirely after this point.
 
@@ -383,7 +386,7 @@ native\compiler.exe native\examples\tour.py            # compile, then run
 native\compiler.exe native\examples\flow.py out.sp     # compile only
 ```
 
-With one argument the bytecode is written next to the source
+With one argument `.sp` source is written next to the source
 (`tour.py` → `tour.sp`) and then executed. With two arguments it only compiles.
 
 ### 8.3 The input language
@@ -521,11 +524,10 @@ Measured on this machine (Windows 11, CPython 3.13, MinGW g++ 8.1):
 
 Why:
 
-* The Python VM is a *Python* stack machine, so every bytecode step is dozens of
-  CPython bytecodes.
+* The Python VM is a Python implementation of the stack machine, so dispatch work has host-language overhead.
 * `spvm.cpp` keeps ints/floats unboxed and uses a `switch` dispatcher, so a step
   is a few dozen native instructions — hence ~25–34× faster.
-* `sp_vm.sp` is an interpreter written in bytecode, interpreted by another
+* `sp_vm.sp` is an execution engine written in `.sp`, interpreted by another
   interpreter: each level costs ~100×.
 
 The 2.8 MB artifact size is not a bug: every user-function call site encodes a
@@ -544,7 +546,7 @@ The 2.8 MB artifact size is not a bug: every user-function call site encodes a
 | `spc: unknown function: foo` | `compiler.exe` only knows the builtin list; user-defined functions are not in its input language | rewrite without `def` for now |
 | `spc: expected an indented block` | body not indented, or tabs used | indent with 4 spaces |
 | `compiler: … was not written` | the frontend rejected the source; the real message is the `spc:` line above it | fix the source |
-| depth-3 chain never finishes | ~100× per level | stay at depth 2 |
+| depth-3 chain never finishes | ~100× per interpreter level | stay at depth 2 |
 | `native\spvm.exe` not found | binaries are gitignored | run `native\build.ps1` |
 | `g++` is not recognized | compiler not on `PATH` | add its `bin` directory to `PATH`, or set `$env:CXX="C:\path\to\g++.exe"` |
 | pytest cannot create temp dirs | Windows ACLs on the temp root | `pytest --basetemp=<fresh dir under the repo>` |
@@ -555,122 +557,20 @@ The 2.8 MB artifact size is not a bug: every user-function call site encodes a
 
 ### What works today
 
-* `.sp` interpreter written in `.sp`, verified against the Python VM.
-* Depth-2 chain: the interpreter runs its own compiled copy.
-* Native VM: four demos + the repo quine, ~30× faster, no Python.
-* Single-file executable per program.
-* A compiler written in SpaceLang that compiles and runs a small Python subset.
+Repository evidence for runtime and native behavior is listed in the test and native sections. Completion status for new `.sp → .sp` compiler milestones must not be inferred.
 
-### What is missing
+- [ ] `.sp → .sp` compiler fixed point
+  - Input language: `.sp`
+  - Produced artifact: equivalent compiler artifact
+  - Status: `AUTHOR_CONFIRMATION_REQUIRED`
+  - Evidence/command: TODO(author)
 
-| Gap | Why | Work |
-| --- | --- | --- |
-| `compiler.exe` can't compile `spc.py` | the **input** language has no `def`/lists/dicts; `spc.py` is written *with* them | add functions, locals and frames to the input subset → then `compiler.exe spc.py` produces a new `spc.sp` → true fixed point |
-| `spvm.exe` can't run `sp_vm.sp` | no `IMPORT`, no `GET_ATTR`; `sp_vm.sp` needs `os.path.exists`, `sys.stderr`, `getattr`, `to_bytes`/`decode` | ~200 lines in `spvm.cpp`: module stubs, attribute access, a `bytes` type |
-| No exceptions in SpaceLang source | `pyfront.py` cannot emit `TRY` | frontend feature, then both VMs already support the opcodes |
-| `.sp` artifacts are huge | function ids are encoded as ~10 KB of spaces per call site | change the operand encoding (delta/varint) in `encoder.py`/`parser.py` — a format change |
-| Depth-3 bootstrapping | ~100× per interpreter level | needs a faster VM or a smaller interpreter |
+### Optional `.py` frontend roadmap
 
-### The remaining milestone, concretely
+- [ ] Complete optional `def`, list, and dict frontend syntax where needed.
+  - Input language: `.py`
+  - Produced artifact: lowered `.sp`
+  - Status: `AUTHOR_CONFIRMATION_REQUIRED`
+  - Evidence/command: TODO(author)
 
-To get the classic three-stage bootstrap:
-
-```
-stage 0  Python toolchain        : spc.py  → spc.sp
-stage 1  compiler.exe (spc.sp)   : spc.py  → spc2.sp     ← blocked: no `def` in input
-stage 2  compare spc2.sp == spc.sp                        ← the fixed point
-```
-
-Adding `def` to the input subset (parser + frames + `CALL`/`RET` emission, and
-`break`/`continue` for convenience) is the single piece of work that unlocks it.
-
----
-
-## 13. File map
-
-Everything below is **new**; nothing existing was modified except the six lines
-noted in [§15](#15-merging-into-your-repository).
-
-| Path | State | Purpose |
-| --- | --- | --- |
-| `bootstrap/sp_vm.py` | tracked | the interpreter, source of truth |
-| `bootstrap/sp_vm.sp` | tracked (2.8 MB) | compiled interpreter — or gitignore it and `build` |
-| `bootstrap/demos/*.py`, `*.sp` | tracked | four test programs |
-| `bootstrap/bootstrap.py` | tracked | build/check/run/selfhost driver |
-| `bootstrap/README.md` | tracked | short guide |
-| `native/spvm.cpp` | tracked | the native VM (2,232 lines) |
-| `native/spc.py` | tracked | the compiler (704 lines) |
-| `native/compiler.cpp` | tracked | `compiler.exe` entry point |
-| `native/embed.py`, `make_blob.py` | tracked | packaging helpers |
-| `native/build.ps1`, `build.sh`, `build_compiler.ps1` | tracked | builds |
-| `native/examples/{tour,flow}.py` | tracked | sample compiler inputs |
-| `native/README.md` | tracked | native guide |
-| `native/*.exe`, `native/spc.sp`, `native/spc_blob.h`, `native/examples/*.sp` | **gitignored** | build outputs |
-| `tests/test_selfhost.py` | tracked | 5 tests |
-| `tests/test_native.py` | tracked | 9 tests (skip when binaries are absent) |
-| `SELFHOSTING.md` | tracked | this document |
-
----
-
-## 14. Tests
-
-```powershell
-py -m pytest tests/test_selfhost.py tests/test_native.py -q
-```
-
-14 tests, ~7 s:
-
-* `test_selfhost.py` — level-1 parity on a hello program, depth-2 chain, `argv`
-  plumbing, sidecar name tables (the repo quine).
-* `test_native.py` — native runner vs reference VM on four demos + the quine,
-  single-file embed, `compiler.exe` compile+run on two examples, and rejection
-  of unsupported syntax.
-
-The native tests skip automatically when the binaries are not built, so CI stays
-green without a C++ toolchain. The rest of the original suite is untouched; run
-it as usual with `py -m pytest`.
-
----
-
-## 15. Merging into your repository
-
-### What is modified
-
-| File | Change |
-| --- | --- |
-| `spacelang/main.py` | +6 lines: `run` accepts trailing ARGs; sets `__argv__` |
-| `.gitignore` | +10 lines for build outputs |
-| `README.md` | 2 bullets, 2 table rows |
-| `SELFHOSTING.md` | new (this file) |
-
-Nothing else in `spacelang/`, `tests/`, `csrc/`, `pyproject.toml` is touched.
-The package wheel/sdist is unchanged apart from the `run` feature, because
-`bootstrap/` and `native/` are not in `wheel.packages` or `sdist.include`.
-
-### The CLI change
-
-```python
-run_command.add_argument("args", nargs="*", help="…")        # optional positionals
-…
-vm.globals_["__argv__"] = [str(args.src), *args.args]        # new global
-```
-
-Existing invocations are unaffected: `run SRC` still works, and
-`run SRC --engine cpp` still parses (the existing tests exercise exactly that
-form). `__argv__` is inert unless a program mentions it.
-
-### Recommended sequence
-
-```powershell
-py -m pytest -q                                  # your baseline
-git add spacelang/main.py README.md .gitignore SELFHOSTING.md
-git add bootstrap native tests/test_selfhost.py tests/test_native.py
-# optional: keep the 2.8 MB artifacts out of history
-git rm --cached bootstrap/sp_vm.sp bootstrap/demos/*.sp   # then add bootstrap/*.sp to .gitignore
-git commit -m "self-hosting: SpaceLang VM in SpaceLang, native runner, SpaceLang compiler"
-py -m pytest -q                                  # after
-```
-
-The only judgement calls: whether to commit the generated `.sp` artifacts
-(2.8 MB + 200 KB), and whether you accept the six-line CLI addition — if not,
-the argv plumbing can move into `bootstrap.py` instead.
+This is optional sugar completeness work. It does not block the `.sp → .sp` self-hosting path.

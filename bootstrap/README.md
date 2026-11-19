@@ -1,13 +1,19 @@
 # Bootstrapping SpaceLang (self-hosting)
 
+SpaceLang is a programming language whose source language is `.sp`. The `.py` form is an optional surface syntax that is lowered to `.sp`.
+
+`.sp` is the SpaceLang source language. `.py` is an optional surface syntax lowered to `.sp`.
+Supporting `.py` input does not make SpaceLang Python.
+
 > For the whole picture — the self-hosted VM, the Python-free runner, and the
 > SpaceLang compiler — read [../SELFHOSTING.md](../SELFHOSTING.md). This file is
 > the short version.
 
 **Goal:** use SpaceLang (`sp`) to run SpaceLang (`sp`).
 
-`bootstrap/sp_vm.py` is a complete SpaceLang virtual machine written *in* the
-SpaceLang Python subset. The ordinary toolchain compiles it once to
+`bootstrap/sp_vm.py` is an implementation of the SpaceLang VM written in a bounded
+`.py` surface syntax and lowered to `.sp`.
+The ordinary toolchain compiles it once to
 `bootstrap/sp_vm.sp`, and from then on that single `.sp` artifact can load and
 execute other `.sp` programs — **including a compiled copy of itself**. The VM
 does not call back into Python for decoding or dispatch; the only host services
@@ -133,7 +139,7 @@ each VM consumes one path and forwards the remainder.
 
 | Path | Purpose |
 | --- | --- |
-| `bootstrap/sp_vm.py` | The VM, written in the supported Python subset (source of truth) |
+| `bootstrap/sp_vm.py` | An optional `.py` frontend implementation of the VM, lowered to `.sp` |
 | `bootstrap/sp_vm.sp` | Compiled artifact — the runnable self-hosted VM (~2.7 MB) |
 | `bootstrap/demos/*.py` | Demo targets: `hello`, `fib`, `collections`, `closure` |
 | `bootstrap/demos/*.sp` | Their compiled programs |
@@ -165,3 +171,5 @@ format is honest about its own overhead; the artifact still loads in ~0.1 s.
 * **Small divergences** from the reference VM are documented in code: iterating
   a list while mutating it, `range` slices returning lists, lone surrogates and
   astral characters in string payloads.
+* **Optional `.py` frontend completeness.** Expanding the frontend is separate
+  from `.sp → .sp` compiler self-hosting.

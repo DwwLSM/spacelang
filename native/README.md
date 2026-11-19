@@ -1,5 +1,10 @@
 # A native runner: `.sp` without Python
 
+SpaceLang is a programming language whose source language is `.sp`. The `.py` form is an optional surface syntax that is lowered to `.sp`.
+
+`.sp` is the SpaceLang source language. `.py` is an optional surface syntax lowered to `.sp`.
+Supporting `.py` input does not make SpaceLang Python.
+
 > New here? Read [../SELFHOSTING.md](../SELFHOSTING.md) first: it explains the
 > whole pipeline, including the SpaceLang compiler (`compiler.exe`). This file
 > documents the native tools themselves.
@@ -40,8 +45,10 @@ one binary, so you can ship it to a machine with no toolchain and no `.sp` file.
 
 ## A compiler written in SpaceLang: `compiler.exe`
 
-`native/spc.py` is a **compiler** — tokenizer, indentation-aware parser, code
-generator and bytecode encoder — written in the SpaceLang subset. Like the
+`native/spc.py` implements a compiler with tokenizer, indentation-aware parser,
+code generator, and `.sp` producer. It is written in a bounded `.py` surface
+syntax and lowered to `.sp`.
+Like the
 self-hosted VM, it is compiled into `.sp` and then runs without Python:
 
 ```
@@ -128,13 +135,11 @@ Python and calls back into it for globals, cells, closures and builtins.
 - Dictionaries use insertion-ordered linear lookup (fine for program-sized
   dicts, not for large tables).
 
-## Why not compile `.sp` to machine code?
+## Executing `.sp` in native form
 
-`.sp` is a bytecode format, so "compiling it to an exe" means *linking an
-interpreter with the program*, which is what `embed.py` does. True machine-code
-translation would need a code generator per opcode plus a native object model —
-a much larger project than the runner above, and the win over 11 ms for a 20k
-loop is small.
+The VM executes `.sp` source artifacts. `embed.py` creates a single executable
+by linking the native VM and program artifact together. Direct machine-code
+translation is a separate implementation choice.
 
 ## Layout
 
@@ -143,7 +148,7 @@ loop is small.
 | `spvm.cpp` | The VM: decoder, value model, executor, builtins, methods, file I/O |
 | `spvm.exe` | Built artifact (2.7 MB, static) |
 | `spc.py` | The compiler, written in the SpaceLang subset |
-| `spc.sp` | That compiler, compiled to bytecode (build output, gitignored) |
+| `spc.sp` | Compiled `.sp` artifact for the compiler (build output, gitignored) |
 | `compiler.cpp` | `compiler.exe` entry point: embedded `spc.sp` + VM |
 | `build.ps1`, `build.sh` | Build the runner |
 | `build_compiler.ps1` | Build `compiler.exe` (stage 0 + blob + link) |
