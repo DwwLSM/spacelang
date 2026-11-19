@@ -1,35 +1,41 @@
 # SpaceLang
 
+SpaceLang is a programming language whose source language is `.sp`. The `.py` form is an optional surface syntax that is lowered to `.sp`.
+
+`.sp` is the SpaceLang source language. `.py` is an optional surface syntax lowered to `.sp`.
+Supporting `.py` input does not make SpaceLang Python.
+
 **A small programming-language toolkit built as a university course project.**
 
-SpaceLang explores how source code becomes executable instructions. It includes
-a Python-subset compiler, a readable stack-machine assembly, a whitespace-only
-program format, a reference virtual machine, an experimental C++ engine, and a
-browser-based visual debugger. It is both a working Python package and a
-showcase of compiler, runtime, packaging, testing, and developer-tool work.
+SpaceLang explores compiler, assembly, runtime, packaging, testing, and developer-tool work. `.sp` is source; `.py` is only an optional frontend.
 
-> **Project status:** Experimental and actively developed. SpaceLang is an
-> educational language implementation, not a replacement for Python. The
-> compiler accepts a documented subset of Python syntax; unsupported syntax
-> raises an error.
+## Project status
+
+Experimental and actively developed. This project does not claim completion beyond repository evidence. Optional `.py` frontend completeness is separate from the language and `.sp → .sp` self-hosting path.
+
+## C++ analogy
+
+| Stage | C++ | SpaceLang |
+|---|---|---|
+| Write source | `.cpp` | **`.sp`** (language proper) |
+| Optional surface syntax | — | **`.py`** (lowered to `.sp`) |
+| Compile | `C++.exe` | **`compiler.exe`** (reads `.sp` → produces `.sp` / executable artifacts) |
+| Execute | OS / linker | **VM (`spvm.exe` / `sp_vm`)** |
 
 ## What you can explore
 
-- **A compiler pipeline:** Python-subset source or SpaceLang assembly becomes
-  an intermediate program, which can be optimized, encoded, inspected, and run.
-- **A custom language format:** `.sp` programs encode integer tokens as runs
-  of spaces terminated by newlines. `.spz` is their gzip-compressed form.
-- **Two VM implementations:** a Python reference engine and an experimental
-  C++17 engine built with pybind11.
-- **Language features:** functions and closures, loops, collections,
-  comprehensions, argument binding, imports, and more—within a clearly bounded
-  subset.
-- **Tools for learning and demonstration:** a command-line interface, a
-  step-by-step browser visualizer, benchmarks, tests, and an optional Manim
-  introduction animation.
+- **The `.sp` source path:** native `.sp` source, assembly tooling, and `.sp` artifacts.
+- **Optional `.py` lowering:** a convenience frontend that lowers supported `.py` syntax to `.sp`.
+- **Compiler and VM roles:** `compiler.exe` / `spc` compiles `.sp`; `spvm.exe` / `sp_vm` executes `.sp`.
+- **Tools:** a Python reference VM, an experimental C++ engine, optimizer, CLI, tests, and browser visualizer.
+- **Native tools:** [native/](native/README.md) for native execution and compiler work.
+- **Self-hosting:** the runtime and compiler guide in [SELFHOSTING.md](SELFHOSTING.md).
 
 For the full architecture, language reference, instruction set, APIs, and
 development notes, see [the project documentation](documentation.md).
+
+For self-hosting, the Python-free runner, and the SpaceLang compiler, see the
+complete guide: [SELFHOSTING.md](SELFHOSTING.md).
 
 ## Try it
 
@@ -50,7 +56,11 @@ cd spacelang
 python -m pip install -e ".[dev]"
 ```
 
-### Compile and run Python-subset source
+## Optional `.py` frontend
+
+`.py` is optional sugar. The frontend lowers `.py` source to `.sp`; after lowering, the program follows the same path as native `.sp` source.
+
+### Optional `.py` frontend example
 
 Create `hello.py`:
 
@@ -98,8 +108,9 @@ This prints `42`. Assembly makes the operand stack and operations explicit;
 
 ## See a program execute
 
-The OPT_SP browser debugger can visualize Python-subset source, assembly, or an
-encoded `.sp` program. It shows the instruction trace, operand and call stacks,
+The OPT_SP browser debugger can visualize optional `.py` frontend source, assembly, or a
+`.sp` source artifact.
+It shows the instruction trace, operand and call stacks,
 globals, heap objects, and printed output. Its local Python server serves the
 interface; execution and tracing happen in the browser with Pyodide. Edited
 source can be downloaded from the editor or live visualizer. The editor also
@@ -159,12 +170,10 @@ are observations, not performance guarantees.
 
 ## A short presentation walkthrough
 
-1. Compile a small Python-subset example and inspect its assembly with
-   `spacelang disasm`.
-2. Run it in the reference VM and, optionally, the experimental C++ VM.
-3. Open OPT_SP to step through the stacks and program state.
-4. Explain the whitespace format, optimizer, automated tests, and current
-   limitations.
+1. Use a native `.sp` program or inspect a repository `.sp` example.
+2. Optionally demonstrate lowering a supported `.py` source file to `.sp`.
+3. Run the `.sp` artifact in the reference VM or native VM.
+4. Explain the compiler, optimizer, runtime, tests, and current status without conflating `.py` frontend completeness with the `.sp` language.
 
 If using a PyPI installation, OPT_SP's browser assets are already included.
 When demonstrating from a source checkout, prepare them first with
@@ -184,26 +193,40 @@ Other scene variants are listed in [the documentation](documentation.md#project-
 
 ## Scope and safety
 
-SpaceLang is a learning and experimentation project. The Python frontend does
-not implement all of Python; consult the [supported-language reference](documentation.md#python-subset-reference)
-for implemented syntax and known limitations. The VMs expose capabilities
-such as file access and selected operating-system functions, so do not run
-untrusted programs with them. OPT_SP's browser execution is useful for
-demonstration, but it should not be treated as a security boundary.
+SpaceLang is a learning and experimentation project. The optional `.py` frontend has bounded syntax and is not full Python; consult [documentation.md](documentation.md) for the implemented frontend surface.
+
+The VMs expose capabilities such as file access and selected operating-system functions, so do not run untrusted programs with them. Optional `.py` frontend completeness is not the boundary of the `.sp` language or a blocker for `.sp → .sp` compiler self-hosting.
 
 ## Project map
 
 | Path | Purpose |
 | --- | --- |
-| `spacelang/pyfront.py` | Python-subset parser/compiler |
-| `spacelang/ir.py` | Instruction set and program representation |
+| `spacelang/pyfront.py` | Optional `.py` frontend lowering to `.sp` |
+| `spacelang/ir.py` | Internal compiler structures and instruction definitions |
 | `spacelang/asm.py`, `disasm.py` | Human-readable assembly tools |
-| `spacelang/encoder.py`, `lexer.py`, `parser.py` | SpaceLang file encoding and parsing |
-| `spacelang/vm_py.py` | Reference virtual machine |
-| `csrc/`, `spacelang/vm_cpp.py` | Native C++ VM and Python wrapper |
-| `spacelang/peephole.py` | Program optimization passes |
-| `spacelang/opt_sp/`, `spacelang/vm_trace.py` | Browser debugger and trace support |
+| `spacelang/encoder.py`, `lexer.py`, `parser.py` | SpaceLang artifact parsing and encoding |
+| `spacelang/vm_py.py` | Reference VM |
+| `csrc/`, `spacelang/vm_cpp.py` | C++ VM and Python wrapper |
+| `bootstrap/` | Runtime self-hosting experiments |
+| `native/` | Native runner and compiler tools |
 | `tests/` | Automated tests and language examples |
-| `benchmarks/` | Python-versus-C++ VM benchmark |
-| `scene.py` | Optional introduction animation |
 | [`documentation.md`](documentation.md) | Detailed project and technical reference |
+
+## Pipeline
+
+```
+                         ┌─────────────────────────────┐
+   .sp source  ─────────►│                             │
+   (language proper)     │        compiler.exe         │────► .sp / executable artifacts
+                         │  native .sp frontend        │
+   .py source  ─lower───►│  optional .py frontend      │
+   (optional sugar)      └─────────────────────────────┘
+                                      │
+                                      ▼
+                            VM / runtime executes .sp
+```
+
+## Minimal `.sp` example
+
+A real repository example is [`bootstrap/demos/hello.sp`](bootstrap/demos/hello.sp).
+The VM/runtime executes this `.sp` artifact after the compiler/toolchain produces or supplies it.

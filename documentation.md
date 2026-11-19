@@ -1,5 +1,17 @@
 # SpaceLang Project Documentation
 
+SpaceLang is a language implementation centered on `.sp` source. `.py` support is
+an optional frontend that lowers `.py` syntax to `.sp`. The toolchain provides:
+
+- A compiler that reads `.sp` source and produces `.sp` or executable artifacts.
+- A bounded optional `.py` frontend.
+- A human-readable assembly syntax.
+- VM/runtime implementations that execute `.sp` artifacts.
+- A peephole optimizer and tools to inspect, encode, compress, and run programs.
+
+`.sp` is the SpaceLang source language. `.py` is an optional surface syntax lowered to `.sp`.
+Supporting `.py` input does not make SpaceLang Python.
+
 > **Audience:** students, instructors, contributors, and anyone evaluating the
 > package. This guide describes the checked-in implementation and current
 > behavior; it is not a promise of full Python compatibility.
@@ -12,7 +24,7 @@
 4. [Compiler and execution pipeline](#compiler-and-execution-pipeline)
 5. [Python-subset reference](#python-subset-reference)
 6. [Assembly language](#assembly-language)
-7. [Intermediate representation](#intermediate-representation)
+7. [Internal compiler representation](#internal-compiler-representation)
 8. [Instruction set reference](#instruction-set-reference)
 9. [SpaceLang file format](#spacelang-file-format)
 10. [Optimization](#optimization)
@@ -34,10 +46,9 @@ SpaceLang is a Python package and experimental language implementation created
 to explore programming-language construction. It provides:
 
 - A compiler for a deliberately limited subset of Python.
-- A compact intermediate representation (IR) and stack-based instruction set.
-- A human-readable assembly syntax.
-- A whitespace-only encoded program format (`.sp`) and gzip container (`.spz`).
-- A Python virtual machine used as a readable reference implementation.
+- A compact instruction model and stack-based instruction set.
+- A `.sp` source representation with whitespace-token serialization; `.spz` is a gzip container.
+- A Python reference VM used to execute `.sp` artifacts.
 - An experimental native C++17 virtual machine exposed through pybind11.
 - A peephole optimizer and tooling to inspect, encode, compress, run, and
   self-copy programs.
@@ -76,8 +87,7 @@ multiple layers that are often taught separately:
 
 - **A Python reference engine comes first.** The Python VM makes semantics and
   instruction behavior easier to inspect while the C++ implementation evolves.
-- **The bytecode has a readable assembly view.** This makes it possible to
-  discuss compiler output without reading whitespace runs.
+- **The `.sp` representation has a readable assembly view.** Assembly makes instruction structure easier to inspect; it is not a replacement or alternative definition of `.sp` source.
 - **The encoded file uses only spaces and newlines as token delimiters.** It
   demonstrates a custom serialization scheme, not an attempt to execute
   whitespace one character at a time.
@@ -86,6 +96,10 @@ multiple layers that are often taught separately:
 - **The browser debugger uses Pyodide.** The local Python server supplies its
   static page and assets; program tracing is performed by Python running in the
   browser.
+- **`.sp` is source.** The whitespace token format is one representation of `.sp`, not the definition of the language.
+- **The `.py` frontend is optional sugar.** It lowers supported syntax to `.sp` and does not define the language identity.
+- **The Python VM is a readable reference implementation.** It is not the compiler or the language core.
+- **Assembly is a human-readable view.** It is not the `.sp` source language.
 
 ## Quick start
 
@@ -196,64 +210,19 @@ demonstrations and experiments.
 
 ## Compiler and execution pipeline
 
-The main data path for Python-subset source is:
-
-```text
-Python source
-    │
-    ▼
-Python ast.parse
-    │
-    ▼
-pyfront.compile_py ─────► Program (IR)
-                               │
-                    optional optimizer
-                               │
-                               ▼
-                     encoder.encode
-                               │
-                               ▼
-                 whitespace-only .sp file
-                               │
-                      lexer.tokenize
-                               │
-                       parser.parse
-                               │
-                     ┌─────────┴──────────┐
-                     ▼                    ▼
-               Python VM             C++ VM
-               (reference)         (experimental)
+```
+                         ┌─────────────────────────────┐
+   .sp source  ─────────►│                             │
+   (language proper)     │        compiler.exe         │────► .sp / executable artifacts
+                         │  native .sp frontend        │
+   .py source  ─lower───►│  optional .py frontend      │
+   (optional sugar)      └─────────────────────────────┘
+                                      │
+                                      ▼
+                            VM / runtime executes .sp
 ```
 
-The assembler offers an alternate input path: assembly text becomes the same
-`Program` representation. The disassembler moves in the reverse direction from
-`Program` to readable instruction text. The `.spz` container wraps encoded
-`.sp` bytes in gzip; it does not change the instruction set.
-
-### Principal source modules
-
-| Module | Responsibility |
-| --- | --- |
-| `spacelang/pyfront.py` | Converts supported Python AST nodes into SpaceLang IR. |
-| `spacelang/ir.py` | Defines the `OP` enumeration, `Instr`, and `Program`. |
-| `spacelang/peephole.py` | Performs constant folding, unreachable-code removal, constant pooling, and optional integer source compression. |
-| `spacelang/asm.py` | Parses assembly mnemonics, operands, labels, and name directives. |
-| `spacelang/disasm.py` | Formats instructions as assembly text. |
-| `spacelang/encoder.py` | Encodes instructions as whitespace-delimited integer tokens. |
-| `spacelang/lexer.py` | Counts spaces before each newline to produce tokens. |
-| `spacelang/parser.py` | Reconstructs instructions and embedded name tables from tokens. |
-| `spacelang/decoder.py` | Convenience wrapper that decodes whitespace source to a `Program`. |
-| `spacelang/vm_py.py` | Reference VM, call frames, runtime values, and execution semantics. |
-| `spacelang/vm_cpp.py` | Python wrapper around the compiled `_spacelang_cpp` module. |
-| `csrc/` | C++ VM, value conversion, IR handling, and pybind11 binding. |
-| `spacelang/vm_trace.py` | Captures per-instruction snapshots for visualization. |
-| `spacelang/web_bridge.py` | Selects assembly, Python-subset, or encoded input and returns trace results. |
-| `spacelang/opt_sp/` | Static browser UI and local HTTP server for OPT_SP. |
-| `spacelang/quine.py` | Generates self-copying Python or SpaceLang files. |
-| `spacelang/compress.py` | Packs and unpacks byte streams and files using gzip. |
-| `spacelang/modules.py`, `builtins_py.py` | Builtins and the fixed module import table. |
-| `spacelang/names.py` | Name-to-ID and ID-to-name table. |
-| `spacelang/errors.py` | Project exception hierarchy with source line and instruction context. |
+`compiler.exe` is a compiler, not a VM or interpreter. `spvm.exe` and `sp_vm` are the VM/runtime implementations that execute `.sp`.
 
 ## Python-subset reference
 
@@ -351,7 +320,7 @@ refer to the program name table. The precise accepted forms and argument
 validation are implemented by `spacelang/asm.py`; use `assemble()` or the CLI
 instead of assuming that Python syntax can be pasted into assembly.
 
-## Intermediate representation
+## Internal compiler representation
 
 The IR is intentionally small:
 
@@ -388,7 +357,7 @@ name and label concepts are resolved before serialization.
 This table describes the instruction IDs in `spacelang/ir.py`. Stack effects
 are described from the perspective of the Python VM. `name_id` refers to an
 entry in the `Program` name table; `target` is an instruction index. For exact
-runtime behavior, particularly for hand-written bytecode, the VM source remains
+runtime behavior, particularly for hand-written `.sp`, the VM source remains
 authoritative.
 
 | ID | Mnemonic | Arguments | Summary |
@@ -681,8 +650,8 @@ and `log`; `random` includes `random` and `randint`; `os` includes `system`;
 
 **This is not a sandbox.** Programs can call `open`, `input`, `os.system`,
 `sys.exit`, and functions or methods available on Python objects. The native
-VM also interoperates with Python objects. Do not execute untrusted source or
-bytecode. OPT_SP's browser-side execution is for visualization and should not
+VM also interoperates with Python objects. Do not execute untrusted `.sp` source or
+`.py` frontend input. OPT_SP's browser-side execution is for visualization and should not
 be relied on as a security boundary.
 
 ## Command-line reference
@@ -1052,9 +1021,10 @@ native VM where relevant.
 | Term | Meaning in this project |
 | --- | --- |
 | **AST** | Python abstract syntax tree parsed from source by the standard library. |
-| **Bytecode** | SpaceLang instruction sequence executed by a VM. |
+| **Instruction sequence** | Stack-machine instructions executed by a VM. |
 | **Closure** | Function value that retains references to captured local cells. |
-| **IR** | Intermediate representation: `Program` plus its instructions and metadata. |
+| **IR** | Internal compiler representation: `Program` plus instructions and metadata. |
+| **SpaceLang source** | `.sp` source / the language's source representation. |
 | **Instruction pointer (`ip`)** | Index of the instruction currently being executed. |
 | **Name table** | Mapping between source identifiers and numeric operands. |
 | **Operand stack** | Runtime stack holding intermediate values and call operands. |

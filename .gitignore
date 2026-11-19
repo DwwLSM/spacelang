@@ -9,3 +9,13 @@ dist/
 spacelang/opt_sp/static/pyodide/
 spacelang/opt_sp/static/spacelang_pkg/
 /media/
+
+# native runner artifacts (build them with native/build.ps1)
+native/*.exe
+native/*.embed.cpp
+native/spvm
+
+# native compiler artifacts (build with native/build_compiler.ps1)
+native/spc.sp
+native/spc_blob.h
+native/examples/*.sp
