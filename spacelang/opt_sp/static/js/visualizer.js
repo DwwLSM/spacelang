@@ -142,7 +142,7 @@ export class Visualizer {
     });
     this.autoplaySpeed.addEventListener("input", () => {
       const seconds = Number(this.autoplaySpeed.value) / 1000;
-      this.autoplaySpeedLabel.textContent = `${seconds.toFixed(1)} s / step`;
+      this.autoplaySpeedLabel.textContent = `${Number(seconds.toFixed(2))} s / step`;
     });
     this.bindColumnResizer();
     this.bindPanelResizers();

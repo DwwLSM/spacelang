@@ -68,10 +68,16 @@ def test_server_assets_use_paths_relative_to_app():
             page = response.read().decode("utf-8")
         assert 'href="css/opt-sp.css?v=6"' in page
         assert 'src="js/app.js?v=6"' in page
+        assert 'id="autoplay-speed" type="range" min="50" max="1500" step="50"' in page
+        assert '>1 s / step</output>' in page
         assert 'for="open-project-file-browser">File</label>' in page
         assert 'id="open-project-file-browser"' in page
         assert 'id="project-file-browser"' in page
         assert 'id="close-project-file-browser"' in page
+
+        with urlopen(f"{url}/js/visualizer.js") as response:
+            visualizer = response.read().decode("utf-8")
+        assert 'Number(seconds.toFixed(2))} s / step' in visualizer
 
         with urlopen(f"{url}/js/app.js") as response:
             app = response.read().decode("utf-8")
