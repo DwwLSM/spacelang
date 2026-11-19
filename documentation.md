@@ -1021,7 +1021,7 @@ native VM where relevant.
 | Term | Meaning in this project |
 | --- | --- |
 | **AST** | Python abstract syntax tree parsed from source by the standard library. |
-| **Bytecode** | SpaceLang instruction sequence executed by a VM. |
+| **Instruction sequence** | Stack-machine instructions executed by a VM. |
 | **Closure** | Function value that retains references to captured local cells. |
 | **IR** | Internal compiler representation: `Program` plus instructions and metadata. |
 | **SpaceLang source** | `.sp` source / the language's source representation. |
@@ -1033,4 +1033,3 @@ native VM where relevant.
 | **`.spasm`** | Human-readable mnemonic assembly source. |
 | **`.spz`** | Gzip-compressed `.sp` file. |
 | **OPT_SP** | Browser-based SpaceLang instruction visualizer/debugger. |
-| **Instruction sequence** | Stack-machine instructions executed by a VM. |
