@@ -30,6 +30,12 @@ Experimental and actively developed. This project does not claim completion beyo
 - **Tools:** a Python reference VM, an experimental C++ engine, optimizer, CLI, tests, and browser visualizer.
 - **Native tools:** [native/](native/README.md) for native execution and compiler work.
 - **Self-hosting:** the runtime and compiler guide in [SELFHOSTING.md](SELFHOSTING.md).
+- **The `.sp` format:** integer tokens are encoded as runs of spaces terminated
+  by newlines; `.spz` is the gzip-compressed form.
+- **Language features:** functions and closures, loops, collections,
+  comprehensions, argument binding, and imports within a bounded subset.
+- **Presentation tools:** the browser visualizer and optional Manim and Remotion
+  introduction videos.
 
 For the full architecture, language reference, instruction set, APIs, and
 development notes, see [the project documentation](documentation.md).
@@ -190,6 +196,19 @@ manim -ql scene.py SpacelangIntroEnglishWithSubtitle
 ```
 
 Other scene variants are listed in [the documentation](documentation.md#project-presentation-and-animation).
+
+The separate [`remotion/`](remotion/) project provides English and Chinese
+project videos without changing the existing Manim scenes:
+
+```bash
+cd remotion
+npm ci
+npm run dev
+npm run render
+```
+
+See [the Remotion project guide](remotion/README.md) for requirements, subtitle
+files, and rendering details.
 
 ## Scope and safety
 
