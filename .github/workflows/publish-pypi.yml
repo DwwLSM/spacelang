@@ -1,0 +1,150 @@
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the verified artifacts to PyPI
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build and test dependencies
+        run: python -m pip install --upgrade pip build pytest twine
+
+      - name: Build OPT_SP static assets
+        run: |
+          python tools/build_static.py
+          python tools/build_static.py --check
+
+      - name: Install package and test dependencies
+        run: python -m pip install -e .
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build source distribution
+        run: python -m build --sdist
+
+      - name: Validate source distribution
+        run: |
+          python tools/check_distribution.py dist
+          python -m twine check dist/*.tar.gz
+
+      - name: Upload source distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-distribution
+          path: dist/*.tar.gz
+
+  build-wheels:
+    name: Build wheels (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            archs: x86_64
+          - runner: ubuntu-24.04-arm
+            archs: aarch64
+          - runner: windows-latest
+            archs: AMD64
+          - runner: macos-15-intel
+            archs: universal2
+    env:
+      CIBW_ARCHS: ${{ matrix.archs }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install cibuildwheel
+        run: python -m pip install --upgrade pip cibuildwheel
+
+      - name: Build OPT_SP static assets
+        run: |
+          python tools/build_static.py
+          python tools/build_static.py --check
+
+      - name: Build wheels
+        run: python -m cibuildwheel --output-dir wheelhouse
+
+      - name: Validate wheels
+        run: python tools/check_distribution.py wheelhouse
+
+      - name: Install and smoke-test wheel
+        run: |
+          python -m pip install --no-index --find-links "${{ github.workspace }}/wheelhouse" spacelanguage==0.1.10
+          python -c "import spacelang._spacelang_cpp; from spacelang.opt_sp._locate import static_dir; assert (static_dir() / 'pyodide/pyodide.js').is_file()"
+        working-directory: ${{ runner.temp }}
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.runner }}
+          path: wheelhouse/*.whl
+
+  publish:
+    name: Publish distributions
+    if: ${{ inputs.publish }}
+    needs: [build-sdist, build-wheels]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install validation tools
+        run: python -m pip install --upgrade pip twine
+
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: "wheels-*"
+          merge-multiple: true
+
+      - name: Validate all distributions
+        run: |
+          python tools/build_static.py
+          python tools/check_distribution.py dist
+          python -m twine check dist/*
+
+      - name: Check PyPI publishing secret
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "$PYPI_API_TOKEN" ]; then
+            echo "::error::Configure the PYPI_API_TOKEN repository secret before publishing."
+            exit 1
+          fi
+
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}

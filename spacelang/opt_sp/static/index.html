@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="opt-sp-control-token" content="__OPT_SP_CONTROL_TOKEN__">
+  <title>OPT_SP — SpaceLang Visual Debugger</title>
+  <link rel="stylesheet" href="css/opt-sp.css?v=6">
+  <script type="module" src="js/app.js?v=6"></script>
+</head>
+<body data-page="editor">
+  <header class="app-header">
+    <h1>OPT_SP — SpaceLang Visual Debugger</h1>
+    <div class="server-controls">
+      <span id="server-status" role="status" aria-live="polite"></span>
+      <button id="stop-server-button" type="button" title="Stop OPT_SP (Ctrl+Alt+Q; Cmd+Option+Q on macOS)">Stop server</button>
+    </div>
+  </header>
+  <main class="editor-page">
+    <section class="editor-panel">
+      <textarea id="code-editor" spellcheck="false">PUSH_INT 2
+PUSH_INT 3
+OP 1
+      CALL 0 1
+HALT</textarea>
+      <div class="editor-controls">
+        <div class="editor-toolbar">
+          <div class="project-file-picker">
+            <label for="open-project-file-browser">File</label>
+            <button id="open-project-file-browser" type="button" disabled>Search files</button>
+          </div>
+    <div class="editor-tools">
+          <label class="toolbar-label" for="source-mode">Mode</label>
+            <select id="source-mode" aria-label="Source mode">
+              <option value="asm">Assembly</option>
+              <option value="sp">Encoded</option>
+              <option value="python">Python</option>
+            </select>
+            <select id="example-select" aria-label="Load example">
+              <option value="">Examples</option>
+              <option value="asm">Assembly: add two numbers</option>
+              <option value="python">Python: sum and print</option>
+            </select>
+          </div>
+          <div class="editor-actions">
+            <button id="open-local-file" class="file-open" type="button" title="Open local file">Open</button>
+            <input id="sp-file" class="visually-hidden" type="file" accept=".py,.sp,.spasm,text/plain" tabindex="-1" aria-hidden="true">
+            <button id="download-button" type="button" aria-label="Download edited file" title="Download edited file">Download</button>
+            <button id="overwrite-button" type="button" aria-label="Overwrite source file" title="Overwrite source file" disabled>Overwrite</button>
+            <button id="run-button" type="button" aria-label="Run and visualize" title="Run and visualize">Run</button>
+          </div>
+        </div>
+        <details class="editor-help">
+          <summary>Help</summary>
+          <p>Tab inserts four spaces. With lines selected, Tab indents and Shift+Tab outdents; without a selection, Shift+Tab outdents the current line. Drag selected text to move it. Undo: Ctrl+Z / Cmd+Z; redo: Ctrl+Shift+Z / Cmd+Shift+Z or Ctrl+Y. Encoded source uses spaces and newlines. Download saves a copy; Overwrite replaces the loaded source file after confirmation.</p>
+        </details>
+      </div>
+      <div id="editor-message" aria-live="polite"></div>
+    </section>
+    <section id="project-file-browser" class="project-file-browser" aria-labelledby="project-file-browser-title" hidden>
+      <div class="project-file-browser-header">
+        <h2 id="project-file-browser-title">Project files</h2>
+        <button id="close-project-file-browser" type="button">Close</button>
+      </div>
+      <label for="project-file-search">Search files</label>
+      <input id="project-file-search" type="search" placeholder="Filter files…" aria-label="Search project files" disabled>
+      <label for="project-file-select">Choose a file</label>
+      <select id="project-file-select" size="14" aria-describedby="project-file-status" disabled>
+        <option value="">Loading…</option>
+      </select>
+      <span id="project-file-status" role="status" aria-live="polite">Scanning files…</span>
+    </section>
+  </main>
+</body>
+</html>

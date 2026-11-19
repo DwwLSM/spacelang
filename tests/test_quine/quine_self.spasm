@@ -1,0 +1,90 @@
+.name __file__=0
+.name os=1
+.name path=2
+.name __quine_source=3
+.name __quine_root=4
+.name __quine_extension=5
+.name __quine_output=6
+.name __quine_file=7
+.name __quine_data=8
+.name __quine_sidecar_source=9
+.name __quine_sidecar_output=10
+.name __quine_sidecar_data=11
+.name splitext=12
+.name read=13
+.name write=14
+.name close=15
+LOAD_GLOBAL __file__ ; line=1 spaces=9,0
+STORE_GLOBAL __quine_source ; line=3 spaces=10,3
+IMPORT 2 ; line=5 spaces=4,2
+STORE_GLOBAL os ; line=7 spaces=10,1
+LOAD_GLOBAL os ; line=9 spaces=9,1
+GET_ATTR path ; line=11 spaces=11,2
+LOAD_GLOBAL __quine_source ; line=13 spaces=9,3
+CALL_METHOD splitext os ; line=15 spaces=12,12,1
+STACK 1 ; line=18 spaces=6,1
+PUSH_INT 0 ; line=20 spaces=7,0
+INDEX 0 ; line=22 spaces=13,0
+STORE_GLOBAL __quine_root ; line=24 spaces=10,4
+PUSH_INT 1 ; line=26 spaces=7,2
+INDEX 0 ; line=28 spaces=13,0
+STORE_GLOBAL __quine_extension ; line=30 spaces=10,5
+LOAD_GLOBAL __quine_root ; line=32 spaces=9,4
+PUSH_STR ".copy" ; line=34 spaces=8,5,46,99,111,112,121
+LOAD_GLOBAL __quine_extension ; line=41 spaces=9,5
+CONCAT 3 ; line=43 spaces=16,3
+STORE_GLOBAL __quine_output ; line=45 spaces=10,6
+LOAD_GLOBAL __quine_source ; line=47 spaces=9,3
+PUSH_STR "rb" ; line=49 spaces=8,2,114,98
+CALL 10 2 ; line=53 spaces=1,10,2
+STORE_GLOBAL __quine_file ; line=56 spaces=10,7
+LOAD_GLOBAL __quine_file ; line=58 spaces=9,7
+CALL_METHOD read __file__ ; line=60 spaces=12,13,0
+STORE_GLOBAL __quine_data ; line=63 spaces=10,8
+LOAD_GLOBAL __quine_file ; line=65 spaces=9,7
+CALL_METHOD close __file__ ; line=67 spaces=12,15,0
+STACK 3 ; line=70 spaces=6,3
+LOAD_GLOBAL __quine_output ; line=72 spaces=9,6
+PUSH_STR "wb" ; line=74 spaces=8,2,119,98
+CALL 10 2 ; line=78 spaces=1,10,2
+STORE_GLOBAL __quine_file ; line=81 spaces=10,7
+LOAD_GLOBAL __quine_file ; line=83 spaces=9,7
+LOAD_GLOBAL __quine_data ; line=85 spaces=9,8
+CALL_METHOD write os ; line=87 spaces=12,14,1
+STACK 3 ; line=90 spaces=6,3
+LOAD_GLOBAL __quine_file ; line=92 spaces=9,7
+CALL_METHOD close __file__ ; line=94 spaces=12,15,0
+STACK 3 ; line=97 spaces=6,3
+LOAD_GLOBAL __quine_root ; line=99 spaces=9,4
+PUSH_STR ".names.json" ; line=101 spaces=8,11,46,110,97,109,101,115,46,106,115,111,110
+CONCAT 2 ; line=114 spaces=16,2
+STORE_GLOBAL __quine_sidecar_source ; line=116 spaces=10,9
+LOAD_GLOBAL __quine_root ; line=118 spaces=9,4
+PUSH_STR ".copy.names.json" ; line=120 spaces=8,16,46,99,111,112,121,46,110,97,109,101,115,46,106,115,111,110
+CONCAT 2 ; line=138 spaces=16,2
+STORE_GLOBAL __quine_sidecar_output ; line=140 spaces=10,10
+LOAD_GLOBAL __quine_sidecar_source ; line=142 spaces=9,9
+PUSH_STR "rb" ; line=144 spaces=8,2,114,98
+CALL 10 2 ; line=148 spaces=1,10,2
+STORE_GLOBAL __quine_file ; line=151 spaces=10,7
+LOAD_GLOBAL __quine_file ; line=153 spaces=9,7
+CALL_METHOD read __file__ ; line=155 spaces=12,13,0
+STORE_GLOBAL __quine_sidecar_data ; line=158 spaces=10,11
+LOAD_GLOBAL __quine_file ; line=160 spaces=9,7
+CALL_METHOD close __file__ ; line=162 spaces=12,15,0
+STACK 3 ; line=165 spaces=6,3
+LOAD_GLOBAL __quine_sidecar_output ; line=167 spaces=9,10
+PUSH_STR "wb" ; line=169 spaces=8,2,119,98
+CALL 10 2 ; line=173 spaces=1,10,2
+STORE_GLOBAL __quine_file ; line=176 spaces=10,7
+LOAD_GLOBAL __quine_file ; line=178 spaces=9,7
+LOAD_GLOBAL __quine_sidecar_data ; line=180 spaces=9,11
+CALL_METHOD write os ; line=182 spaces=12,14,1
+STACK 3 ; line=185 spaces=6,3
+LOAD_GLOBAL __quine_file ; line=187 spaces=9,7
+CALL_METHOD close __file__ ; line=189 spaces=12,15,0
+STACK 3 ; line=192 spaces=6,3
+PUSH_STR "Hello from the SpaceLang quine demo." ; line=194 spaces=8,36,72,101,108,108,111,32,102,114,111,109,32,116,104,101,32,83,112,97,99,101,76,97,110,103,32,113,117,105,110,101,32,100,101,109,111,46
+CALL 0 1 ; line=232 spaces=1,0,1
+STACK 3 ; line=235 spaces=6,3
+HALT ; line=237 spaces=29
