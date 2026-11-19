@@ -3,6 +3,6 @@
 from ..web_bridge import trace_program
 from .server import open_browser, server
 
-__version__ = "0.1.10"
+__version__ = "0.2.0"
 
 __all__ = ["server", "open_browser", "trace_program", "__version__"]

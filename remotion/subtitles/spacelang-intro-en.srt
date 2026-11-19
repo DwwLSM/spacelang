@@ -1,0 +1,43 @@
+1
+00:00:00,000 --> 00:00:05,400
+SpaceLang is a small experimental language that compiles a documented Python subset into executable stack machine instructions.
+
+2
+00:00:05,400 --> 00:00:10,800
+For example, print(add(a, b)) enters as readable source code and becomes ordered operations for a virtual machine.
+
+3
+00:00:10,800 --> 00:00:16,200
+LOAD_LOCAL 0 pushes argument a onto the operand stack, then LOAD_LOCAL 1 places argument b above it.
+
+4
+00:00:16,200 --> 00:00:21,600
+OP 1 removes both arguments, calculates their sum, and pushes the result back onto the stack.
+
+5
+00:00:21,600 --> 00:00:27,000
+RET returns the value, allowing print(add(a, b)) to display five when the program completes.
+
+6
+00:00:27,000 --> 00:00:32,400
+SpaceLang also saves programs in compact .sp files, representing each integer token as a count of spaces.
+
+7
+00:00:32,400 --> 00:00:37,800
+Newlines separate encoded tokens, empty lines represent zero, and assembly and optimization happen before encoding.
+
+8
+00:00:37,800 --> 00:00:43,200
+OPT_SP displays source beside compiled instructions, letting you step through traces and inspect each operation.
+
+9
+00:00:43,200 --> 00:00:48,600
+Watch the instruction pointer advance as operands enter the stack and program state updates during execution.
+
+10
+00:00:48,600 --> 00:00:54,000
+SpaceLang has two interpreters: a clear Python reference VM and an experimental C++ VM for native execution.
+
+11
+00:00:54,000 --> 00:01:00,000
+Both VMs run equivalent stack instructions; follow the source, compiled code, live stack, and matching results in this example.
