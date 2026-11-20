@@ -30,8 +30,9 @@ function rememberStyle(name) {
 }
 
 export function initHomeScene() {
-  const container = document.querySelector(".home-art");
-  if (!container) return null;
+  const container = document.querySelector("#home-scene");
+  const layout = container?.closest(".home-layout");
+  if (!container || !layout) return null;
 
   const switcher = document.querySelector("#scene-styles");
   const available = new Set(sceneStyleNames());
@@ -44,14 +45,22 @@ export function initHomeScene() {
 
   let scene;
   try {
-    scene = createAsciiScene(container, { style: initial, rows: 96 });
+    scene = createAsciiScene(container, {
+      style: initial,
+      rows: 96,
+      // The canvas spans the whole page now, so the tree is pushed left of the
+      // middle column instead of sitting under the copy; its right edge still
+      // reaches into the translucent panel, which is what makes it readable as
+      // a layer behind the page rather than a picture in a box.
+      styleOptions: { centerX: 0.27 },
+    });
   } catch (error) {
     // Keep the static artwork and say why nothing animated.
     console.error("ASCII scene failed to start:", error);
     return null;
   }
 
-  container.classList.add("home-art-live");
+  layout.classList.add("home-scene-live");
 
   const buttons = [...(switcher?.querySelectorAll("button[data-style]") ?? [])];
   const syncButtons = (active) => {

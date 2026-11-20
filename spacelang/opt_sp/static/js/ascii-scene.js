@@ -91,8 +91,12 @@ class AsciiSurface {
   }
 
   resize() {
-    const width = Math.max(1, Math.round(this.container.clientWidth));
-    const height = Math.max(1, Math.round(this.container.clientHeight));
+    // Floor, never round: a canvas half a pixel past its box adds a scrollbar,
+    // which shrinks the box, which moves the canvas, which removes the
+    // scrollbar. That loop is what the ResizeObserver reports as "loop
+    // completed with undelivered notifications".
+    const width = Math.max(1, Math.floor(this.container.clientWidth));
+    const height = Math.max(1, Math.floor(this.container.clientHeight));
     const dpr = Math.min(this.maxDevicePixelRatio, window.devicePixelRatio || 1);
     this.width = width;
     this.height = height;
@@ -232,6 +236,8 @@ export function createAsciiScene(container, options = {}) {
   let time = 0;
   let lastStamp = 0;
   let frames = 0;
+  let appliedWidth = -1;
+  let appliedHeight = -1;
 
   function applyStyle(name) {
     const factory = styles.get(name);
@@ -283,15 +289,20 @@ export function createAsciiScene(container, options = {}) {
     style?.frame?.(0, time, view);
   }
 
-  function relayout() {
+  function relayout(force = false) {
     if (destroyed) return;
+    const width = Math.floor(container.clientWidth);
+    const height = Math.floor(container.clientHeight);
+    if (!force && width === appliedWidth && height === appliedHeight) return;
+    appliedWidth = width;
+    appliedHeight = height;
     surface.resize();
     view = surface.view();
     style?.resize?.(view);
     settle();
   }
 
-  const resizeObserver = new ResizeObserver(relayout);
+  const resizeObserver = new ResizeObserver(() => relayout());
   resizeObserver.observe(container);
 
   const intersectionObserver = new IntersectionObserver((entries) => {
@@ -350,10 +361,12 @@ export function createAsciiScene(container, options = {}) {
   canvas.addEventListener("pointercancel", onPointerUp);
   canvas.addEventListener("wheel", onWheel, { passive: false });
 
-  // Web fonts can change the measured cell box after the first frame.
+  // Web fonts can change the measured cell box after the first frame, so the
+  // grid is rebuilt once they are ready even though the container size did not
+  // change.
   document.fonts?.ready
     ?.then(() => {
-      if (!destroyed) relayout();
+      if (!destroyed) relayout(true);
     })
     .catch(() => {});
 
@@ -411,6 +424,8 @@ export function createAsciiScene(container, options = {}) {
 
   surface.resize();
   view = surface.view();
+  appliedWidth = Math.floor(container.clientWidth);
+  appliedHeight = Math.floor(container.clientHeight);
   applyStyle(initialStyle ?? sceneStyleNames()[0]);
   sync();
   return handle;

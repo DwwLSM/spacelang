@@ -12,6 +12,9 @@
 <body data-page="home">
   <!-- #include partials/app-header.html -->
   <main class="home-layout">
+    <!-- Full-bleed scene layer: the columns sit on top of it, and the middle
+         column is translucent so the scene shows through. -->
+    <div class="home-scene" id="home-scene" aria-hidden="true"></div>
     <section class="home-art" aria-label="Animated ASCII scene">
       <pre class="home-art-code" id="home-art" aria-hidden="true">                 *
                 / \

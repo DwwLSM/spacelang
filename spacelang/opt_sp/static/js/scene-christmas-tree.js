@@ -514,9 +514,10 @@ function buildSprites() {
   });
 }
 
-function createChristmasTreeStyle({ reducedMotion = false, ...initialOptions } = {}) {
+function createChristmasTreeStyle({ reducedMotion = false, centerX = 0.5, ...initialOptions } = {}) {
   const data = buildScene();
   const sprites = buildSprites();
+  const originX = Math.min(0.9, Math.max(0.1, centerX));
   const options = {
     spin: true,
     lights: true,
@@ -684,7 +685,7 @@ function createChristmasTreeStyle({ reducedMotion = false, ...initialOptions } =
     litB.fill(0);
     star.seen = false;
     const cam = camDist;
-    const cxp = cols * cellW / 2;
+    const cxp = cols * cellW * originX;
     const cyp = rows * cellH * 0.555;
 
     for (let i = 0; i < N; i++) {

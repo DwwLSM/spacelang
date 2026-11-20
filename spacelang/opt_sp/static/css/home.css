@@ -1,12 +1,25 @@
 .home-layout {
+  position: relative;
   height: calc(100vh - 59px);
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.1fr) minmax(260px, 0.9fr);
   gap: 0;
 }
 
+/* The scene covers the whole main area; columns paint over it. It must clip:
+   a canvas one subpixel wider than its box would toggle a scrollbar, and the
+   resize observer would then see the box shrink and grow forever. */
+.home-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.home-scene .ascii-scene-canvas { cursor: grab; }
+
 .home-art {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -18,9 +31,9 @@
     radial-gradient(120% 90% at 50% 18%, #101a3c 0%, #0a1128 42%, #05070f 78%, #020309 100%);
 }
 
-/* The scene draws into the whole column, so the fallback text steps aside. */
-.home-art-live { padding: 0; }
-.home-art-live .home-art-code { display: none; }
+/* Once the canvas is alive the column is a window onto the scene. */
+.home-scene-live .home-art { background: transparent; }
+.home-scene-live .home-art-code { display: none; }
 
 .ascii-scene-canvas {
   position: absolute;
@@ -39,7 +52,8 @@
   display: none;
   gap: .3rem;
 }
-.home-art-live .home-scene-styles { display: flex; }
+.home-art-live .home-scene-styles,
+.home-scene-live .home-scene-styles { display: flex; }
 .home-scene-styles button {
   padding: .25rem .5rem;
   font: 600 .62rem/1.2 inherit;
@@ -67,12 +81,17 @@
 }
 
 .home-center {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 1rem;
   min-width: 0;
   padding: 2rem 2.4rem;
+  /* Half transparent: the scene keeps running behind the words. The divider is
+     the art column's border-right, so no second border here. */
+  background: rgba(14, 17, 22, .52);
 }
 
 .home-title {
@@ -131,6 +150,8 @@
 .home-link-external { color: var(--accent); }
 
 .home-chat {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -152,7 +173,15 @@
     height: auto;
     grid-template-columns: minmax(0, 1fr);
   }
+  /* Stacked layout: a full-bleed canvas would sit behind everything and eat
+     touch gestures, so the static tree stays and the scene is not shown. */
+  .home-scene { display: none; }
+  .home-scene-live .home-art {
+    background:
+      radial-gradient(120% 90% at 50% 18%, #101a3c 0%, #0a1128 42%, #05070f 78%, #020309 100%);
+  }
+  .home-scene-live .home-art-code { display: block; }
   .home-art { border-right: 0; border-bottom: 1px solid var(--border); padding: 1.4rem; }
-  .home-center { padding: 1.6rem 1.2rem; }
+  .home-center { padding: 1.6rem 1.2rem; background: transparent; border-left: 0; }
   .home-chat { border-left: 0; border-top: 1px solid var(--border); min-height: 6rem; }
 }
