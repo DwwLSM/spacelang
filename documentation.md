@@ -787,6 +787,19 @@ available while editing a loaded file and writes the live editor contents to
 that source after confirmation. The overwrite action is unavailable for
 examples.
 
+A buffer that belongs to no file — a fresh "Start a file" choice, an example,
+or text carried back from the Studio — has nothing to overwrite, so the button
+reads **New file** and the file picker reads *New Python file*, *New Assembly
+file* or *New Encoded file*. New file asks for a name, writes it under the
+project folder, and refuses to replace an existing path; the editor then treats
+the result as the loaded file. The server endpoint behind it is
+`POST /api/file/new`, loopback only like the overwrite endpoint.
+
+**Back to editor** in the Studio header carries the pane that was being edited
+back to the editor, so the text moves with you instead of being left behind.
+It arrives as an unsaved buffer: same representation, no file path, and the
+**New file** action to save it.
+
 ### Pages
 
 The server serves one page per task; the home page links all of them.

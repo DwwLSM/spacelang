@@ -81,5 +81,21 @@ HALT</textarea>
       <button id="new-file-open" type="button">Open a file…</button>
     </div>
   </dialog>
+  <dialog id="create-file-dialog" class="app-dialog" aria-labelledby="create-file-title">
+    <h2 id="create-file-title">New file</h2>
+    <p class="app-dialog-hint">
+      These contents are not part of a file yet. The new file is written to the
+      folder the server was started from; an existing file is never replaced.
+    </p>
+    <div class="app-dialog-field">
+      <label for="create-file-name">File name</label>
+      <input id="create-file-name" type="text" spellcheck="false" autocomplete="off" placeholder="program.py">
+    </div>
+    <p id="create-file-error" class="app-dialog-error" role="alert" hidden></p>
+    <div class="app-dialog-actions">
+      <button id="create-file-cancel" type="button">Cancel</button>
+      <button id="create-file-submit" type="button">Create</button>
+    </div>
+  </dialog>
 </body>
 </html>

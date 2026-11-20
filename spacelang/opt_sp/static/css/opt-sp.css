@@ -936,6 +936,23 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
   margin-top: .9rem;
 }
 
+.app-dialog-field {
+  display: grid;
+  gap: .35rem;
+}
+.app-dialog-field label {
+  color: var(--muted);
+  font-size: .72rem;
+}
+.app-dialog-field input { width: 100%; }
+.app-dialog-error {
+  margin: .55rem 0 0;
+  color: #ff9d9d;
+  font-size: .74rem;
+  line-height: 1.45;
+}
+.app-dialog-error[hidden] { display: none; }
+
 .new-file-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

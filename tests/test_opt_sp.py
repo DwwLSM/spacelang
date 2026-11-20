@@ -351,7 +351,9 @@ def test_server_assets_use_paths_relative_to_app():
         assert 'fetch("__opt_sp/stop"' in app
         assert 'openProjectFileBrowserButton.addEventListener("click"' in app
         assert 'closeProjectFileBrowserButton.addEventListener("click"' in app
-        assert 'function setProjectFileButtonLabel(filename = "")' in app
+        assert 'function updateFileButtonLabel()' in app
+        assert 'function updateFileActions()' in app
+        assert 'fetch("api/file/new"' in app
 
         with urlopen(f"{url}/js/spacelang-kernel.js") as response:
             kernel = response.read().decode("utf-8")
@@ -507,6 +509,83 @@ def test_server_lists_and_reads_project_files(tmp_path, monkeypatch):
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_server_creates_new_project_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+
+    def create(payload):
+        request = Request(
+            f"{url}/api/file/new",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        return urlopen(request)
+
+    try:
+        with create({"path": "hello.py", "code": "print('hi')\n"}) as response:
+            assert response.status == 201
+            result = json.load(response)
+        assert result == {"path": "hello.py", "message": "Project file created."}
+        assert (tmp_path / "hello.py").read_text(encoding="utf-8") == "print('hi')\n"
+
+        # Creating never replaces: the same name is a conflict, and the original
+        # contents survive.
+        with pytest.raises(HTTPError) as error:
+            create({"path": "hello.py", "code": "print('replaced')\n"})
+        assert error.value.code == 409
+        assert (tmp_path / "hello.py").read_text(encoding="utf-8") == "print('hi')\n"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+    httpd, url = server(
+        open_browser=False,
+        blocking=False,
+        port=0,
+        allow_project_files=False,
+    )
+    try:
+        request = Request(
+            f"{url}/api/file/new",
+            data=json.dumps({"path": "hello.py", "code": "x"}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(request)
+        assert error.value.code == 403
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_server_rejects_unsafe_new_file_paths(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        cases = (
+            ({"path": "notes.txt", "code": "x"}, 415),
+            ({"path": "../outside.py", "code": "x"}, 400),
+            ({"path": "missing-dir/a.py", "code": "x"}, 404),
+        )
+        for payload, expected in cases:
+            request = Request(
+                f"{url}/api/file/new",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with pytest.raises(HTTPError) as error:
+                urlopen(request)
+            assert error.value.code == expected, payload
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert not (tmp_path / "notes.txt").exists()
 
 
 def test_server_overwrites_project_file_atomically(tmp_path, monkeypatch):

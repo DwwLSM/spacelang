@@ -1,29 +1,40 @@
 /**
  * One-shot handoff between tabs.
  *
- * `sessionStorage` is per-tab, so the studio (which opens in a new tab) cannot
- * read the source the launching page was showing. The launcher writes a short
- * lived record here; the studio consumes and deletes it, so a later direct visit
- * to /studio always starts empty.
+ * `sessionStorage` is per-tab, so a page that opens another one cannot read the
+ * source it was showing. The launcher writes a short lived record here; the
+ * receiving page consumes and deletes it, so a later direct visit starts empty.
+ *
+ * Two directions share this module:
+ *   - editor -> studio, when a "Studio" link is clicked;
+ *   - studio -> editor, when "Back to editor" carries the active pane back.
+ * They use separate keys, because the two tabs can be open at the same time.
  */
 
-const KEY = "opt-sp-handout";
+const KEYS = {
+  studio: "opt-sp-handout",
+  editor: "opt-sp-editor-handout",
+};
 const TTL_MS = 5 * 60 * 1000;
 const MODES = ["python", "asm", "sp"];
 
-export function writeHandout(mode, source) {
+export function writeHandout(mode, source, target = "studio") {
+  const key = KEYS[target];
+  if (!key) return;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ mode, source, at: Date.now() }));
+    localStorage.setItem(key, JSON.stringify({ mode, source, at: Date.now() }));
   } catch {
-    // Storage may be unavailable; the studio then simply opens empty.
+    // Storage may be unavailable; the receiving page then simply opens empty.
   }
 }
 
-export function takeHandout() {
+export function takeHandout(target = "studio") {
+  const key = KEYS[target];
+  if (!key) return null;
   let raw = null;
   try {
-    raw = localStorage.getItem(KEY);
-    localStorage.removeItem(KEY);
+    raw = localStorage.getItem(key);
+    localStorage.removeItem(key);
   } catch {
     return null;
   }

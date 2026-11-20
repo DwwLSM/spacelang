@@ -5,7 +5,7 @@ import { initDocNavigation } from "./docs.js";
 import { getFileHandle, storeFileHandle } from "./file-handles.js";
 import { checkAssets } from "./health.js";
 import { takeHandout, writeHandout } from "./handout.js";
-import { SyncEngine } from "./sync-engine.js";
+import { SyncEngine, stripAnnotations } from "./sync-engine.js";
 import { initStudioLayout } from "./studio-layout.js";
 import { TracePanel } from "./trace-panel.js";
 import { describeError, refinePy } from "./llm-bridge.js";
@@ -109,28 +109,47 @@ if (page === "editor") {
   bindAutoCompletion(editor);
   bindDragMove(editor);
 
-  function updateOverwriteButton() {
-    overwriteButton.disabled = !projectFilePath &&
-      !localFileHandle &&
-      !(localFileName && typeof window.showSaveFilePicker === "function");
+  const MODE_LABELS = { python: "Python", asm: "Assembly", sp: "Encoded" };
+  const MODE_EXTENSIONS = { python: ".py", asm: ".spasm", sp: ".sp" };
+
+  /** The file this buffer belongs to, or "" while it is still unsaved. */
+  function currentFileName() {
+    return projectFilePath || localFileName || "";
+  }
+
+  /**
+   * Both file actions follow the buffer state: a buffer that belongs to a file
+   * can be overwritten, an unsaved one can only be written somewhere new. The
+   * button therefore reads "Overwrite" or "New file" instead of going dead.
+   */
+  function updateFileActions() {
+    const unsaved = !currentFileName();
+    const title = unsaved
+      ? "Write these contents to a new file in the project folder"
+      : "Overwrite the loaded source file";
+    overwriteButton.textContent = unsaved ? "New file" : "Overwrite";
+    overwriteButton.title = title;
+    overwriteButton.setAttribute("aria-label", title);
+    overwriteButton.disabled = false;
+  }
+
+  function updateFileButtonLabel() {
+    const name = currentFileName();
+    const label = name || `New ${MODE_LABELS[sourceModeSelect.value]} file`;
+    openProjectFileBrowserButton.textContent = label;
+    openProjectFileBrowserButton.title = name
+      ? `Currently open: ${name}. Click to search project files.`
+      : "This buffer is not saved yet. Click to open a project file.";
+    openProjectFileBrowserButton.setAttribute(
+      "aria-label",
+      name ? `Currently open: ${name}. Search project files` : "Open a project file",
+    );
   }
 
   function setSourceMode(mode) {
     if ([...sourceModeSelect.options].some((option) => option.value === mode)) {
       sourceModeSelect.value = mode;
     }
-  }
-
-  function setProjectFileButtonLabel(filename = "") {
-    const label = filename || "Search files";
-    openProjectFileBrowserButton.textContent = label;
-    openProjectFileBrowserButton.title = filename
-      ? `Currently open: ${filename}. Click to search project files.`
-      : "Search project files";
-    openProjectFileBrowserButton.setAttribute(
-      "aria-label",
-      filename ? `Currently open: ${filename}. Search project files` : "Search project files",
-    );
   }
 
   function selectProjectFileInList(path) {
@@ -172,7 +191,7 @@ if (page === "editor") {
     localFileHandle = null;
     localFileHandleId = null;
     localFileName = null;
-    updateOverwriteButton();
+    updateFileActions();
     projectFileStatus.classList.remove("empty", "error");
     projectFileStatus.removeAttribute("title");
     projectFileStatus.textContent = `Loading ${path}…`;
@@ -185,8 +204,8 @@ if (page === "editor") {
       suggestedFilename = result.path;
       projectFilePath = result.path;
       setSourceMode(result.mode);
-      setProjectFileButtonLabel(result.path);
-      updateOverwriteButton();
+      updateFileButtonLabel();
+      updateFileActions();
       scheduleWorkspaceSave();
       message.replaceChildren();
       projectFileStatus.textContent = `Loaded ${result.path} · ${projectFileSummary}`;
@@ -210,7 +229,7 @@ if (page === "editor") {
         renderProjectFileOptions();
         projectFileSearch.disabled = true;
         openProjectFileBrowserButton.disabled = true;
-        setProjectFileButtonLabel(projectFilePath ?? "");
+        updateFileButtonLabel();
         projectFileStatus.classList.add("empty");
         projectFileStatus.textContent = `No .py, .sp, or .spasm files in ${result.root}.`;
         return;
@@ -218,7 +237,7 @@ if (page === "editor") {
 
       projectFileSearch.disabled = false;
       openProjectFileBrowserButton.disabled = false;
-      setProjectFileButtonLabel(projectFilePath ?? "");
+      updateFileButtonLabel();
       projectFileSummary = `${projectFiles.length} source file${projectFiles.length === 1 ? "" : "s"} in ${result.root}`;
       renderProjectFileOptions();
       projectFileStatus.classList.remove("empty", "error");
@@ -232,7 +251,7 @@ if (page === "editor") {
       projectFileSelect.disabled = true;
       projectFileSearch.disabled = true;
       openProjectFileBrowserButton.disabled = true;
-      setProjectFileButtonLabel();
+      updateFileButtonLabel();
       projectFileStatus.classList.add("error");
       projectFileStatus.textContent = "Project file list unavailable.";
       projectFileStatus.title = error.message || String(error);
@@ -294,10 +313,10 @@ if (page === "editor") {
       }
       localFileName = file.name;
       suggestedFilename = file.name;
-      setProjectFileButtonLabel(file.name);
+      updateFileButtonLabel();
       const extension = file.name.split(".").pop().toLowerCase();
       setSourceMode(extension === "sp" ? "sp" : extension === "spasm" ? "asm" : "python");
-      updateOverwriteButton();
+      updateFileActions();
       scheduleWorkspaceSave();
     } catch (error) {
       if (error.name !== "AbortError") {
@@ -317,10 +336,10 @@ if (page === "editor") {
       localFileHandleId = null;
       localFileName = file.name;
       suggestedFilename = file.name;
-      setProjectFileButtonLabel(file.name);
+      updateFileButtonLabel();
       const extension = file.name.split(".").pop().toLowerCase();
       setSourceMode(extension === "sp" ? "sp" : extension === "spasm" ? "asm" : "python");
-      updateOverwriteButton();
+      updateFileActions();
       scheduleWorkspaceSave();
       message.replaceChildren();
     } catch (error) {
@@ -337,8 +356,8 @@ if (page === "editor") {
       localFileHandle = null;
       localFileHandleId = null;
       localFileName = null;
-      setProjectFileButtonLabel("example.spasm");
-      updateOverwriteButton();
+      updateFileButtonLabel();
+      updateFileActions();
       suggestedFilename = "example.spasm";
       setSourceMode("asm");
     } else if (event.target.value === "python") {
@@ -348,8 +367,8 @@ if (page === "editor") {
       localFileHandle = null;
       localFileHandleId = null;
       localFileName = null;
-      setProjectFileButtonLabel("example.py");
-      updateOverwriteButton();
+      updateFileButtonLabel();
+      updateFileActions();
       suggestedFilename = "example.py";
       setSourceMode("python");
     }
@@ -359,6 +378,12 @@ if (page === "editor") {
     downloadSource(editor.value, mode, suggestedFilename);
   });
   overwriteButton.addEventListener("click", async () => {
+    // A buffer that belongs to no file cannot be overwritten; the same button
+    // writes it to a new file instead.
+    if (!currentFileName()) {
+      openCreateFileDialog();
+      return;
+    }
     const targetName = projectFilePath || localFileName;
     if (!targetName || !window.confirm(`Overwrite "${targetName}" with the current editor contents?`)) {
       return;
@@ -395,7 +420,7 @@ if (page === "editor") {
         }
         localFileHandle = handle;
         localFileName = handle.name;
-        setProjectFileButtonLabel(handle.name);
+        updateFileButtonLabel();
         showStatus(message, `Overwrote ${localFileName}.`);
       }
     } catch (error) {
@@ -403,7 +428,7 @@ if (page === "editor") {
         showError(message, `Could not overwrite the source file: ${error.message || String(error)}`);
       }
     } finally {
-      updateOverwriteButton();
+      updateFileActions();
     }
   });
   runButton.addEventListener("click", async () => {
@@ -481,10 +506,12 @@ if (page === "editor") {
     localFileHandle = null;
     localFileHandleId = null;
     localFileName = null;
-    setProjectFileButtonLabel("");
+    updateFileButtonLabel();
     resetUndoHistory();
-    updateOverwriteButton();
+    updateFileActions();
     updateEditorPlaceholder();
+    projectFileStatus.classList.remove("empty", "error");
+    projectFileStatus.textContent = `New ${MODE_LABELS[sourceModeSelect.value]} file · not saved yet`;
     saver.flush();
     newFileDialog?.close();
     editor.focus();
@@ -504,7 +531,90 @@ if (page === "editor") {
     openProjectFileBrowserButton.click();
   });
   newFileButton?.addEventListener("click", openNewFileDialog);
-  sourceModeSelect.addEventListener("change", updateEditorPlaceholder);
+
+  // --- write the current buffer to a new project file ----------------------
+  const createFileDialog = document.querySelector("#create-file-dialog");
+  const createFileName = document.querySelector("#create-file-name");
+  const createFileError = document.querySelector("#create-file-error");
+  const createFileSubmit = document.querySelector("#create-file-submit");
+
+  function showCreateFileError(text) {
+    if (!createFileError) return;
+    createFileError.textContent = text;
+    createFileError.hidden = false;
+  }
+
+  function clearCreateFileError() {
+    if (!createFileError) return;
+    createFileError.textContent = "";
+    createFileError.hidden = true;
+  }
+
+  function openCreateFileDialog() {
+    if (!createFileDialog) return;
+    const stem = (suggestedFilename || "program").replace(/\.[^./\\]+$/, "") || "program";
+    if (createFileName) {
+      createFileName.value = `${stem}${MODE_EXTENSIONS[sourceModeSelect.value] ?? ".py"}`;
+    }
+    clearCreateFileError();
+    if (typeof createFileDialog.showModal === "function") createFileDialog.showModal();
+    else createFileDialog.setAttribute("open", "");
+    createFileName?.focus();
+    createFileName?.select();
+  }
+
+  async function createProjectFile() {
+    const name = createFileName?.value.trim() ?? "";
+    if (!name) {
+      showCreateFileError("Enter a file name.");
+      return;
+    }
+    if (createFileSubmit) createFileSubmit.disabled = true;
+    try {
+      const response = await fetch("api/file/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: name, code: editor.value }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || result.error || `Request failed (${response.status}).`);
+      }
+      projectFilePath = result.path;
+      suggestedFilename = result.path;
+      localFileHandle = null;
+      localFileHandleId = null;
+      localFileName = null;
+      updateFileButtonLabel();
+      updateFileActions();
+      updateEditorPlaceholder();
+      createFileDialog?.close();
+      scheduleWorkspaceSave();
+      await loadProjectFileList();
+      projectFileStatus.classList.remove("empty", "error");
+      projectFileStatus.textContent = `Created ${result.path}.`;
+      showStatus(message, `Created ${result.path}.`);
+    } catch (error) {
+      showCreateFileError(error.message || String(error));
+    } finally {
+      if (createFileSubmit) createFileSubmit.disabled = false;
+    }
+  }
+
+  createFileSubmit?.addEventListener("click", () => void createProjectFile());
+  createFileName?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    void createProjectFile();
+  });
+  createFileDialog?.querySelector("#create-file-cancel")?.addEventListener("click", () => {
+    createFileDialog.close();
+  });
+
+  sourceModeSelect.addEventListener("change", () => {
+    updateEditorPlaceholder();
+    updateFileButtonLabel();
+  });
   window.addEventListener("beforeunload", () => saver.flush());
 
   let bootstrapped = false;
@@ -518,9 +628,9 @@ if (page === "editor") {
     projectFilePath = restored.projectFilePath ?? null;
     localFileName = restored.localFileName ?? null;
     localFileHandleId = restored.localFileHandleId ?? null;
-    setProjectFileButtonLabel(projectFilePath ?? "");
+    updateFileButtonLabel();
     resetUndoHistory();
-    updateOverwriteButton();
+    updateFileActions();
     updateEditorPlaceholder();
     if (Number.isInteger(restored.caret)) {
       const caret = Math.min(restored.caret, editor.value.length);
@@ -533,7 +643,7 @@ if (page === "editor") {
         if (!handle || localFileHandleId !== restored.localFileHandleId) return;
         localFileHandle = handle;
         localFileName = handle.name;
-        updateOverwriteButton();
+        updateFileActions();
       }).catch(() => {});
     }
     return true;
@@ -545,8 +655,42 @@ if (page === "editor") {
    * source of truth, so the saver is paused over that window and the values are
    * asserted again a moment later.
    */
+  /**
+   * A buffer carried back from the Studio belongs to no file: the editor shows
+   * it as a new file, and "New file" is what saves it.
+   */
+  function applyCarriedBuffer(carried) {
+    editor.value = carried.source;
+    sourceModeSelect.value = carried.mode;
+    suggestedFilename = `program${MODE_EXTENSIONS[carried.mode] ?? ""}`;
+    projectFilePath = null;
+    localFileHandle = null;
+    localFileHandleId = null;
+    localFileName = null;
+    resetUndoHistory();
+    updateFileButtonLabel();
+    updateFileActions();
+    updateEditorPlaceholder();
+    showStatus(message, "Carried over from the Studio · not saved yet");
+    saver.flush();
+  }
+
   function bootstrapWorkspace() {
     saver.setPaused(true);
+    const carried = takeHandout("editor");
+    if (carried) {
+      applyCarriedBuffer(carried);
+      const expectedCode = editor.value;
+      const expectedMode = sourceModeSelect.value;
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          saver.setPaused(false);
+          guardAgainstBrowserRestore(expectedCode, expectedMode, null);
+        }, 300);
+      });
+      bootstrapped = true;
+      return;
+    }
     const restored = applyWorkspace();
     const expectedCode = restored ? editor.value : defaultAsm;
     const expectedMode = restored ? sourceModeSelect.value : "asm";
@@ -557,6 +701,8 @@ if (page === "editor") {
       editor.value = defaultAsm;
       sourceModeSelect.value = "asm";
       updateEditorPlaceholder();
+      updateFileButtonLabel();
+      updateFileActions();
       openNewFileDialog();
     }
     requestAnimationFrame(() => {
@@ -785,6 +931,19 @@ if (page === "editor") {
     container: document.querySelector(".studio-editors"),
     toggleButton: document.querySelector("#pane-layout-toggle"),
   });
+
+  // "Back to editor" carries the pane that was being edited, so the editor can
+  // offer to save it as a new file instead of showing an unrelated buffer. An
+  // empty studio carries nothing: the editor keeps its own workspace.
+  const modeByPane = { py: "python", spasm: "asm", sp: "sp" };
+  for (const link of document.querySelectorAll(".back-link")) {
+    link.addEventListener("click", () => {
+      const pane = engine.authoritative ?? "py";
+      const text = pane === "spasm" ? stripAnnotations(panes[pane].value) : panes[pane].value;
+      if (!text.trim()) return;
+      writeHandout(modeByPane[pane], text, "editor");
+    });
+  }
 
   // --- AI mirror sync -----------------------------------------------------
   const llmButton = document.querySelector("#llm-settings-button");

@@ -250,6 +250,9 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         if request_path == "/api/file":
             self._overwrite_project_file()
             return
+        if request_path == "/api/file/new":
+            self._create_project_file()
+            return
         if request_path == "/api/refine-py":
             self._refine_py()
             return
@@ -486,6 +489,57 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             "code": code,
         })
 
+    def _read_source_payload(self) -> tuple[str, bytes] | None:
+        """Parse and validate a ``{path, code}`` body for the file endpoints.
+
+        Sends the error response itself and returns ``None`` when the request is
+        unusable, so overwriting and creating share one validation path.
+        """
+        if self.headers.get_content_type() != "application/json":
+            self._send_json(415, {"error": "Expected a JSON request."})
+            return None
+        try:
+            content_length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self._send_json(400, {"error": "Invalid request size."})
+            return None
+        if content_length < 0 or content_length > _MAX_SOURCE_FILE_SIZE + 8192:
+            self._send_json(413, {"error": "Request is too large."})
+            return None
+        try:
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            self._send_json(400, {"error": "Invalid JSON request."})
+            return None
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error": "Invalid project file request."})
+            return None
+        relative_path = payload.get("path")
+        code = payload.get("code")
+        if not isinstance(relative_path, str) or not isinstance(code, str):
+            self._send_json(400, {"error": "A project path and source text are required."})
+            return None
+
+        try:
+            encoded = code.encode("utf-8")
+        except UnicodeError:
+            self._send_json(400, {"error": "Source text must be valid UTF-8."})
+            return None
+        if len(encoded) > _MAX_SOURCE_FILE_SIZE:
+            self._send_json(413, {"error": "Edited source is larger than 1 MiB."})
+            return None
+        relative = Path(relative_path)
+        if (
+            not relative_path
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or "\\" in relative_path
+            or "\0" in relative_path
+        ):
+            self._send_json(400, {"error": "Invalid project file path."})
+            return None
+        return relative_path, encoded
+
     def _overwrite_project_file(self) -> None:
         if not self._project_files_allowed():
             return
@@ -496,49 +550,10 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         if not is_loopback:
             self._send_json(403, {"error": "Project files can only be overwritten locally."})
             return
-        if self.headers.get_content_type() != "application/json":
-            self._send_json(415, {"error": "Expected a JSON request."})
+        payload = self._read_source_payload()
+        if payload is None:
             return
-        try:
-            content_length = int(self.headers.get("Content-Length", ""))
-        except ValueError:
-            self._send_json(400, {"error": "Invalid request size."})
-            return
-        if content_length < 0 or content_length > _MAX_SOURCE_FILE_SIZE + 8192:
-            self._send_json(413, {"error": "Request is too large."})
-            return
-        try:
-            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
-        except (UnicodeError, json.JSONDecodeError):
-            self._send_json(400, {"error": "Invalid JSON request."})
-            return
-        if not isinstance(payload, dict):
-            self._send_json(400, {"error": "Invalid project file request."})
-            return
-        relative_path = payload.get("path")
-        code = payload.get("code")
-        if not isinstance(relative_path, str) or not isinstance(code, str):
-            self._send_json(400, {"error": "A project path and source text are required."})
-            return
-
-        try:
-            encoded = code.encode("utf-8")
-        except UnicodeError:
-            self._send_json(400, {"error": "Source text must be valid UTF-8."})
-            return
-        if len(encoded) > _MAX_SOURCE_FILE_SIZE:
-            self._send_json(413, {"error": "Edited source is larger than 1 MiB."})
-            return
-        relative = Path(relative_path)
-        if (
-            not relative_path
-            or relative.is_absolute()
-            or ".." in relative.parts
-            or "\\" in relative_path
-            or "\0" in relative_path
-        ):
-            self._send_json(400, {"error": "Invalid project file path."})
-            return
+        relative_path, encoded = payload
 
         candidate = self.project_root / relative_path
         try:
@@ -580,6 +595,63 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         self._send_json(200, {
             "path": path.relative_to(self.project_root).as_posix(),
             "message": "Project file overwritten.",
+        })
+
+    def _create_project_file(self) -> None:
+        """Create a new source file; never replace an existing path.
+
+        Creating and overwriting are separate endpoints on purpose: a mistyped
+        name has to fail instead of destroying a file.
+        """
+        if not self._project_files_allowed():
+            return
+        try:
+            is_loopback = ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not is_loopback:
+            self._send_json(403, {"error": "Project files can only be created locally."})
+            return
+        payload = self._read_source_payload()
+        if payload is None:
+            return
+        relative_path, encoded = payload
+
+        relative = Path(relative_path)
+        if relative.suffix.lower() not in _SOURCE_MODES:
+            self._send_json(415, {"error": "Unsupported project file type."})
+            return
+        candidate = self.project_root / relative_path
+        try:
+            parent = candidate.parent.resolve(strict=True)
+        except (OSError, ValueError):
+            self._send_json(404, {"error": "Project folder not found."})
+            return
+        if not parent.is_relative_to(self.project_root) or not parent.is_dir():
+            self._send_json(404, {"error": "Project folder not found."})
+            return
+
+        target = parent / candidate.name
+        exists = {"error": "exists", "message": f"{relative_path} already exists."}
+        if target.exists() or target.is_symlink():
+            self._send_json(409, exists)
+            return
+        try:
+            # "x" makes the existence check atomic with the creation itself.
+            with open(target, "xb") as output:
+                output.write(encoded)
+                output.flush()
+                os.fsync(output.fileno())
+        except FileExistsError:
+            self._send_json(409, exists)
+            return
+        except OSError:
+            self._send_json(500, {"error": "Could not create the project file."})
+            return
+
+        self._send_json(201, {
+            "path": target.relative_to(self.project_root).as_posix(),
+            "message": "Project file created.",
         })
 
 
