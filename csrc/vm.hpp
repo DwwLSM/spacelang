@@ -84,9 +84,39 @@ private:
     PyObject* cell_value_name_ = nullptr;
     PyObject* cell_initialized_name_ = nullptr;
 
+    // A Closure's attributes never change after construction, so the names are
+    // interned once and read through the C-API instead of PyObject_GetAttrString
+    // rebuilding a Python string on every call.
+    enum class ClosureField {
+        FuncId,
+        Cells,
+        ArgCount,
+        ParameterNames,
+        Defaults,
+        PositionalCount,
+        VarargName,
+        KwargName,
+        PositionalOnlyCount,
+        Count,
+    };
+    PyObject* closure_fields_[static_cast<std::size_t>(ClosureField::Count)] = {};
+
+    // Every call allocates two vectors for its locals; recycling them removes a
+    // pair of allocations per call from call-heavy programs.
+    std::vector<std::vector<Value>> locals_pool_;
+    std::vector<std::vector<bool>> initialized_pool_;
+
     void cache_python_objects();
     bool is_cell(const Value& value) const;
     PyObject* name_object(std::int64_t name_id) const;
+    pybind11::object closure_field(const pybind11::object& closure, ClosureField field) const;
+    Frame make_frame(
+        std::int64_t func_id,
+        std::int64_t return_ip,
+        std::size_t local_count,
+        pybind11::object cells = pybind11::object()
+    );
+    void recycle_frame(Frame&& frame);
     Value pop(const char* name);
     const std::string& name(std::int64_t name_id) const;
     [[noreturn]] void raise_space_error(
