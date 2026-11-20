@@ -24,7 +24,7 @@ async function initialize() {
     py.FS.writeFile(target, new Uint8Array(buffer));
   }
   py.runPython('import sys; sys.path.insert(0, "/spacelang_pkg")');
-  py.runPython("from spacelang.web_bridge import trace_program");
+  py.runPython("from spacelang.web_bridge import trace_program, convert");
   return py;
 }
 
@@ -43,6 +43,17 @@ export const kernel = {
     const runtime = await this.init();
     const result = await runtime.runPythonAsync(
       `trace_program(${JSON.stringify(code)}, ${mode === "asm" ? "True" : "False"}, ${mode === "sp" ? "True" : "False"})`,
+    );
+    try {
+      return result.toJs({ dict_converter: Object.fromEntries });
+    } finally {
+      result.destroy();
+    }
+  },
+  async convert(source, src) {
+    const runtime = await this.init();
+    const result = await runtime.runPythonAsync(
+      `convert(${JSON.stringify(source)}, ${JSON.stringify(src)})`,
     );
     try {
       return result.toJs({ dict_converter: Object.fromEntries });

@@ -41,6 +41,7 @@ def _check() -> int:
         STATIC / "js" / "pyodide-loader.js",
         STATIC / "js" / "visualizer.js",
         STATIC / "js" / "spacelang-kernel.js",
+        STATIC / "js" / "sync-engine.js",
         STATIC / "partials" / "app-header.html",
         STATIC / "partials" / "settings-menu.html",
         STATIC / "partials" / "state-panels.html",

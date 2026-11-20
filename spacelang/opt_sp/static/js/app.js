@@ -4,6 +4,7 @@ import { downloadSource } from "./download.js";
 import { getFileHandle, storeFileHandle } from "./file-handles.js";
 import { checkAssets } from "./health.js";
 import { takeHandout, writeHandout } from "./handout.js";
+import { SyncEngine } from "./sync-engine.js";
 
 const page = document.body.dataset.page;
 
@@ -523,10 +524,58 @@ if (page === "editor") {
     spasm: document.querySelector("#spasm-editor"),
     sp: document.querySelector("#sp-editor"),
   };
+  const badges = {
+    py: document.querySelector("#py-badge"),
+    spasm: document.querySelector("#spasm-badge"),
+    sp: document.querySelector("#sp-badge"),
+  };
+  const preview = document.querySelector("#sp-preview");
+  const spacesToggle = document.querySelector("#show-spaces-toggle");
+  const copyButton = document.querySelector("#copy-sp-button");
+
+  const renderPreview = () => {
+    if (!preview || preview.hidden) return;
+    preview.textContent = panes.sp.value.replace(/ /g, "\u00b7");
+  };
+
+  const engine = new SyncEngine({
+    panes,
+    onStateChange: (name, state) => {
+      const badge = badges[name];
+      if (!badge) return;
+      badge.dataset.state = state;
+      badge.textContent = state;
+    },
+    onWrite: (name) => {
+      if (name === "sp") renderPreview();
+    },
+  });
+
+  spacesToggle?.addEventListener("click", () => {
+    const next = spacesToggle.getAttribute("aria-pressed") !== "true";
+    spacesToggle.setAttribute("aria-pressed", String(next));
+    preview.hidden = !next;
+    renderPreview();
+  });
+
+  copyButton?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(panes.sp.value);
+      copyButton.textContent = "Copied";
+    } catch {
+      copyButton.textContent = "Copy failed";
+    }
+    setTimeout(() => { copyButton.textContent = "Copy raw"; }, 1200);
+  });
+
+  panes.sp.addEventListener("input", renderPreview);
+
   const handoff = takeHandout();
   if (handoff) {
-    const pane = panes[paneByMode[handoff.mode]];
-    if (pane) pane.value = handoff.source;
+    const name = paneByMode[handoff.mode];
+    panes[name].value = handoff.source;
+    renderPreview();
+    void engine.start(name);
   }
 }
 

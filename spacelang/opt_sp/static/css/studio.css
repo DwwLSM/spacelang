@@ -76,6 +76,22 @@
 
 .pane-editor-sp { tab-size: 1; }
 
+.pane-preview {
+  flex: 0 0 auto;
+  max-height: 45%;
+  margin: 0;
+  padding: .5rem .7rem;
+  overflow: auto;
+  color: var(--muted);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: .8rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .trace-column {
   display: grid;
   grid-template-rows: minmax(110px, 28%) minmax(0, 1fr);
