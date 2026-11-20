@@ -178,6 +178,60 @@
 
 .pane-editor-sp { tab-size: 1; }
 
+.pane-status {
+  padding: .3rem .7rem;
+  font-size: .7rem;
+  color: var(--muted);
+  background: var(--surface-raised);
+  border-top: 1px solid var(--border);
+}
+.pane-status.error { color: #ffb3b3; }
+
+.llm-dialog {
+  width: min(460px, 92vw);
+  padding: 1rem 1.1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px #000a;
+}
+.llm-dialog::backdrop { background: #0009; }
+.llm-dialog h2 { margin: 0 0 .8rem; font-size: .95rem; }
+
+.llm-field {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .5rem;
+  font-size: .78rem;
+  color: var(--muted);
+}
+
+.llm-modes {
+  margin: .9rem 0 .5rem;
+  padding: .5rem .7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.llm-modes legend { padding: 0 .3rem; font-size: .7rem; color: var(--muted); }
+.llm-modes label { margin-right: .9rem; font-size: .78rem; }
+
+.llm-hint {
+  margin: .35rem 0 0;
+  font-size: .68rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.llm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: .9rem;
+}
+
 .pane-preview {
   flex: 0 0 auto;
   max-height: 45%;

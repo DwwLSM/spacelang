@@ -16,6 +16,7 @@ from .asm import assemble
 from .decoder import decode
 from .disasm import disassemble
 from .encoder import encode
+from .ir import OP
 from .pyfront import compile_py
 from .vm_trace import TracedVM
 
@@ -95,6 +96,24 @@ def annotate(spasm_src: str) -> dict[str, Any]:
     return {"ok": True, "text": text, "error": None}
 
 
+def _describe(entry: tuple[int, tuple]) -> str:
+    try:
+        name = OP(entry[0]).name
+    except ValueError:
+        name = str(entry[0])
+    return name if not entry[1] else f"{name} " + " ".join(str(arg) for arg in entry[1])
+
+
+def _first_difference(want, got) -> dict | None:
+    for index, (left, right) in enumerate(zip(want, got)):
+        if left != right:
+            return {"index": index, "want": _describe(left), "got": _describe(right)}
+    if len(want) != len(got):
+        longer, shorter = ("assembly", "python") if len(want) > len(got) else ("python", "assembly")
+        return {"index": min(len(want), len(got)), "want": f"{longer} continues", "got": f"{shorter} ends"}
+    return None
+
+
 def verify_py(py_src: str, spasm_src: str) -> dict[str, Any]:
     """Check that a proposed Python mirror compiles to the same program.
 
@@ -122,6 +141,7 @@ def verify_py(py_src: str, spasm_src: str) -> dict[str, Any]:
         "ok": want == got,
         "want_len": len(want),
         "got_len": len(got),
+        "first": None if want == got else _first_difference(want, got),
         "error": None if want == got else "not_equivalent",
     }
 

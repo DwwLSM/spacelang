@@ -799,6 +799,14 @@ AI", expect roughly 7 s of waiting, then a verified `py` or a rejection message.
 
 ## Phase 5 - Streaming
 
+> **Superseded.** Phase 4 shipped against a deployment where disabling the
+> model's hidden reasoning (`chat_template_kwargs.enable_thinking=false`) turns
+> the call into ~0.4 s, 19 output tokens. Streaming existed to hide six seconds
+> of reasoning that turned out to be a pathological loop, so the JSON path is
+> kept and this phase is deferred. It remains valid if a future endpoint cannot
+> disable thinking, or once prompts grow large enough that a full listing has to
+> be sent.
+
 **Goal:** stop showing six seconds of nothing.
 
 **Files you may touch:** `server.py`, `spacelang/llm_client.py`,

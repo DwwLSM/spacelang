@@ -7,6 +7,8 @@ import { takeHandout, writeHandout } from "./handout.js";
 import { SyncEngine } from "./sync-engine.js";
 import { initStudioLayout } from "./studio-layout.js";
 import { TracePanel } from "./trace-panel.js";
+import { describeError, refinePy } from "./llm-bridge.js";
+import { initLLMSettings, llmHeaders } from "./llm-settings.js";
 
 const page = document.body.dataset.page;
 
@@ -549,9 +551,14 @@ if (page === "editor") {
     panes,
     onStateChange: (name, state) => {
       const badge = badges[name];
-      if (!badge) return;
-      badge.dataset.state = state;
-      badge.textContent = state;
+      if (badge) {
+        badge.dataset.state = state;
+        badge.textContent = state;
+      }
+      if (name === "py") {
+        updateSyncButton();
+        if (state === "stale") maybeAutoSync();
+      }
     },
     onWrite: (name) => {
       if (name === "sp") renderPreview();
@@ -577,6 +584,74 @@ if (page === "editor") {
     container: document.querySelector(".studio-editors"),
     toggleButton: document.querySelector("#pane-layout-toggle"),
   });
+
+  // --- AI mirror sync -----------------------------------------------------
+  const llmButton = document.querySelector("#llm-settings-button");
+  if (llmButton) llmButton.hidden = false;
+  const llmDialog = document.querySelector("#llm-settings");
+  const llmSettings = initLLMSettings({ dialog: llmDialog, openers: [llmButton] });
+  const syncButton = document.querySelector("#py-sync-button");
+  const syncStatus = document.querySelector("#py-sync-status");
+  let syncing = false;
+  let lastSyncAt = 0;
+  let autoTimer = null;
+
+  function setSyncStatus(text, isError = false) {
+    if (!syncStatus) return;
+    syncStatus.hidden = !text;
+    syncStatus.textContent = text;
+    syncStatus.classList.toggle("error", Boolean(text) && Boolean(isError));
+  }
+
+  function updateSyncButton() {
+    if (!syncButton) return;
+    const mode = llmSettings.read().mode;
+    syncButton.hidden = mode === "off" || syncing || engine.state.py !== "stale";
+  }
+
+  function maybeAutoSync() {
+    if (llmSettings.read().mode !== "auto" || syncing) return;
+    if (Date.now() - lastSyncAt < 5000) return;
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => { void syncPy(); }, 1500);
+  }
+
+  async function syncPy() {
+    if (syncing) return;
+    const spasm = panes.spasm.value;
+    if (!spasm.trim()) {
+      setSyncStatus("Nothing to sync: the assembly pane is empty.", true);
+      return;
+    }
+    syncing = true;
+    if (syncButton) syncButton.disabled = true;
+    updateSyncButton();
+    setSyncStatus("asking the model\u2026");
+    try {
+      const result = await refinePy({
+        py: panes.py.value,
+        spasm,
+        headers: llmHeaders(llmSettings.read()),
+      });
+      if (!result.ok) {
+        setSyncStatus(describeError(result), true);
+        return;
+      }
+      engine.write("py", result.py);
+      engine.setState("py", "synced");
+      const tokens = result.usage?.completion_tokens;
+      setSyncStatus(tokens ? `mirror verified \u00b7 ${tokens} output tokens` : "mirror verified");
+    } finally {
+      syncing = false;
+      lastSyncAt = Date.now();
+      if (syncButton) syncButton.disabled = false;
+      updateSyncButton();
+    }
+  }
+
+  syncButton?.addEventListener("click", () => void syncPy());
+  llmDialog?.addEventListener("close", () => updateSyncButton());
+  updateSyncButton();
 
   const optSpLink = document.querySelector("#opt-sp-link");
   if (optSpLink) optSpLink.hidden = false;

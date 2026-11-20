@@ -23,6 +23,7 @@
           </span>
         </h2>
         <textarea id="py-editor" class="pane-editor" spellcheck="false" wrap="off" aria-label="Python surface syntax"></textarea>
+        <div id="py-sync-status" class="pane-status" role="status" aria-live="polite" hidden></div>
       </section>
       <div class="pane-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize py and spasm panes" tabindex="0" data-split="0"></div>
       <section class="editor-pane" data-pane="spasm">
@@ -65,5 +66,34 @@
     </section>
     <!-- #include partials/step-controls.html -->
   </main>
+
+  <dialog id="llm-settings" class="llm-dialog" aria-labelledby="llm-settings-title">
+    <h2 id="llm-settings-title">LLM settings</h2>
+    <label class="llm-field">
+      <span>Base URL</span>
+      <input id="llm-base-url" type="url" spellcheck="false" placeholder="https://host/litellm/v1">
+    </label>
+    <label class="llm-field">
+      <span>Model</span>
+      <input id="llm-model" type="text" spellcheck="false" placeholder="Socrates">
+    </label>
+    <label class="llm-field">
+      <span>API key</span>
+      <input id="llm-key" type="password" spellcheck="false" placeholder="leave empty to use the server key">
+    </label>
+    <fieldset class="llm-modes">
+      <legend>Sync mode</legend>
+      <label><input type="radio" name="llm-mode" value="manual"> Manual</label>
+      <label><input type="radio" name="llm-mode" value="auto"> Auto</label>
+      <label><input type="radio" name="llm-mode" value="off"> Off</label>
+      <p class="llm-hint">Auto syncs the Python mirror about 1.5&nbsp;s after you stop editing. It shares a 40 requests/min quota with everyone using the same key.</p>
+    </fieldset>
+    <p class="llm-hint">A key stored here is readable by any script on this page. Use it only for local work; the studio should never be exposed on a network.</p>
+    <form method="dialog" class="llm-actions">
+      <button id="llm-clear" type="button">Clear</button>
+      <button id="llm-save" type="button">Save</button>
+      <button value="close">Close</button>
+    </form>
+  </dialog>
 </body>
 </html>

@@ -25,6 +25,17 @@ from urllib.request import ProxyHandler, Request, build_opener, urlopen
 import webbrowser
 
 from ._locate import static_dir
+from ..llm_client import LLMError
+from .llm_proxy import (
+    MODES,
+    Gate,
+    LLMConfig,
+    TokenBucket,
+    is_loopback,
+    refine_py,
+    resolve_config,
+    status as llm_status,
+)
 
 _SOURCE_MODES = {".py": "python", ".sp": "sp", ".spasm": "asm"}
 _IGNORED_DIRECTORIES = {
@@ -38,6 +49,20 @@ _IGNORED_DIRECTORIES = {
     "venv",
 }
 _MAX_SOURCE_FILE_SIZE = 1024 * 1024
+_MAX_LLM_REQUEST = 64 * 1024
+_MAX_DRAIN = 1024 * 1024
+_LLM_STATUS = {
+    "bad_config": 400,
+    "no_key": 400,
+    "input_too_large": 413,
+    "rate_limited": 429,
+    "busy": 429,
+    "not_equivalent": 422,
+    "bad_key": 502,
+    "truncated": 502,
+    "empty_completion": 502,
+    "upstream_error": 502,
+}
 _PAGES = {
     "/": "index.html",
     "/index.html": "index.html",
@@ -60,11 +85,17 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         project_root: Path,
         project_files_enabled: bool,
         stop_token: str | None,
+        llm_config: "LLMConfig | dict | None" = None,
+        llm_bucket: TokenBucket | None = None,
+        llm_gate: Gate | None = None,
         **kwargs,
     ):
         self.project_root = project_root
         self.project_files_enabled = project_files_enabled
         self.stop_token = stop_token
+        self.llm_config = llm_config
+        self.llm_bucket = llm_bucket or TokenBucket()
+        self.llm_gate = llm_gate or Gate()
         super().__init__(*args, **kwargs)
 
     def log_message(self, format: str, *args) -> None:
@@ -83,6 +114,8 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             self._send_project_files()
         elif request.path == "/api/file":
             self._send_project_file(parse_qs(request.query).get("path", [""])[0])
+        elif request.path == "/api/llm-status":
+            self._send_llm_status()
         else:
             super().do_GET()
 
@@ -132,6 +165,9 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         request_path = urlsplit(self.path).path
         if request_path == "/api/file":
             self._overwrite_project_file()
+            return
+        if request_path == "/api/refine-py":
+            self._refine_py()
             return
         if request_path != "/__opt_sp/stop":
             self.send_error(404)
@@ -190,6 +226,90 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             "checks": checks,
             "hint": None if ok else "Run: python tools/build_static.py",
         })
+
+    def _local_only(self) -> bool:
+        if is_loopback(self.client_address[0]):
+            return True
+        self._send_json(403, {"error": "This endpoint is only available locally."})
+        return False
+
+    def _send_llm_status(self) -> None:
+        if not self._local_only():
+            return
+        try:
+            config = resolve_config(self.llm_config, self.headers)
+        except LLMError as error:
+            self._send_json(400, {"ok": False, "error": error.code, "message": error.message})
+            return
+        self._send_json(200, llm_status(config, self.llm_config))
+
+    def _refine_py(self) -> None:
+        """Ask the model for a new Python mirror, then verify it locally."""
+        if not self._local_only():
+            return
+        if self.headers.get_content_type() != "application/json":
+            self._send_json(415, {"ok": False, "error": "expected_json"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self._send_json(400, {"ok": False, "error": "bad_request_size"})
+            return
+        if length < 0 or length > _MAX_LLM_REQUEST:
+            # Drain a modest overshoot so the client reads the 413 instead of a
+            # connection reset, then refuse.
+            if 0 < length <= _MAX_DRAIN:
+                self.rfile.read(length)
+            self._send_json(413, {"ok": False, "error": "input_too_large"})
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return
+        if "sp" in payload:
+            self._send_json(400, {
+                "ok": False,
+                "error": "sp_not_allowed",
+                "message": "The encoded program is never sent to the model.",
+            })
+            return
+        extra = set(payload) - {"py", "spasm", "src_kind"}
+        if extra:
+            self._send_json(400, {
+                "ok": False,
+                "error": "unknown_field",
+                "message": f"unsupported fields: {', '.join(sorted(extra))}",
+            })
+            return
+        py_src = payload.get("py")
+        spasm_src = payload.get("spasm")
+        if not isinstance(py_src, str) or not isinstance(spasm_src, str):
+            self._send_json(400, {"ok": False, "error": "py_and_spasm_required"})
+            return
+
+        try:
+            config = resolve_config(self.llm_config, self.headers)
+            result = refine_py(
+                config,
+                py_src,
+                spasm_src,
+                bucket=self.llm_bucket,
+                gate=self.llm_gate,
+            )
+        except LLMError as error:
+            body = {"ok": False, "error": error.code}
+            if error.message:
+                body["message"] = error.message
+            if error.retry_after is not None:
+                body["retry_after"] = error.retry_after
+            body.update(error.details)
+            self._send_json(_LLM_STATUS.get(error.code, 502), body)
+            return
+        self._send_json(200, result)
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")
@@ -394,6 +514,7 @@ def server(
     allow_project_files: bool | None = None,
     _stop_token: str | None = None,
     _ready_file: Path | None = None,
+    llm: "LLMConfig | dict | None" = None,
 ) -> tuple[ThreadingHTTPServer, str] | None:
     if _stop_token is None:
         _stop_token = secrets.token_urlsafe(32)
@@ -402,12 +523,19 @@ def server(
             allow_project_files = ipaddress.ip_address(host).is_loopback
         except ValueError:
             allow_project_files = host.lower() == "localhost"
+    try:
+        effective_llm = resolve_config(llm)
+    except LLMError:
+        effective_llm = LLMConfig()
     handler = partial(
         _QuietHandler,
         directory=str(static_dir()),
         project_root=Path.cwd().resolve(),
         project_files_enabled=allow_project_files,
         stop_token=_stop_token,
+        llm_config=llm,
+        llm_bucket=TokenBucket(effective_llm.rate_limit_rpm, effective_llm.rate_limit_burst),
+        llm_gate=Gate(),
     )
     httpd = _OPTSPHTTPServer((host, port), handler)
     if _ready_file is not None:
@@ -516,7 +644,7 @@ def _serve_background(
                 state_file.unlink(missing_ok=True)
 
 
-def _start_background(host: str, port: int, open_browser: bool) -> None:
+def _start_background(host: str, port: int, open_browser: bool, llm_flags: list[str] | None = None) -> None:
     if not _is_loopback_host(host):
         raise RuntimeError("Background mode is limited to localhost or IPv4 loopback hosts.")
     if not 0 < port < 65536:
@@ -557,6 +685,7 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
         str(state_file),
         "--_background-ready-file",
         str(ready_file),
+        *(llm_flags or []),
     ]
     try:
         if os.name == "nt":
@@ -659,7 +788,32 @@ def _cli() -> None:
     )
     parser.add_argument("--_background-token-file", help=argparse.SUPPRESS)
     parser.add_argument("--_background-ready-file", help=argparse.SUPPRESS)
+    parser.add_argument("--llm-base-url", help="OpenAI-compatible endpoint for the AI mirror sync.")
+    parser.add_argument("--llm-model", help="Model name served by that endpoint.")
+    parser.add_argument(
+        "--llm-api-key-file",
+        help="Read the API key from this file (first non-empty line).",
+    )
+    parser.add_argument("--llm-mode", choices=MODES, help="manual, auto or off.")
     args = parser.parse_args()
+
+    llm_overrides: dict[str, object] = {}
+    if args.llm_base_url:
+        llm_overrides["base_url"] = args.llm_base_url
+    if args.llm_model:
+        llm_overrides["model"] = args.llm_model
+    if args.llm_mode:
+        llm_overrides["mode"] = args.llm_mode
+    if args.llm_api_key_file:
+        try:
+            contents = Path(args.llm_api_key_file).read_text(encoding="utf-8")
+        except OSError as error:
+            parser.error(f"Could not read the API key file: {error}")
+        lines = [line.strip() for line in contents.splitlines() if line.strip()]
+        if not lines:
+            parser.error("The API key file is empty.")
+        llm_overrides["api_key"] = lines[0]
+
     if args._background_token_file:
         if not args._background_ready_file:
             parser.error("Background server readiness file is required.")
@@ -674,13 +828,23 @@ def _cli() -> None:
         _stop_background(args.host, args.port)
         return
     if args.background:
-        _start_background(args.host, args.port, not args.no_browser)
+        llm_flags: list[str] = []
+        if args.llm_base_url:
+            llm_flags += ["--llm-base-url", args.llm_base_url]
+        if args.llm_model:
+            llm_flags += ["--llm-model", args.llm_model]
+        if args.llm_mode:
+            llm_flags += ["--llm-mode", args.llm_mode]
+        if args.llm_api_key_file:
+            llm_flags += ["--llm-api-key-file", args.llm_api_key_file]
+        _start_background(args.host, args.port, not args.no_browser, llm_flags)
         return
     server(
         port=args.port,
         host=args.host,
         open_browser=not args.no_browser,
         allow_project_files=True if args.allow_project_files else None,
+        llm=llm_overrides or None,
     )
 
 

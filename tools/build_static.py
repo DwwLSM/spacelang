@@ -38,6 +38,8 @@ def _check() -> int:
         STATIC / "js" / "file-handles.js",
         STATIC / "js" / "handout.js",
         STATIC / "js" / "health.js",
+        STATIC / "js" / "llm-bridge.js",
+        STATIC / "js" / "llm-settings.js",
         STATIC / "js" / "pyodide-loader.js",
         STATIC / "js" / "visualizer.js",
         STATIC / "js" / "spacelang-kernel.js",

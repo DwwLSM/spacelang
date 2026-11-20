@@ -111,12 +111,26 @@ instruction stream as `decode(sp)` (ignoring `Instr.line`, name table, labels an
 debug tables). Verification runs in Pyodide, costs microseconds, and is the only
 reliable guard against a fluent-but-wrong rewrite. Failure keeps the old `py`.
 
-### ADR-006 — Streaming from the first release
+### ADR-006 — No streaming; switch the model's hidden reasoning off instead
 
-Measured on the target deployment: a realistic rewrite takes **7.3 s total, of
-which 6.0 s is hidden reasoning**. A spinner for six seconds is not acceptable,
-so the endpoint streams (SSE) and the UI shows `thinking…` progress before code
-appears. See §11 and Appendix A.
+Measured on the deployment: with reasoning enabled, a five-line rewrite burned
+6000 reasoning tokens in 42 s and emitted **no code at all**; with
+`chat_template_kwargs.enable_thinking=false` the same rewrite takes ~0.4 s and
+19 output tokens. The sync is therefore a plain JSON request/response. SSE was
+planned on the assumption of six seconds of hidden reasoning per call; that
+premise disappeared once the flag was found, so the framing complexity is not
+worth it. The 90 s timeout and the `truncated` handling stay as safety nets for a
+deployment that ignores the flag.
+
+### ADR-009 — Send an assembly diff, not the whole listing
+
+Asking the model to rewrite the mirror from scratch made it transcribe compiler
+artifacts (`__spacelang_temp_*` globals, `CALL`/`STACK` bookkeeping) and fail
+verification. The stale mirror still compiles, so the server can compute the
+*previous* assembly locally, diff it against the submitted one, and send only the
+change. The same test case then passed verification on the first attempt. The
+full listing remains as the fallback when the stale mirror does not compile or
+the diff is bigger than 6000 characters.
 
 ### ADR-007 — The secret does not leave the machine
 
@@ -475,38 +489,52 @@ protection lives in the server-side token bucket (§11.6), which surfaces a
 ```http
 POST /api/refine-py
 Content-Type: application/json
-Accept: text/event-stream
 
 {
-  "py":      "<current readable mirror>",
-  "spasm":   "<readable assembly of the current program>",
-  "old_py":  "<the mirror before the user started editing>",
+  "py":       "<current readable mirror>",
+  "spasm":    "<readable assembly of the current program>",
   "src_kind": "sp" | "spasm"
 }
 ```
 
-`.sp` is never included (ADR-007).
+`.sp` is never included (ADR-007). The server derives the *previous* assembly by
+compiling `py` itself, so no other state has to travel.
 
 ### 11.3 Prompt
 
-System:
+The server diffs the previous assembly against the submitted one and sends the
+change, not the whole listing (ADR-009):
 
-> You are the Python mirror maintainer for SpaceLang. SpaceLang programs are
-> assembled from integer opcodes. The user edits the low-level form; you keep a
-> readable Python mirror in sync. Reply with Python code only, no prose, no
-> Markdown fences.
+```
+system: You update a Python file to match a changed SpaceLang program. You are
+        given the current Python and a unified diff of the compiler's assembly
+        output. Apply the change, keep everything else exactly as it is, and
+        reply with Python only: no prose, no Markdown fences.
 
-User: current `py`, current `spasm`, and the instruction: produce a `py` whose
-compilation matches the given assembly, preserving the existing names, helpers,
-docstrings and structure wherever the change allows.
+user:   ## Current Python
+        ```python
+        {py}
+        ```
+        ## Change in the program (assembly diff)
+        ```diff
+        {diff}
+        ```
+        ## Task
+        Apply this change to the Python and output the whole file.
+```
 
-Constraints enforced by the server before sending: total input ≤ 12 000 chars;
-`max_tokens = 4096`; `temperature = 0.2`.
+When the stale mirror does not compile, or the diff exceeds 6000 characters, the
+server falls back to sending the full annotated listing with an instruction to
+rewrite the mirror.
+
+Constraints enforced before sending: total input ≤ 12 000 chars;
+`max_tokens = 4096`; `temperature = 0.2`;
+`chat_template_kwargs.enable_thinking = false` (ADR-006).
 
 ### 11.4 Response handling
 
-- Only `delta.content` is accumulated. `delta.reasoning_content` is displayed as
-  a separate "thinking" indicator and **never** written to the editor.
+- Only `message.content` is used. `message.reasoning_content` is ignored
+  entirely: it is never shown and never written to the editor.
 - `finish_reason == "length"` ⇒ discard, report `truncated`.
 - Empty content ⇒ discard, report `empty_completion`.
 - Success ⇒ verification gate (§11.5).
@@ -517,7 +545,8 @@ Constraints enforced by the server before sending: total input ≤ 12 000 chars;
 def verify_py(py_src: str, spasm_src: str) -> dict:
     want = canon(assemble(spasm_src))
     got  = canon(compile_py(py_src))
-    return {"ok": want == got, "want_len": len(want), "got_len": len(got)}
+    return {"ok": want == got, "want_len": len(want), "got_len": len(got),
+            "first": first_difference(want, got), "error": ...}
 
 def canon(program):
     return [(int(i.op), tuple(i.args)) for i in program.instrs]
@@ -789,19 +818,20 @@ Endpoint `https://socratic.cs.cityu.edu.hk/litellm/v1`, model `Socrates`,
 | Invalid key | 401, clean JSON |
 | Minimal completion | 200, 0.32 s, `reasoning_content` present, `reasoning_tokens: 10` |
 | Streaming | supported (`text/event-stream`), first byte 0.20 s |
-| Realistic rewrite (~400 prompt tokens) | **7.3 s total**, 6.0 s before first content byte, ~900 chars of code |
-| `max_tokens=1500` | 200 **with empty content**, `finish_reason: "length"` — reasoning consumed the budget |
-| `max_tokens=4000` | completes, 2.4 s for a short task |
-| `reasoning_effort: low/none` | accepted, effectively ignored (3809 → 3055 reasoning chars) |
-| `chat_template_kwargs.enable_thinking=false` | returns empty; do not use |
+| Rewrite from scratch, reasoning on, `max_tokens=1500` | 200 with **empty content**, `finish_reason: "length"`, 1500 reasoning tokens |
+| Rewrite from scratch, reasoning on, `max_tokens=6000` | 42.3 s, **empty content**, `finish_reason: "length"`, 6001 reasoning tokens |
+| `reasoning_effort: low/none` | accepted, effectively ignored |
+| `chat_template_kwargs.enable_thinking=false` | honoured: same rewrite in 0.37 s, 19 output tokens |
+| Assembly diff + thinking off | 0.36 s, verified on the first attempt |
 | `usage` in stream | absent unless `stream_options.include_usage` |
 
 Operational limits: 500 000 tokens/min, 40 requests/min, daily budget, key
 expires 2026-12-19.
 
-Consequences: `max_tokens` must be ≥ 3000 (4096 chosen); empty/truncated replies
-are an expected outcome and must be handled as errors, not as empty code;
-`reasoning_content` must be discarded; streaming is required for acceptable UX.
+Consequences: hidden reasoning is unusable at this size (it loops and emits
+nothing), so the request disables it; the diff-based prompt is what makes the
+answer correct; empty/truncated replies are still expected outcomes and must be
+treated as errors, never as empty code; `reasoning_content` is discarded.
 
 ## Appendix B — decision log
 
