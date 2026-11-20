@@ -567,9 +567,13 @@ if (page === "editor") {
   });
 
   initStudioLayout({
+    layout: document.querySelector(".studio-layout"),
     container: document.querySelector(".studio-editors"),
     toggleButton: document.querySelector("#pane-layout-toggle"),
   });
+
+  const optSpLink = document.querySelector("#opt-sp-link");
+  if (optSpLink) optSpLink.hidden = false;
 
   copyButton?.addEventListener("click", async () => {
     try {

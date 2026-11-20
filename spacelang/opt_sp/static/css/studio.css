@@ -1,13 +1,43 @@
 .studio-layout {
+  --splitter: 6px;
   height: calc(100vh - 59px);
   min-height: 0;
   padding: .8rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 42%);
+  grid-template-columns:
+    minmax(0, var(--lhs, 58fr)) var(--splitter)
+    minmax(0, var(--rhs, 42fr));
   grid-template-rows: minmax(0, 1fr) auto;
-  column-gap: .8rem;
+  column-gap: .4rem;
   row-gap: .8rem;
 }
+
+.studio-column-splitter {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 3px;
+}
+
+.studio-column-splitter::after {
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 2px;
+  width: 2px;
+  content: "";
+  background: var(--border);
+  opacity: 0;
+  transition: opacity .15s ease, background .15s ease;
+}
+
+.studio-column-splitter:hover::after,
+.studio-column-splitter:focus-visible::after,
+.studio-column-splitter.active::after {
+  background: var(--accent);
+  opacity: 1;
+}
+.studio-column-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .studio-editors {
   --splitter: 6px;
@@ -192,7 +222,9 @@
     height: auto;
     min-height: calc(100vh - 58px);
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
   }
+  .studio-column-splitter { display: none; }
   /* Narrow screens always stack, whatever the saved orientation says. */
   .studio-editors[data-orientation="vertical"],
   .studio-editors[data-orientation="horizontal"] {

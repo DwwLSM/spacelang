@@ -8,30 +8,50 @@
 
 const KEY = "opt-sp-studio-layout";
 const MIN_PANE_PX = 80;
+const MIN_LHS_PX = 300;
+const MIN_RHS_PX = 320;
 const VARS = ["--pane-a", "--pane-b", "--pane-c"];
-const DEFAULTS = { orientation: "vertical", sizes: [1, 1, 1] };
+const DEFAULTS = { orientation: "vertical", sizes: [1, 1, 1], columns: [0.58, 0.42] };
+
+function normalise(values, fallback) {
+  const source = Array.isArray(values) && values.length === fallback.length ? values : fallback;
+  const clean = source.map((value) => (Number.isFinite(value) && value > 0 ? value : 1));
+  const total = clean.reduce((sum, value) => sum + value, 0) || 1;
+  return clean.map((value) => value / total);
+}
 
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS, sizes: [...DEFAULTS.sizes] };
+    if (!raw) {
+      return {
+        orientation: DEFAULTS.orientation,
+        sizes: [...DEFAULTS.sizes],
+        columns: [...DEFAULTS.columns],
+      };
+    }
     const value = JSON.parse(raw);
-    const orientation = value?.orientation === "horizontal" ? "horizontal" : "vertical";
-    const sizes =
-      Array.isArray(value?.sizes) && value.sizes.length === 3
-        ? value.sizes.map((size) => (Number.isFinite(size) && size > 0 ? size : 1))
-        : [1, 1, 1];
-    const total = sizes.reduce((sum, size) => sum + size, 0) || 1;
-    return { orientation, sizes: sizes.map((size) => size / total) };
+    return {
+      orientation: value?.orientation === "horizontal" ? "horizontal" : "vertical",
+      sizes: normalise(value?.sizes, DEFAULTS.sizes),
+      columns: normalise(value?.columns, DEFAULTS.columns),
+    };
   } catch {
-    return { ...DEFAULTS, sizes: [...DEFAULTS.sizes] };
+    return {
+      orientation: DEFAULTS.orientation,
+      sizes: [...DEFAULTS.sizes],
+      columns: [...DEFAULTS.columns],
+    };
   }
 }
 
-export function initStudioLayout({ container, toggleButton }) {
+export function initStudioLayout({ layout, container, toggleButton }) {
   if (!container) return null;
   const paneEls = [...container.querySelectorAll(".editor-pane")];
   const splitters = [...container.querySelectorAll(".pane-splitter")];
+  const columnSplitter = layout?.querySelector(".studio-column-splitter");
+  const editorsColumn = layout?.querySelector(".studio-editors");
+  const traceColumn = layout?.querySelector(".trace-column");
   const state = load();
 
   const apply = () => {
@@ -39,6 +59,10 @@ export function initStudioLayout({ container, toggleButton }) {
     state.sizes.forEach((size, index) => {
       container.style.setProperty(VARS[index], `${size.toFixed(4)}fr`);
     });
+    if (layout) {
+      layout.style.setProperty("--lhs", `${state.columns[0].toFixed(4)}fr`);
+      layout.style.setProperty("--rhs", `${state.columns[1].toFixed(4)}fr`);
+    }
     for (const splitter of splitters) {
       splitter.setAttribute(
         "aria-orientation",
@@ -106,6 +130,39 @@ export function initStudioLayout({ container, toggleButton }) {
     state.orientation = state.orientation === "vertical" ? "horizontal" : "vertical";
     apply();
     persist();
+  });
+
+  columnSplitter?.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    if (!editorsColumn || !traceColumn) return;
+    event.preventDefault();
+    const left = editorsColumn.getBoundingClientRect().width;
+    const right = traceColumn.getBoundingClientRect().width;
+    const pair = left + right;
+    if (pair <= MIN_LHS_PX + MIN_RHS_PX) return;
+    const start = event.clientX;
+    columnSplitter.classList.add("active");
+    columnSplitter.setPointerCapture(event.pointerId);
+
+    const onMove = (moveEvent) => {
+      const delta = moveEvent.clientX - start;
+      const first = Math.min(
+        Math.max(MIN_LHS_PX, left + delta),
+        pair - MIN_RHS_PX,
+      );
+      state.columns = [first / pair, (pair - first) / pair];
+      apply();
+    };
+    const onEnd = () => {
+      columnSplitter.classList.remove("active");
+      columnSplitter.removeEventListener("pointermove", onMove);
+      columnSplitter.removeEventListener("pointerup", onEnd);
+      columnSplitter.removeEventListener("pointercancel", onEnd);
+      persist();
+    };
+    columnSplitter.addEventListener("pointermove", onMove);
+    columnSplitter.addEventListener("pointerup", onEnd);
+    columnSplitter.addEventListener("pointercancel", onEnd);
   });
 
   apply();

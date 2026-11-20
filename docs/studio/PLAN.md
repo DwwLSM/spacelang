@@ -331,6 +331,11 @@ Failure to parse or a stale timestamp silently yields an empty workspace.
   like the state-panel resizers on the right, and persisted in
   `localStorage["opt-sp-studio-layout"]`. Below 1100 px the editors always stack,
   whatever the saved orientation says.
+- The boundary between the editor column and the trace column is draggable as
+  well, with the same persistence and minimum widths (300 px editors, 320 px
+  trace). The step controls span the full width below both.
+- The same menu offers `OPT_SP editor (new tab)` back to the classic page, so the
+  studio never traps the user in the new layout.
 - The assembly pane header carries an `annotations` toggle for the
   `; line=N spaces=...` comments that `disassemble()` appends to every
   instruction. Hiding is a pure text transform; restoring reuses the cached
