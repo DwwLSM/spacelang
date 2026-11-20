@@ -73,6 +73,8 @@ def benchmark_engines(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare CPython and both SpaceLang VM runtimes.")
+    parser.add_argument("--case", choices=("fib", "loop"), default="loop",
+                        help="which program to run (default: loop)")
     parser.add_argument("--n", type=int, default=27, help="Fibonacci input (default: 27)")
     parser.add_argument("--repeat", type=int, default=7, help="Measured runs per engine (default: 7)")
     parser.add_argument("--warmup", type=int, default=2, help="Unmeasured runs per engine (default: 2)")
@@ -80,7 +82,8 @@ def main() -> None:
     if args.n < 0 or args.repeat < 1 or args.warmup < 0:
         parser.error("--n must be non-negative, --repeat >= 1, and --warmup >= 0")
 
-    source = f"""
+    if args.case == "fib":
+        source = f"""
 def fib(n):
     if n < 2:
         return n
@@ -88,18 +91,17 @@ def fib(n):
 
 result = fib({args.n})
 """
-    source = f"""
-
+    else:
+        source = """
 from math import sqrt
 sum = 0
 for i in range(100000):
     sum = sqrt(sum) if sum > 20000000 else sqrt(i) * sqrt(3) * 2 + sum
-    
-result = sum    
-    
+
+result = sum
 """
 
-
+    print(f"case: {args.case}")
     durations = benchmark_engines(source, repeats=args.repeat, warmup=args.warmup)
     baseline = durations["CPython"]
     for name, duration in durations.items():
