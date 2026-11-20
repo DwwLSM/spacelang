@@ -2,6 +2,7 @@ import { Visualizer } from "./visualizer.js";
 import { bindAutoCompletion, bindDragMove, bindUndoRedo } from "./editor.js";
 import { downloadSource } from "./download.js";
 import { getFileHandle, storeFileHandle } from "./file-handles.js";
+import { checkAssets } from "./health.js";
 
 const page = document.body.dataset.page;
 
@@ -505,3 +506,41 @@ if (page === "editor") {
     }
   }
 }
+
+const settingsButton = document.querySelector("#settings-button");
+const settingsMenu = document.querySelector("#settings-menu");
+if (settingsButton && settingsMenu) {
+  const closeSettingsMenu = () => {
+    settingsMenu.hidden = true;
+    settingsButton.setAttribute("aria-expanded", "false");
+  };
+
+  settingsButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const willOpen = settingsMenu.hidden;
+    settingsMenu.hidden = !willOpen;
+    settingsButton.setAttribute("aria-expanded", String(willOpen));
+    if (willOpen) {
+      settingsMenu.querySelector("[role='menuitem']")?.focus();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!settingsMenu.hidden && !event.target.closest(".settings-menu-wrapper")) {
+      closeSettingsMenu();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !settingsMenu.hidden) {
+      closeSettingsMenu();
+      settingsButton.focus();
+    }
+  });
+
+  document.querySelector("#reload-page-button")?.addEventListener("click", () => {
+    window.location.reload();
+  });
+}
+
+void checkAssets();

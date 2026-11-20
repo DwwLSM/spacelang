@@ -4,6 +4,7 @@
   --surface: #161b22;
   --surface-raised: #1d242d;
   --border: #303943;
+  --border-strong: #1d1f22;
   --text: #e6edf3;
   --muted: #9daab7;
   --accent: #58a6ff;
@@ -789,6 +790,88 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
   overflow-wrap: anywhere;
 }
 .loading { cursor: progress; }
+
+#settings-button {
+  width: 31px;
+  height: 31px;
+  min-height: 31px;
+  padding: 0;
+  display: inline-grid;
+  flex: 0 0 31px;
+  place-items: center;
+  border-radius: 50%;
+}
+#settings-button svg {
+  width: 16px;
+  height: 16px;
+}
+.settings-menu-wrapper {
+  height: 31px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.settings-menu {
+  position: absolute;
+  top: calc(100% + .55rem);
+  right: 0;
+  z-index: 100;
+  width: 190px;
+  padding: .35rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px #0008, inset 0 1px 0 #ffffff08;
+}
+.settings-menu[hidden] { display: none; }
+.settings-menu-heading {
+  padding: .45rem .55rem .35rem;
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.settings-menu-item {
+  width: 100%;
+  padding: .55rem .65rem;
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  box-shadow: none;
+}
+.settings-menu-item:hover,
+.settings-menu-item:focus-visible {
+  background: #58a6ff18;
+  border-color: transparent;
+}
+.settings-menu-danger,
+#stop-server-button {
+  color: #ffb3b3;
+  background: transparent;
+  border: 0;
+  font-size: .75rem;
+}
+.settings-menu-danger:hover,
+.settings-menu-danger:focus-visible,
+#stop-server-button:hover:not(:disabled) {
+  color: #ffd0d0;
+  background: #f8514922;
+  border: 0;
+  box-shadow: none;
+}
+.asset-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  margin: 0;
+  padding: .55rem .9rem;
+  font-size: .8rem;
+  color: #1b1206;
+  background: var(--highlight);
+  border-bottom: 1px solid #b9791a;
+}
 
 @media (max-width: 900px) and (min-width: 761px) {
   .editor-toolbar { grid-template-columns: minmax(0, 1fr) auto; }

@@ -1,9 +1,12 @@
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
 import time
+from importlib import import_module
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -61,13 +64,50 @@ def test_server_returns_url():
         httpd.server_close()
 
 
+def test_health_reports_state():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/__opt_sp/health") as response:
+            assert response.status == 200
+            report = json.loads(response.read())
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert set(report["checks"]) == {
+        "pyodide_js",
+        "python_stdlib",
+        "spacelang_pkg",
+        "studio_page",
+    }
+    assert report["ok"] == all(report["checks"].values())
+    assert report["checks"]["pyodide_js"] is True
+
+
+def test_health_marks_missing_asset(monkeypatch):
+    missing_root = Path(__file__).resolve().parent / "__missing_opt_sp_static__"
+    # `spacelang.opt_sp.server` is shadowed by the exported `server` function,
+    # so resolve the module through sys.modules instead of attribute access.
+    server_module = import_module("spacelang.opt_sp.server")
+    monkeypatch.setattr(server_module, "static_dir", lambda: missing_root)
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/__opt_sp/health") as response:
+            report = json.loads(response.read())
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert report["ok"] is False
+    assert report["checks"]["pyodide_js"] is False
+    assert "build_static" in (report["hint"] or "")
+
+
 def test_server_assets_use_paths_relative_to_app():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:
         with urlopen(f"{url}/") as response:
             page = response.read().decode("utf-8")
-        assert 'href="css/opt-sp.css?v=6"' in page
-        assert 'src="js/app.js?v=6"' in page
+        assert re.search(r'href="css/opt-sp\.css\?v=\d+"', page), page
+        assert re.search(r'src="js/app\.js\?v=\d+"', page), page
         assert 'for="open-project-file-browser">File</label>' in page
         assert 'id="open-project-file-browser"' in page
         assert 'id="project-file-browser"' in page

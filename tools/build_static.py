@@ -34,6 +34,7 @@ def _check() -> int:
         STATIC / "js" / "download.js",
         STATIC / "js" / "editor.js",
         STATIC / "js" / "file-handles.js",
+        STATIC / "js" / "health.js",
         STATIC / "js" / "pyodide-loader.js",
         STATIC / "js" / "visualizer.js",
         STATIC / "js" / "spacelang-kernel.js",
@@ -119,11 +120,17 @@ def _copy_spacelang_modules() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="only verify built static assets")
+    parser.add_argument(
+        "--no-pyodide",
+        action="store_true",
+        help="skip re-downloading the Pyodide distribution",
+    )
     args = parser.parse_args()
     if args.check:
         return _check()
 
-    _copy_pyodide_distribution()
+    if not args.no_pyodide:
+        _copy_pyodide_distribution()
     _copy_spacelang_modules()
     total_size = sum(path.stat().st_size for path in STATIC.rglob("*") if path.is_file())
     file_count = sum(1 for path in STATIC.rglob("*") if path.is_file())

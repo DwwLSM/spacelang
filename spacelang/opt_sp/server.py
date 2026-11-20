@@ -61,6 +61,8 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         request = urlsplit(self.path)
         if request.path == "/__opt_sp/status":
             self._send_status()
+        elif request.path == "/__opt_sp/health":
+            self._send_health()
         elif request.path in {"/", "/index.html", "/visualize.html"}:
             page = (
                 "index.html"
@@ -124,6 +126,29 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         self._send_json(200, {
             "pid": os.getpid(),
             "port": self.server.server_address[1],
+        })
+
+    def _send_health(self) -> None:
+        try:
+            is_loopback = ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not is_loopback:
+            self._send_json(403, {"error": "Health information is only available locally."})
+            return
+
+        root = Path(static_dir())
+        checks = {
+            "pyodide_js": (root / "pyodide" / "pyodide.js").is_file(),
+            "python_stdlib": (root / "pyodide" / "python_stdlib.zip").is_file(),
+            "spacelang_pkg": (root / "spacelang_pkg" / "manifest.json").is_file(),
+            "studio_page": (root / "studio.html").is_file(),
+        }
+        ok = all(checks.values())
+        self._send_json(200, {
+            "ok": ok,
+            "checks": checks,
+            "hint": None if ok else "Run: python tools/build_static.py",
         })
 
     def _send_json(self, status: int, payload: dict) -> None:
