@@ -63,6 +63,33 @@ for i in range(2000):
     total = total + math.sqrt(i)
 result = total
 """,
+    "closure": """
+def make_counter():
+    value = 0
+    def increment():
+        nonlocal value
+        value = value + 1
+        return value
+    return increment
+
+counter = make_counter()
+total = 0
+for i in range(2000):
+    total = total + counter()
+result = total
+""",
+    "higher-order": """
+def multiplier(factor):
+    def scale(value):
+        return value * factor
+    return scale
+
+double = multiplier(2)
+total = 0
+for i in range(2000):
+    total = total + double(i)
+result = total
+""",
 }
 
 
@@ -117,7 +144,7 @@ def main() -> int:
 
     names = args.program or list(PROGRAMS)
     header = (
-        f"{'program':<12}{'instrs':>9}{'py ms':>10}{'cpp ms':>10}"
+        f"{'program':<14}{'instrs':>9}{'py ms':>10}{'cpp ms':>10}"
         f"{'speedup':>9}{'py ns/i':>10}{'cpp ns/i':>10}"
     )
     print(header)
@@ -138,7 +165,7 @@ def main() -> int:
         py_ns = py_seconds * 1e9 / executed
         cpp_ns = cpp_seconds * 1e9 / executed
         print(
-            f"{name:<12}{executed:>9,}{py_seconds * 1e3:>10.2f}{cpp_seconds * 1e3:>10.2f}"
+            f"{name:<14}{executed:>9,}{py_seconds * 1e3:>10.2f}{cpp_seconds * 1e3:>10.2f}"
             f"{py_seconds / cpp_seconds:>8.1f}x{py_ns:>10.1f}{cpp_ns:>10.1f}"
         )
         rows.append((name, executed, counts, py_seconds, cpp_seconds))
