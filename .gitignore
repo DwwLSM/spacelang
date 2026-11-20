@@ -19,3 +19,14 @@ native/spvm
 native/spc.sp
 native/spc_blob.h
 native/examples/*.sp
+
+# local secrets (LLM endpoint keys); see docs/studio/PLAN.md
+.env
+.env.local
+.env.*.local
+
+# local scratch output from manual checks
+.artifacts/
+
+# pytest scratch directories it could not clean up in this sandbox
+pytest-cache-files-*/
