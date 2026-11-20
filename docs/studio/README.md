@@ -117,6 +117,23 @@ Mirror rejected at instruction 7: the program needs "OP 2" but the answer compil
 
 There is no "accept anyway" — a gate you can bypass is not a gate.
 
+### Known limit: wholesale rewrites
+
+The sync is built for **incremental** edits. Replacing an entire program at once —
+for example pasting a 90-instruction assembly listing over a four-line mirror —
+usually produces an answer that compiles to a *different* program, and the gate
+rejects it:
+
+```
+Mirror rejected at instruction 1: the program needs "PUSH_INT 1" but the answer
+compiles to "DEF 10000 1". This change rewrites most of the program; smaller
+edits sync more reliably.
+```
+
+The model answers in well under a second because its hidden reasoning is turned
+off; the price is that it does not plan a large rewrite. Edit in steps instead:
+each accepted sync gives the next one a correct starting point.
+
 ### Limits
 
 Requests share a token bucket of 40 per minute (burst 4) per server process,

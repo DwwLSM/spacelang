@@ -165,6 +165,7 @@ SYSTEM_PROMPT_FULL = (
 )
 
 _ANNOTATION = re.compile(r"\s*; line=\d+ spaces=[0-9,]*$")
+_FENCE = re.compile(r"^\s*```[A-Za-z0-9_+-]*[ \t]*\r?\n(.*?)\r?\n\s*```\s*$", re.DOTALL)
 _MAX_DIFF_CHARS = 6000
 
 # Mirrors spacelang/pyfront.py (BinOp.op_map) and csrc/vm.cpp (try_numeric_binary_fast).
@@ -221,6 +222,12 @@ def assembly_diff(previous_asm: str, current_asm: str) -> str | None:
     return diff
 
 
+def _unwrap_fences(text: str) -> str:
+    """Drop a Markdown code fence if the model wrapped the file in one."""
+    match = _FENCE.match(text)
+    return match.group(1) if match else text
+
+
 def _previous_assembly(py_src: str) -> str | None:
     """The assembly the stale mirror compiles to, if it still compiles."""
     try:
@@ -230,6 +237,17 @@ def _previous_assembly(py_src: str) -> str | None:
     if not result.get("ok"):
         return None
     return result["texts"].get("spasm")
+
+
+def _diff_is_large(diff: str, listing: str) -> bool:
+    """True when the change rewrites most of the listing."""
+    changed = sum(
+        1
+        for line in diff.split("\n")
+        if line[:1] in "+-" and not line.startswith(("+++", "---"))
+    )
+    total = max(1, len([line for line in listing.split("\n") if line.strip()]))
+    return changed > 0.4 * total
 
 
 def build_messages(py_src: str, spasm_src: str) -> list[dict[str, str]]:
@@ -243,6 +261,13 @@ def build_messages(py_src: str, spasm_src: str) -> list[dict[str, str]]:
     diff = assembly_diff(previous, spasm_src) if previous else None
     legend = operator_legend(spasm_src, previous or "")
     if diff:
+        scale = ""
+        if _diff_is_large(diff, spasm_src):
+            scale = (
+                "\nThis is a large change. Output the complete module: the "
+                "module-level constants first, then every function, in the order "
+                "the assembly gives them.\n"
+            )
         user = (
             "## Current Python\n"
             "```python\n"
@@ -255,6 +280,7 @@ def build_messages(py_src: str, spasm_src: str) -> list[dict[str, str]]:
             "```\n\n"
             "## Task\n"
             "Apply this change to the Python and output the whole file.\n"
+            f"{scale}"
         )
         return [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -359,21 +385,31 @@ def refine_py(
             disable_thinking=config.disable_thinking,
         )
 
-    report = verify_py(answer["content"], spasm_src)
+    content = _unwrap_fences(answer["content"])
+    report = verify_py(content, spasm_src)
     if not report["ok"]:
+        # Report the real reason: an answer that does not compile is a different
+        # failure from one that compiles to another program.
+        code = report.get("error") or "not_equivalent"
+        detail_lines = [
+            line for line in (report.get("detail") or "").strip().splitlines() if line.strip()
+        ]
+        previous = _previous_assembly(py_src)
+        diff = assembly_diff(previous, spasm_src) if previous else None
         raise LLMError(
-            "not_equivalent",
-            "the rewritten mirror does not compile to the same program",
+            code,
+            detail_lines[-1] if detail_lines else "the rewritten mirror was rejected",
             details={
                 "want_len": report.get("want_len"),
                 "got_len": report.get("got_len"),
                 "first": report.get("first"),
+                "large_change": bool(diff and _diff_is_large(diff, spasm_src)),
             },
         )
 
     return {
         "ok": True,
-        "py": answer["content"],
+        "py": content,
         "verified": True,
         "model": answer["model"],
         "usage": answer["usage"],

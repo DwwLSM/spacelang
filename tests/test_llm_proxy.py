@@ -240,6 +240,66 @@ def test_refine_py_not_equivalent_is_rejected(stub_llm):
     assert "py" not in body
 
 
+def test_refine_py_reports_invalid_python_from_the_model(stub_llm):
+    stub_llm.payload = {
+        "choices": [{"finish_reason": "stop", "message": {"content": "def ("}}],
+    }
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _expect_error(url, {"py": PY_SOURCE, "spasm": _asm()})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 422
+    assert body["error"] == "python_unparsable"
+    assert body["message"]
+
+
+def test_refine_py_unwraps_markdown_fences(stub_llm):
+    stub_llm.payload = {
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {"content": f"```python\n{PY_SOURCE}\n```"},
+        }],
+    }
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _post(url, {"py": PY_SOURCE, "spasm": _asm()})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 200
+    assert body["verified"] is True
+    assert "```" not in body["py"]
+
+
+def test_refine_py_reports_unparsable_assembly(stub_llm):
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _expect_error(url, {"py": PY_SOURCE, "spasm": "NOT_AN_OPCODE"})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 400
+    assert body["error"] == "assembly_unparsable"
+
+
+def test_refine_py_flags_a_large_change(stub_llm):
+    big = "".join(f"value_{index} = {index}\nprint(value_{index})\n" for index in range(1, 16))
+    big_asm = convert(big, "py")["texts"]["spasm"]
+    stub_llm.payload = {
+        "choices": [{"finish_reason": "stop", "message": {"content": "x = 1\n"}}],
+    }
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _expect_error(url, {"py": "x = 1\n", "spasm": big_asm})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 422
+    assert body["large_change"] is True
+
+
 def test_prompt_explains_the_operator_codes(stub_llm):
     program = "a = 3\nb = 4\nc = a + b\nprint(c)\n"
     asm = convert(program, "py")["texts"]["spasm"].replace("OP 1", "OP 2")

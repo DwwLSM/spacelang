@@ -58,6 +58,8 @@ _LLM_STATUS = {
     "rate_limited": 429,
     "busy": 429,
     "not_equivalent": 422,
+    "python_unparsable": 422,
+    "assembly_unparsable": 400,
     "bad_key": 502,
     "truncated": 502,
     "empty_completion": 502,

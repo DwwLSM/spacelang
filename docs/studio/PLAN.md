@@ -570,11 +570,17 @@ are debug/symbol metadata and legitimately differ between the two front ends.
 
 - `ok == true` → replace `py`, badge `synced`, toast "mirror verified".
 - `ok == false` → **do not replace**. The editor keeps the user's text; a
-  non-blocking strip reports `mirror rejected — n/nn instructions differ` with
-  the first three differing opcodes, and a "Try again" action. There is no
-  "accept anyway": once a bypass exists the gate stops being a gate. If the
-  model is repeatedly wrong, the correct response is a better prompt or a
-  smaller change, not a bypass.
+  non-blocking strip reports the first differing instruction, and a "Try again"
+  action. There is no "accept anyway": once a bypass exists the gate stops being
+  a gate. If the model is repeatedly wrong, the correct response is a better
+  prompt or a smaller change, not a bypass.
+
+Known limitation, measured: with thinking disabled the model handles incremental
+diffs reliably (0.4 s, correct on the first attempt) but not whole-program
+rewrites. Replacing a four-line mirror with a 94-instruction listing produced an
+answer of 112 instructions that began at the wrong place; the gate rejected it.
+The response therefore carries `large_change` (the diff covers more than 40 % of
+the listing) so the UI can tell the user to edit in smaller steps.
 
 ### 11.6 Rate limiting
 

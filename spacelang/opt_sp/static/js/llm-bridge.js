@@ -17,6 +17,8 @@ const ERRORS = {
   bad_config: "The LLM endpoint or model name is not valid.",
   network_error: "Cannot reach the local server.",
   cancelled: "Sync cancelled.",
+  python_unparsable: "The model's answer was not valid Python, so it was rejected.",
+  assembly_unparsable: "The assembly could not be assembled, so nothing was sent.",
 };
 
 export function describeError(result) {
@@ -26,11 +28,17 @@ export function describeError(result) {
   }
   if (result.error === "not_equivalent") {
     const first = result.first;
+    const hint = result.large_change
+      ? " This change rewrites most of the program; smaller edits sync more reliably."
+      : "";
     if (first) {
       return `Mirror rejected at instruction ${Number(first.index) + 1}: `
-        + `the program needs "${first.want}" but the answer compiles to "${first.got}".`;
+        + `the program needs "${first.want}" but the answer compiles to "${first.got}".${hint}`;
     }
-    return `Mirror rejected - ${result.got_len ?? "?"}/${result.want_len ?? "?"} instructions differ.`;
+    if (result.want_len != null && result.got_len != null) {
+      return `Mirror rejected - ${result.got_len}/${result.want_len} instructions differ.${hint}`;
+    }
+    return `Mirror rejected: the answer compiles to a different program.${hint}`;
   }
   return base;
 }
