@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import ProxyHandler, Request, build_opener, urlopen
 import webbrowser
 
+from . import markdown_doc
 from ._locate import static_dir
 from ..llm_client import LLMError
 from .llm_proxy import (
@@ -90,6 +91,59 @@ _PAGE_TITLES = {
     "tutorial.html": "SpaceLang \u00b7 Tutorial",
 }
 _DEFAULT_PAGE_TITLE = "OPT_SP \u2014 SpaceLang Visual Debugger"
+_DOCUMENTED_PAGES = frozenset({"docs.html"})
+_DOCUMENT = "documentation.md"
+_DOCUMENT_MISSING = (
+    "<h1>Documentation is unavailable</h1>"
+    "<p>This page renders <code>documentation.md</code>, which this installation "
+    "does not ship. From a checkout, run <code>python tools/build_static.py</code> "
+    "to bake a copy into the served static files.</p>"
+)
+_DOCUMENT_CACHE: tuple[tuple[str, int, int], tuple[str, str]] | None = None
+
+
+def _document_path() -> Path | None:
+    """Return the Markdown file behind ``/docs``, if this installation has one.
+
+    A checkout keeps the document at the repository root. An installed wheel
+    cannot ship the root file, so ``tools/build_static.py`` copies it next to
+    the static pages; prefer the checkout copy so an edit never serves a stale
+    build.
+    """
+    candidates = (
+        Path(__file__).resolve().parents[2] / _DOCUMENT,
+        Path(static_dir()) / _DOCUMENT,
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _render_documentation() -> tuple[str, str]:
+    """Render ``documentation.md`` to ``(body, table of contents)``.
+
+    The result is cached against the file's modification time: the page is
+    re-read only when the document changes, so browsing costs one render.
+    """
+    global _DOCUMENT_CACHE
+
+    path = _document_path()
+    if path is None:
+        return _DOCUMENT_MISSING, ""
+    try:
+        stat = path.stat()
+        key = (str(path), stat.st_mtime_ns, stat.st_size)
+        if _DOCUMENT_CACHE is not None and _DOCUMENT_CACHE[0] == key:
+            return _DOCUMENT_CACHE[1]
+        source = path.read_text(encoding="utf-8")
+    except OSError:
+        return _DOCUMENT_MISSING, ""
+
+    body, toc = markdown_doc.render_document(source)
+    rendered = (body, markdown_doc.render_toc(toc))
+    _DOCUMENT_CACHE = (key, rendered)
+    return rendered
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -173,6 +227,10 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             html.escape(_PAGE_TITLES.get(filename, _DEFAULT_PAGE_TITLE)),
         )
         text = text.replace("__OPT_SP_CONTROL_TOKEN__", self.stop_token or "")
+        if filename in _DOCUMENTED_PAGES:
+            body, toc = _render_documentation()
+            text = text.replace("{{doc_body}}", body)
+            text = text.replace("{{doc_toc}}", toc)
         return text.encode("utf-8")
 
     @staticmethod

@@ -772,9 +772,11 @@ on macOS); redo with `Ctrl+Shift+Z` / `Cmd+Shift+Z` or `Ctrl+Y`. Undo and redo
 also work in Live edit.
 
 The editor lists `.py`, `.sp`, and `.spasm` files under the directory where
-the OPT_SP server was started, including files in subfolders. The first file
-in the list is loaded automatically. Hidden files and common environment or
-dependency folders, including generated Pyodide module copies, are excluded.
+the OPT_SP server was started, including files in subfolders. Nothing is
+opened automatically: the page starts empty and asks for a new or existing
+file, so a visit never silently replaces the work you left behind. Hidden
+files and common environment or dependency folders, including generated
+Pyodide module copies, are excluded.
 Project-file access is limited to UTF-8 `.py`, `.sp`, and `.spasm` files up to
 1 MiB beneath that directory. **Download** saves the current editor contents
 to your browser's downloads. **Overwrite** replaces the currently loaded
@@ -784,6 +786,28 @@ API; otherwise, use Download to save an edited copy. In Live edit, Overwrite is
 available while editing a loaded file and writes the live editor contents to
 that source after confirmation. The overwrite action is unavailable for
 examples.
+
+### Pages
+
+The server serves one page per task; the home page links all of them.
+
+| Route | Page |
+|---|---|
+| `/` | home page |
+| `/editor` | source editor and visualizer (`/index.html` is an alias) |
+| `/visualize` | trace-only view (`/visualize.html` is an alias) |
+| `/studio` | three-pane workspace |
+| `/docs` | this document, rendered in the browser |
+| `/tutorial` | five-minute walkthrough |
+
+`/docs` is rendered on the server from `documentation.md` at request time:
+headings, lists, fenced code blocks, tables and links become HTML, and the
+table of contents is built from the same pass. Anchors follow GitHub's slug
+rules, so the links written inside the document keep working on both sites,
+and raw HTML in the document is escaped rather than inserted. Editing
+`documentation.md` changes the page on the next request; there is no build
+step. The copy that an installed wheel renders is produced by
+`tools/build_static.py`, described under *Prepare browser assets*.
 
 ### Start the server
 
@@ -912,8 +936,11 @@ python tools/build_static.py --check
 ```
 
 The build helper pins Pyodide 0.26.2, downloads a subset of its distribution,
-copies the pure-Python SpaceLang modules, and generates a module manifest.
-`--check` verifies expected files and a non-empty module manifest. The smoke
+copies the pure-Python SpaceLang modules, generates a module manifest, and
+copies `documentation.md` so an installed wheel can render `/docs` without the
+repository root. `--check` verifies expected files, a non-empty module
+manifest, and that the copied document still matches its source; edit the
+Markdown at the root and rerun the helper rather than the copy. The smoke
 workflow prepares and checks these files before running `tests/test_opt_sp.py`.
 Generated assets are sizeable and are not necessary for the core compiler or
 VM tests.

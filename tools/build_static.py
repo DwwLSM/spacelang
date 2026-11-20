@@ -56,6 +56,7 @@ def _check() -> int:
         STATIC / "partials" / "settings-menu.html",
         STATIC / "partials" / "state-panels.html",
         STATIC / "partials" / "step-controls.html",
+        STATIC / "documentation.md",
         STATIC / "spacelang_pkg" / "manifest.json",
         *(STATIC / "pyodide" / name for name in PYODIDE_FILES),
     ]
@@ -63,6 +64,14 @@ def _check() -> int:
     if missing:
         for path in missing:
             print(f"Missing or empty: {path.relative_to(ROOT)}")
+        return 1
+    source_document = ROOT / "documentation.md"
+    copied_document = STATIC / "documentation.md"
+    if source_document.is_file() and copied_document.read_bytes() != source_document.read_bytes():
+        print(
+            "Stale: spacelang/opt_sp/static/documentation.md no longer matches "
+            "documentation.md; rerun tools/build_static.py."
+        )
         return 1
     manifest = json.loads((STATIC / "spacelang_pkg" / "manifest.json").read_text())
     if not manifest:
@@ -135,6 +144,19 @@ def _copy_spacelang_modules() -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
+def _copy_documentation() -> None:
+    """Ship the Markdown that /docs renders inside the package tree.
+
+    A wheel contains only ``spacelang/``, so the document kept at the
+    repository root must also exist under ``spacelang/opt_sp/static/``.
+    """
+    source = ROOT / "documentation.md"
+    if not source.is_file():
+        raise FileNotFoundError(f"Missing documentation source: {source}")
+    STATIC.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, STATIC / "documentation.md")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="only verify built static assets")
@@ -150,6 +172,7 @@ def main() -> int:
     if not args.no_pyodide:
         _copy_pyodide_distribution()
     _copy_spacelang_modules()
+    _copy_documentation()
     total_size = sum(path.stat().st_size for path in STATIC.rglob("*") if path.is_file())
     file_count = sum(1 for path in STATIC.rglob("*") if path.is_file())
     print(f"Prepared {file_count} files ({total_size / (1024 * 1024):.1f} MiB).")

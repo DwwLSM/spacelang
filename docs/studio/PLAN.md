@@ -169,6 +169,29 @@ only, and no `.sp` content is ever logged.
 `sessionStorage` is per-tab; the studio opens in a new tab. The launching page
 writes `localStorage["opt-sp-handout"]` and the studio consumes and deletes it.
 
+### ADR-010 — `/docs` renders Markdown on the server
+
+`/docs` used to be a placeholder. It now renders `documentation.md` into the
+page at request time, with no client-side Markdown library and no build step
+(ADR-002). The renderer is `spacelang/opt_sp/markdown_doc.py`: a line-based
+parser covering exactly the constructs the document uses — headings, paragraphs,
+lists nested by indentation, pipe tables, fenced code, blockquotes, thematic
+breaks, and inline code, bold, emphasis and links. Raw HTML is escaped instead
+of inserted, so editing the document can never turn the page into a script host.
+
+Heading anchors follow GitHub's slug rules, because `documentation.md` already
+carries a hand-written contents list whose links must keep working on GitHub and
+in the debugger; a test asserts that every in-page link resolves after
+rendering. The sidebar is generated from the same pass, lists levels two and
+three, and skips the document's own "Contents" heading so the two lists are not
+duplicated. The rendered body is cached against the file's modification time, so
+browsing re-reads nothing.
+
+A wheel cannot carry the repository root, so `tools/build_static.py` copies the
+document to `spacelang/opt_sp/static/documentation.md` and `--check` reports a
+stale copy. A checkout always prefers the root file, so editing the document
+never serves a stale build.
+
 ## 6. Current-state inventory
 
 Files that matter (line counts from the working tree):
@@ -892,3 +915,4 @@ treated as errors, never as empty code; `reasoning_content` is discarded.
 | 11 | No "accept unverified": a rejected mirror is never applied | yes |
 | 12 | Narrow screens keep the three editors stacked, semantic order | yes |
 | 13 | AI mode is a Settings radio; no confirmation popup | yes |
+| 14 | `/docs` renders `documentation.md` on the server; the tutorial stays static HTML | yes |

@@ -8,6 +8,7 @@ dist/
 *.egg-info/
 spacelang/opt_sp/static/pyodide/
 spacelang/opt_sp/static/spacelang_pkg/
+spacelang/opt_sp/static/documentation.md
 /media/
 
 # native runner artifacts (build them with native/build.ps1)

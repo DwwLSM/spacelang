@@ -1,6 +1,7 @@
 import { Visualizer } from "./visualizer.js";
 import { bindAutoCompletion, bindDragMove, bindUndoRedo } from "./editor.js";
 import { downloadSource } from "./download.js";
+import { initDocNavigation } from "./docs.js";
 import { getFileHandle, storeFileHandle } from "./file-handles.js";
 import { checkAssets } from "./health.js";
 import { takeHandout, writeHandout } from "./handout.js";
@@ -1009,6 +1010,8 @@ if (page === "editor") {
     renderPreview();
     void engine.start(name);
   }
+} else if (page === "docs" || page === "tutorial") {
+  initDocNavigation();
 }
 
 const settingsButton = document.querySelector("#settings-button");

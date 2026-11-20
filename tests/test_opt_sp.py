@@ -17,7 +17,12 @@ from spacelang.encoder import encode
 from spacelang.pyfront import compile_py
 from spacelang.opt_sp.server import _management_file
 from spacelang.web_bridge import trace_program
+from spacelang.opt_sp import markdown_doc
 from spacelang.opt_sp import server
+
+# The package exports the *function* `server`, which shadows the module of the
+# same name, so helpers have to be reached through the import system.
+server_module = import_module("spacelang.opt_sp.server")
 
 
 def test_trace_program_basic():
@@ -183,6 +188,80 @@ def test_back_link_only_on_secondary_pages():
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_docs_page_renders_the_documentation():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/docs") as response:
+            assert response.status == 200
+            page = response.read().decode("utf-8")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert "{{doc_body}}" not in page
+    assert "{{doc_toc}}" not in page
+    assert '<h1 id="spacelang-project-documentation">' in page
+    assert '<h2 id="project-at-a-glance">' in page
+    assert '<a class="toc-h2" href="#project-at-a-glance">Project at a glance</a>' in page
+    assert "<table>" in page
+    assert '<code class="language-bash">' in page
+
+
+def test_docs_page_reports_a_missing_document(monkeypatch):
+    monkeypatch.setattr(server_module, "_document_path", lambda: None)
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/docs") as response:
+            assert response.status == 200
+            page = response.read().decode("utf-8")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert "Documentation is unavailable" in page
+    assert "build_static" in page
+
+
+def test_markdown_escapes_raw_html():
+    body, toc = markdown_doc.render_document("## Title\n\n<script>alert(1)</script>\n")
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in body
+    assert "<script>" not in body
+    assert toc == [markdown_doc.TocEntry(2, "Title", "title")]
+
+
+def test_markdown_tables_keep_escaped_pipes_in_one_cell():
+    body, _ = markdown_doc.render_document(
+        "| left | right |\n| :--- | ---: |\n| `a\\|b` | **c** |\n"
+    )
+    assert "<th>left</th>" in body
+    assert '<th style="text-align:right">right</th>' in body
+    assert "<td><code>a|b</code></td>" in body
+    assert '<td style="text-align:right"><strong>c</strong></td>' in body
+
+
+def test_markdown_nests_lists_by_indentation():
+    body, _ = markdown_doc.render_document("- one\n  - two\n- three\n")
+    assert "<li>one<ul><li>two</li></ul></li>" in body
+    assert body.count("<ul>") == 2
+
+
+def test_markdown_heading_anchors_are_unique():
+    _, toc = markdown_doc.render_document("## Same\n\n## Same\n\n### Same\n")
+    assert [entry.anchor for entry in toc] == ["same", "same-1", "same-2"]
+
+
+def test_documentation_internal_anchors_resolve():
+    path = server_module._document_path()
+    if path is None:
+        pytest.skip("documentation.md is not installed next to this package")
+    body, toc = markdown_doc.render_document(path.read_text(encoding="utf-8"))
+    anchors = set(re.findall(r'id="([^"]+)"', body))
+    targets = set(re.findall(r'href="#([^"]+)"', body))
+    assert targets <= anchors
+    assert len(toc) >= 20
+    # The document has its own "Contents" section; the sidebar replaces it, so
+    # it must not be listed twice.
+    assert all(entry.anchor != "contents" for entry in toc)
 
 
 STATIC_ROOT = Path(__file__).resolve().parents[1] / "spacelang" / "opt_sp" / "static"

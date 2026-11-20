@@ -11,12 +11,11 @@
 </head>
 <body data-page="docs">
   <!-- #include partials/app-header.html -->
+  <!-- The body and the contents list are rendered from documentation.md by
+       spacelang/opt_sp/markdown_doc.py when the server builds this page. -->
   <main class="page-layout">
-    <article class="doc-body" id="doc-body" aria-label="SpaceLang documentation">
-      <h1>Documentation</h1>
-      <p>The full reference will be rendered here from <code>documentation.md</code>.</p>
-    </article>
-    <nav class="doc-toc" id="doc-toc" aria-label="Contents"></nav>
+    <article class="doc-body" id="doc-body" aria-label="SpaceLang documentation">{{doc_body}}</article>
+    <nav class="doc-toc" id="doc-toc" aria-label="Contents">{{doc_toc}}</nav>
   </main>
 </body>
 </html>
