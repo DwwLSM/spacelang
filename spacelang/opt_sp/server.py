@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import hashlib
+import html
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import hmac
@@ -66,18 +67,29 @@ _LLM_STATUS = {
     "upstream_error": 502,
 }
 _PAGES = {
-    "/": "index.html",
-    "/index.html": "index.html",
+    "/": "home.html",
+    "/home": "home.html",
+    "/editor": "editor.html",
+    "/index.html": "editor.html",
+    "/visualizer": "visualize.html",
     "/visualize.html": "visualize.html",
     "/studio": "studio.html",
+    "/docs": "docs.html",
+    "/tutorial": "tutorial.html",
 }
 _INCLUDE_RE = re.compile(
     r"[ \t]*<!-- #include (partials/[A-Za-z0-9_\-/]+\.html) -->[ \t]*\r?\n?"
 )
 _PARTIAL_RE = re.compile(r"partials/[A-Za-z0-9_\-/]+\.html")
 _MAX_INCLUDE_PASSES = 2
-_BACK_LINK = '<a class="back-link" href="./">\u2190 Back to editor</a>'
-_NO_BACK_LINK = frozenset({"index.html"})
+_BACK_LINK = '<a class="back-link" href="/editor">\u2190 Back to editor</a>'
+_NO_BACK_LINK = frozenset({"editor.html", "home.html"})
+_PAGE_TITLES = {
+    "home.html": "SpaceLang",
+    "docs.html": "SpaceLang \u00b7 Documentation",
+    "tutorial.html": "SpaceLang \u00b7 Tutorial",
+}
+_DEFAULT_PAGE_TITLE = "OPT_SP \u2014 SpaceLang Visual Debugger"
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -156,6 +168,10 @@ class _QuietHandler(SimpleHTTPRequestHandler):
                 break
         back_link = "" if filename in _NO_BACK_LINK else _BACK_LINK
         text = text.replace("{{back_link}}", back_link)
+        text = text.replace(
+            "{{page_title}}",
+            html.escape(_PAGE_TITLES.get(filename, _DEFAULT_PAGE_TITLE)),
+        )
         text = text.replace("__OPT_SP_CONTROL_TOKEN__", self.stop_token or "")
         return text.encode("utf-8")
 
@@ -257,9 +273,6 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         """Ask the model for a new Python mirror, then verify it locally."""
         if not self._local_only():
             return
-        if self.headers.get_content_type() != "application/json":
-            self._send_json(415, {"ok": False, "error": "expected_json"})
-            return
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
@@ -273,7 +286,14 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             self._send_json(413, {"ok": False, "error": "input_too_large"})
             return
         try:
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            body = self.rfile.read(length)
+        except OSError:
+            return
+        if self.headers.get_content_type() != "application/json":
+            self._send_json(415, {"ok": False, "error": "expected_json"})
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
         except (UnicodeError, json.JSONDecodeError):
             self._send_json(400, {"ok": False, "error": "invalid_json"})
             return

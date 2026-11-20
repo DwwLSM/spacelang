@@ -27,11 +27,16 @@ PYODIDE_FILES = (
 
 def _check() -> int:
     required = [
-        STATIC / "index.html",
+        STATIC / "home.html",
+        STATIC / "editor.html",
         STATIC / "visualize.html",
         STATIC / "studio.html",
+        STATIC / "docs.html",
+        STATIC / "tutorial.html",
         STATIC / "css" / "opt-sp.css",
         STATIC / "css" / "studio.css",
+        STATIC / "css" / "home.css",
+        STATIC / "css" / "doc.css",
         STATIC / "js" / "app.js",
         STATIC / "js" / "download.js",
         STATIC / "js" / "editor.js",
@@ -46,6 +51,7 @@ def _check() -> int:
         STATIC / "js" / "studio-layout.js",
         STATIC / "js" / "sync-engine.js",
         STATIC / "js" / "trace-panel.js",
+        STATIC / "js" / "workspace.js",
         STATIC / "partials" / "app-header.html",
         STATIC / "partials" / "settings-menu.html",
         STATIC / "partials" / "state-panels.html",

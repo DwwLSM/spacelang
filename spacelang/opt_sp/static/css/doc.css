@@ -1,0 +1,91 @@
+.page-layout {
+  height: calc(100vh - 59px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 18rem);
+  gap: 0;
+}
+
+.doc-body {
+  min-width: 0;
+  padding: 1.6rem 2rem 4rem;
+  overflow: auto;
+  line-height: 1.65;
+  font-size: .86rem;
+}
+
+.doc-body h1, .doc-body h2, .doc-body h3, .doc-body h4 {
+  margin: 1.8em 0 .6em;
+  line-height: 1.3;
+}
+.doc-body h1 { margin-top: 0; font-size: 1.5rem; }
+.doc-body h2 { font-size: 1.2rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+.doc-body h3 { font-size: 1rem; color: var(--accent); }
+.doc-body p { margin: .7em 0; }
+.doc-body ul, .doc-body ol { margin: .7em 0; padding-left: 1.5rem; }
+.doc-body li { margin: .25em 0; }
+.doc-body a { color: var(--accent); }
+.doc-body code {
+  padding: .1rem .3rem;
+  font-size: .92em;
+  background: #0d1420;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.doc-body pre {
+  margin: .9em 0;
+  padding: .8rem 1rem;
+  overflow: auto;
+  background: #0b1119;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.doc-body pre code {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.doc-body table {
+  margin: .9em 0;
+  border-collapse: collapse;
+  font-size: .82rem;
+}
+.doc-body th, .doc-body td {
+  padding: .35rem .6rem;
+  text-align: left;
+  border: 1px solid var(--border);
+}
+.doc-body th { background: var(--surface-raised); }
+.doc-body blockquote {
+  margin: .9em 0;
+  padding: .2rem 0 .2em 1rem;
+  color: var(--muted);
+  border-left: 3px solid var(--border);
+}
+
+.doc-toc {
+  padding: 1.2rem 1rem;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+.doc-toc h2 {
+  margin: 0 0 .6rem;
+  color: var(--muted);
+  font-size: .68rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.doc-toc a {
+  display: block;
+  padding: .15rem 0;
+  color: var(--muted);
+  font-size: .76rem;
+  text-decoration: none;
+}
+.doc-toc a:hover { color: var(--text); }
+.doc-toc a.toc-h3 { padding-left: .9rem; font-size: .72rem; }
+
+@media (max-width: 1100px) {
+  .page-layout { height: auto; grid-template-columns: minmax(0, 1fr); }
+  .doc-toc { border-left: 0; border-top: 1px solid var(--border); }
+}

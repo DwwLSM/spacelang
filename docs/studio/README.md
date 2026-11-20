@@ -7,10 +7,26 @@ debugger's state panels on the right.
 http://127.0.0.1:8000/studio
 ```
 
-Open it from the settings menu (**Studio (new tab)**) on any OPT_SP page, or
-directly. If you arrived from the editor or the visualizer, the source you were
-looking at is carried over in the `py`, `spasm` or `sp` pane depending on the
-mode; nothing else is shared between tabs.
+Open it from the **Studio** button in the header (it carries the file you are
+looking at into the matching pane), from the settings menu, or from the landing
+page. The pages are:
+
+| Route | What it is |
+|---|---|
+| `/` | landing page with entry links |
+| `/editor` | the classic editor |
+| `/visualizer` | the trace player |
+| `/studio` | this workspace |
+| `/docs` | the language reference |
+| `/tutorial` | a five-step introduction |
+
+The editor keeps your file when you run it: `Run` moves to the visualizer, and
+**← Back to editor** returns to the same source, mode and caret. Opening the
+editor without a saved file asks what to start: `py`, `spasm` or `sp`.
+
+If you arrived from the editor or the visualizer, the source you were looking at
+is carried over in the `py`, `spasm` or `sp` pane depending on the mode; nothing
+else is shared between tabs.
 
 ## Running it
 

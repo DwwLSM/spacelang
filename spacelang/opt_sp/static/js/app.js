@@ -9,6 +9,7 @@ import { initStudioLayout } from "./studio-layout.js";
 import { TracePanel } from "./trace-panel.js";
 import { describeError, refinePy } from "./llm-bridge.js";
 import { initLLMSettings, llmHeaders } from "./llm-settings.js";
+import { createWorkspaceSaver, loadWorkspace } from "./workspace.js";
 
 const page = document.body.dataset.page;
 
@@ -101,6 +102,8 @@ if (page === "editor") {
   let localFileHandle = null;
   let localFileHandleId = null;
   let localFileName = null;
+  // Assigned once the workspace saver exists; earlier loaders call it safely.
+  let scheduleWorkspaceSave = () => {};
   const resetUndoHistory = bindUndoRedo(editor);
   bindAutoCompletion(editor);
   bindDragMove(editor);
@@ -174,6 +177,7 @@ if (page === "editor") {
       setSourceMode(result.mode);
       setProjectFileButtonLabel(result.path);
       updateOverwriteButton();
+      scheduleWorkspaceSave();
       message.replaceChildren();
       projectFileStatus.textContent = `Loaded ${result.path} · ${projectFileSummary}`;
     } catch (error) {
@@ -280,6 +284,7 @@ if (page === "editor") {
       const extension = file.name.split(".").pop().toLowerCase();
       setSourceMode(extension === "sp" ? "sp" : extension === "spasm" ? "asm" : "python");
       updateOverwriteButton();
+      scheduleWorkspaceSave();
     } catch (error) {
       if (error.name !== "AbortError") {
         showError(message, `Could not open the selected file: ${error.message || String(error)}`);
@@ -302,6 +307,7 @@ if (page === "editor") {
       const extension = file.name.split(".").pop().toLowerCase();
       setSourceMode(extension === "sp" ? "sp" : extension === "spasm" ? "asm" : "python");
       updateOverwriteButton();
+      scheduleWorkspaceSave();
       message.replaceChildren();
     } catch (error) {
       showError(message, `Could not read the selected file: ${error.message || String(error)}`);
@@ -416,9 +422,186 @@ if (page === "editor") {
     }
   });
 
-  document.querySelector("#studio-link")?.addEventListener("click", () => {
-    writeHandout(sourceModeSelect.value, editor.value);
+  for (const entry of document.querySelectorAll(".studio-entry")) {
+    entry.addEventListener("click", () => {
+      saver.flush();
+      writeHandout(sourceModeSelect.value, editor.value);
+    });
+  }
+
+  // --- workspace: keep the file and the content across Run and Back ---------
+  const saver = createWorkspaceSaver(() => ({
+    code: editor.value,
+    mode: sourceModeSelect.value,
+    suggestedFilename,
+    projectFilePath,
+    localFileHandleId,
+    localFileName,
+    caret: editor.selectionStart ?? 0,
+  }));
+  scheduleWorkspaceSave = saver.schedule;
+  editor.addEventListener("input", saver.schedule);
+  sourceModeSelect.addEventListener("change", saver.schedule);
+
+  const defaultAsm = editor.defaultValue;
+  const SAMPLES = {
+    python: "def add(a, b):\n    return a + b\n\n\nprint(add(2, 3))\n",
+    asm: defaultAsm,
+    sp: "",
+  };
+  const newFileDialog = document.querySelector("#new-file-dialog");
+  const newFileButton = document.querySelector("#new-file-button");
+  if (newFileButton) newFileButton.hidden = false;
+
+  function updateEditorPlaceholder() {
+    editor.placeholder = sourceModeSelect.value === "sp"
+      ? "Paste an encoded .sp program here."
+      : "";
+  }
+
+  function startNewFile(mode) {
+    sourceModeSelect.value = mode in SAMPLES ? mode : "asm";
+    editor.value = SAMPLES[sourceModeSelect.value] ?? "";
+    suggestedFilename = "program";
+    projectFilePath = null;
+    localFileHandle = null;
+    localFileHandleId = null;
+    localFileName = null;
+    setProjectFileButtonLabel("");
+    resetUndoHistory();
+    updateOverwriteButton();
+    updateEditorPlaceholder();
+    saver.flush();
+    newFileDialog?.close();
+    editor.focus();
+  }
+
+  function openNewFileDialog() {
+    if (!newFileDialog) return;
+    if (typeof newFileDialog.showModal === "function") newFileDialog.showModal();
+    else newFileDialog.setAttribute("open", "");
+  }
+
+  for (const button of newFileDialog?.querySelectorAll("button[data-mode]") ?? []) {
+    button.addEventListener("click", () => startNewFile(button.dataset.mode));
+  }
+  newFileDialog?.querySelector("#new-file-open")?.addEventListener("click", () => {
+    newFileDialog.close();
+    openProjectFileBrowserButton.click();
   });
+  newFileButton?.addEventListener("click", openNewFileDialog);
+  sourceModeSelect.addEventListener("change", updateEditorPlaceholder);
+  window.addEventListener("beforeunload", () => saver.flush());
+
+  let bootstrapped = false;
+
+  function applyWorkspace() {
+    const restored = loadWorkspace();
+    if (!restored) return false;
+    editor.value = restored.code;
+    if (restored.mode) sourceModeSelect.value = restored.mode;
+    suggestedFilename = restored.suggestedFilename || "program";
+    projectFilePath = restored.projectFilePath ?? null;
+    localFileName = restored.localFileName ?? null;
+    localFileHandleId = restored.localFileHandleId ?? null;
+    setProjectFileButtonLabel(projectFilePath ?? "");
+    resetUndoHistory();
+    updateOverwriteButton();
+    updateEditorPlaceholder();
+    if (Number.isInteger(restored.caret)) {
+      const caret = Math.min(restored.caret, editor.value.length);
+      editor.setSelectionRange(caret, caret);
+    }
+    if (localFileHandleId) {
+      // The handle survives in IndexedDB; permission may need re-granting when
+      // the user next overwrites, which the existing flow already handles.
+      getFileHandle(localFileHandleId).then((handle) => {
+        if (!handle || localFileHandleId !== restored.localFileHandleId) return;
+        localFileHandle = handle;
+        localFileName = handle.name;
+        updateOverwriteButton();
+      }).catch(() => {});
+    }
+    return true;
+  }
+
+  /**
+   * Chrome restores textarea and select values around page load and can emit
+   * input events while doing it. The workspace (or the template default) is the
+   * source of truth, so the saver is paused over that window and the values are
+   * asserted again a moment later.
+   */
+  function bootstrapWorkspace() {
+    saver.setPaused(true);
+    const restored = applyWorkspace();
+    const expectedCode = restored ? editor.value : defaultAsm;
+    const expectedMode = restored ? sourceModeSelect.value : "asm";
+    const caret = restored && Number.isInteger(loadWorkspace()?.caret)
+      ? loadWorkspace().caret
+      : null;
+    if (!restored) {
+      editor.value = defaultAsm;
+      sourceModeSelect.value = "asm";
+      updateEditorPlaceholder();
+      openNewFileDialog();
+    }
+    requestAnimationFrame(() => {
+      if (restored) applyWorkspace();
+      setTimeout(() => {
+        saver.setPaused(false);
+        guardAgainstBrowserRestore(expectedCode, expectedMode, caret);
+      }, 300);
+    });
+    bootstrapped = true;
+  }
+
+  if (document.readyState === "complete") {
+    setTimeout(bootstrapWorkspace, 0);
+  } else {
+    window.addEventListener("load", () => setTimeout(bootstrapWorkspace, 0), { once: true });
+  }
+
+  // Back/forward cache restores the DOM wholesale; re-apply the saved state.
+  window.addEventListener("pageshow", (event) => {
+    if (!event.persisted || !bootstrapped) return;
+    saver.setPaused(true);
+    applyWorkspace();
+    setTimeout(() => saver.setPaused(false), 300);
+  });
+
+  /**
+   * Chrome's form-state restoration can land a second late, putting the previous
+   * session's text back into the textarea. Watch the value for a moment and put
+   * the expected text back; any real keystroke or paste ends the guard, because
+   * from then on the visible text belongs to the user.
+   */
+  function guardAgainstBrowserRestore(expectedCode, expectedMode, caret) {
+    let timer = null;
+    const stop = () => {
+      if (timer !== null) clearInterval(timer);
+      timer = null;
+    };
+    let attempts = 0;
+    timer = setInterval(() => {
+      if (attempts++ > 30) return stop();
+      let changed = false;
+      if (editor.value !== expectedCode) {
+        editor.value = expectedCode;
+        if (caret !== null) {
+          const limit = Math.min(caret, editor.value.length);
+          editor.setSelectionRange(limit, limit);
+        }
+        changed = true;
+      }
+      if (expectedMode && sourceModeSelect.value !== expectedMode) {
+        sourceModeSelect.value = expectedMode;
+        changed = true;
+      }
+      if (!changed) stop();
+    }, 100);
+    editor.addEventListener("keydown", stop, { once: true });
+    editor.addEventListener("paste", stop, { once: true });
+  }
 } else if (page === "visualize") {
   const root = document.querySelector("#viz-root");
   let raw = sessionStorage.getItem("opt-sp-trace");
@@ -512,12 +695,14 @@ if (page === "editor") {
       visualizer.bindControls();
       visualizer.liveToggle.addEventListener("click", updateOverwriteButton);
       updateOverwriteButton();
-      document.querySelector("#studio-link")?.addEventListener("click", () => {
-        const source = visualizer.liveMode
-          ? visualizer.liveEditor.value
-          : visualizer.sourceText;
-        writeHandout(visualizer.mode, source);
-      });
+      for (const entry of document.querySelectorAll(".studio-entry")) {
+        entry.addEventListener("click", () => {
+          const source = visualizer.liveMode
+            ? visualizer.liveEditor.value
+            : visualizer.sourceText;
+          writeHandout(visualizer.mode, source);
+        });
+      }
       window.addEventListener("keydown", (event) => {
         if (event.target instanceof HTMLElement &&
           event.target.closest("input, textarea, select, [contenteditable='true']")) return;
@@ -682,6 +867,10 @@ if (page === "editor") {
 
   const optSpLink = document.querySelector("#opt-sp-link");
   if (optSpLink) optSpLink.hidden = false;
+
+  // Already inside the studio: the header shortcut would open a second one.
+  const headerStudioLink = document.querySelector("#studio-link");
+  if (headerStudioLink) headerStudioLink.hidden = true;
 
   const MODES = { py: "python", spasm: "asm", sp: "sp" };
   const panel = new TracePanel({

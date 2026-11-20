@@ -187,18 +187,6 @@
 }
 .pane-status.error { color: #ffb3b3; }
 
-.llm-dialog {
-  width: min(460px, 92vw);
-  padding: 1rem 1.1rem;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 24px 64px #000a;
-}
-.llm-dialog::backdrop { background: #0009; }
-.llm-dialog h2 { margin: 0 0 .8rem; font-size: .95rem; }
-
 .llm-field {
   display: grid;
   grid-template-columns: 5.5rem minmax(0, 1fr);

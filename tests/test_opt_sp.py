@@ -122,22 +122,62 @@ def test_studio_route_serves_page():
 def test_pages_have_no_unresolved_includes():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:
-        for path in ("/", "/visualize.html", "/studio"):
+        for path in ("/", "/editor", "/visualize.html", "/studio", "/docs", "/tutorial"):
             with urlopen(f"{url}{path}") as response:
                 page = response.read().decode("utf-8")
             assert "<!-- #include" not in page, path
             assert "{{back_link}}" not in page, path
+            assert "{{page_title}}" not in page, path
     finally:
         httpd.shutdown()
         httpd.server_close()
 
 
-def test_back_link_only_on_secondary_pages():
+def test_home_page_links_the_workspace():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:
         with urlopen(f"{url}/") as response:
-            assert "back-link" not in response.read().decode("utf-8")
-        for path in ("/visualize.html", "/studio"):
+            page = response.read().decode("utf-8")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    for target in ("/editor", "/studio", "/visualizer", "/docs", "/tutorial"):
+        assert f'href="{target}"' in page, target
+    assert "github.com/DwwLSM/spacelang" in page
+
+
+def test_editor_offers_a_new_file_dialog():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/editor") as response:
+            page = response.read().decode("utf-8")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert 'id="new-file-dialog"' in page
+    for mode in ("python", "asm", "sp"):
+        assert f'data-mode="{mode}"' in page, mode
+    assert 'id="new-file-open"' in page
+
+
+def test_legacy_index_alias_serves_the_editor():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/index.html") as response:
+            page = response.read().decode("utf-8")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert 'id="code-editor"' in page
+
+
+def test_back_link_only_on_secondary_pages():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        for path in ("/", "/editor"):
+            with urlopen(f"{url}{path}") as response:
+                assert "back-link" not in response.read().decode("utf-8"), path
+        for path in ("/visualize.html", "/studio", "/docs", "/tutorial"):
             with urlopen(f"{url}{path}") as response:
                 assert "back-link" in response.read().decode("utf-8"), path
     finally:
@@ -183,7 +223,7 @@ def test_static_scripts_must_revalidate():
 def test_server_assets_use_paths_relative_to_app():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:
-        with urlopen(f"{url}/") as response:
+        with urlopen(f"{url}/editor") as response:
             page = response.read().decode("utf-8")
         assert re.search(r'href="css/opt-sp\.css\?v=\d+"', page), page
         assert re.search(r'src="js/app\.js\?v=\d+"', page), page
@@ -221,7 +261,7 @@ def test_server_does_not_require_reverse_dns(monkeypatch):
 def test_server_page_can_stop_server_with_control_token():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:
-        with urlopen(f"{url}/") as response:
+        with urlopen(f"{url}/editor") as response:
             page = response.read()
         token = page.split(
             b'<meta name="opt-sp-control-token" content="', 1

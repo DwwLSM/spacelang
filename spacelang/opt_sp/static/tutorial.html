@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="opt-sp-control-token" content="__OPT_SP_CONTROL_TOKEN__">
+  <title>SpaceLang · Tutorial</title>
+  <link rel="stylesheet" href="css/opt-sp.css?v=10">
+  <link rel="stylesheet" href="css/doc.css?v=10">
+  <script type="module" src="js/app.js?v=10"></script>
+</head>
+<body data-page="tutorial">
+  <!-- #include partials/app-header.html -->
+  <main class="page-layout">
+    <article class="doc-body" aria-label="SpaceLang tutorial">
+      <h1>First five minutes</h1>
+
+      <h2>1. Write something</h2>
+      <p>
+        Open the <a href="/editor">OPT_SP editor</a>, keep <strong>Assembly</strong>
+        as the mode and press <strong>Run</strong>. The default listing pushes two
+        numbers, adds them and halts.
+      </p>
+
+      <h2>2. Read the trace</h2>
+      <p>
+        The visualizer shows the instruction being executed, the operand stack,
+        the call stack, the heap and anything printed. Step through it with the
+        arrow keys or the slider; nothing is hidden behind a debugger build.
+      </p>
+
+      <h2>3. See the encoded form</h2>
+      <p>
+        Open the <a href="/studio">Studio</a> and type the same program as
+        Python. Two more panes fill themselves: the assembly listing and the
+        encoded <code>.sp</code>, where every token is a run of spaces. That is
+        the artifact the language actually ships.
+      </p>
+
+      <h2>4. Change the low level, keep the mirror</h2>
+      <p>
+        Edit the assembly pane: swap <code>OP 1</code> (add) for <code>OP 2</code>
+        (subtract). The Python pane is marked <em>stale</em> instead of being
+        overwritten, because nothing turns a program back into Python. Press
+        <strong>Sync with AI</strong> to have a model rewrite the mirror; the
+        answer is only accepted if it compiles to the same instructions.
+      </p>
+
+      <h2>5. Run it without Python</h2>
+      <p>
+        The repository ships a standalone interpreter (<code>native/spvm</code>)
+        and a compiler written in SpaceLang itself. Build them with
+        <code>native/build.ps1</code>, then run any compiled
+        <code>.sp</code> with no CPython in the loop.
+      </p>
+
+      <h2>Where to go next</h2>
+      <ul>
+        <li><a href="/docs">Documentation</a> — the language, the opcodes, the CLI.</li>
+        <li><a href="https://github.com/DwwLSM/spacelang" rel="noopener">GitHub</a> — source, tests, self-hosting notes.</li>
+      </ul>
+    </article>
+    <nav class="doc-toc" aria-label="Contents">
+      <h2>Contents</h2>
+      <a href="#1-write-something">1. Write something</a>
+      <a href="#2-read-the-trace">2. Read the trace</a>
+      <a href="#3-see-the-encoded-form">3. See the encoded form</a>
+      <a href="#4-change-the-low-level-keep-the-mirror">4. Change the low level</a>
+      <a href="#5-run-it-without-python">5. Run it without Python</a>
+    </nav>
+  </main>
+</body>
+</html>

@@ -12,7 +12,7 @@
   <!-- #include partials/app-header.html -->
   <main class="editor-page">
     <section class="editor-panel">
-      <textarea id="code-editor" spellcheck="false">PUSH_INT 2
+      <textarea id="code-editor" spellcheck="false" autocomplete="off">PUSH_INT 2
 PUSH_INT 3
 OP 1
       CALL 0 1
@@ -65,5 +65,21 @@ HALT</textarea>
       <span id="project-file-status" role="status" aria-live="polite">Scanning files…</span>
     </section>
   </main>
+
+  <dialog id="new-file-dialog" class="app-dialog" aria-labelledby="new-file-title">
+    <h2 id="new-file-title">Start a file</h2>
+    <p class="app-dialog-hint">
+      The editor works in one representation at a time. Pick the one you want to
+      write; the Studio can convert between them later.
+    </p>
+    <div class="new-file-actions">
+      <button type="button" data-mode="python">Python <span>.py</span></button>
+      <button type="button" data-mode="asm">Assembly <span>.spasm</span></button>
+      <button type="button" data-mode="sp">Encoded <span>.sp</span></button>
+    </div>
+    <div class="app-dialog-actions">
+      <button id="new-file-open" type="button">Open a file…</button>
+    </div>
+  </dialog>
 </body>
 </html>

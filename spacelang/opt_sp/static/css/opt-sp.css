@@ -890,6 +890,69 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
   border-bottom: 1px solid #b9791a;
 }
 
+.header-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 31px;
+  padding: .35rem .7rem;
+  color: var(--text);
+  font-size: .75rem;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, #ffffff08, transparent 62%),
+    linear-gradient(180deg, #252e39, var(--surface-raised));
+  white-space: nowrap;
+}
+.header-link:hover,
+.header-link:focus-visible {
+  color: #fff;
+  border-color: var(--accent-border);
+}
+.header-link[hidden] { display: none; }
+
+.app-dialog {
+  width: min(460px, 92vw);
+  padding: 1rem 1.1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px #000a;
+}
+.app-dialog::backdrop { background: #0009; }
+.app-dialog h2 { margin: 0 0 .8rem; font-size: .95rem; }
+.app-dialog-hint {
+  margin: 0 0 .9rem;
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.5;
+}
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: .9rem;
+}
+
+.new-file-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .5rem;
+}
+.new-file-actions button {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  padding: .7rem .4rem;
+  font-size: .82rem;
+}
+.new-file-actions button span {
+  color: var(--muted);
+  font-size: .68rem;
+}
+
 @media (max-width: 900px) and (min-width: 761px) {
   .editor-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
   .project-file-picker { grid-column: 1 / -1; }

@@ -274,6 +274,35 @@ background/stop logic, stop token semantics, project-file endpoints.
 
 ## 8. Studio page
 
+### 8.0 Pages and navigation
+
+| Route | File | Purpose |
+|---|---|---|
+| `/` | `home.html` | landing page: ASCII scene, entry links, assistant panel |
+| `/home` | `home.html` | alias |
+| `/editor` | `editor.html` | the classic editor (formerly `index.html`) |
+| `/index.html` | `editor.html` | compatibility alias |
+| `/visualizer` | `visualize.html` | the trace player |
+| `/visualize.html` | `visualize.html` | compatibility alias |
+| `/studio` | `studio.html` | this document's subject |
+| `/docs` | `docs.html` | rendered from `documentation.md` |
+| `/tutorial` | `tutorial.html` | five-step introduction |
+
+Every page renders the shared header partial, which carries the page title, the
+back link, the `Studio` shortcut and the settings menu. `spacelang-opt-sp` opens
+`/`, so the product starts on the landing page.
+
+### 8.0.2 The editor's working state
+
+The editor and the visualizer are one workflow, so leaving the editor must not
+lose the file. The editor keeps a workspace record in
+`sessionStorage["opt-sp-workspace"]` (code, mode, file identity, caret) written
+on a 400 ms debounce and flushed before leaving. On load it restores that record;
+when there is none it shows a **Start a file** dialog with `py` / `spasm` / `sp`
+samples and an *Open a file…* action. Chrome restores textarea and select values
+on its own around page load, so the saver is paused for that window and the
+expected value is re-asserted for a moment until it sticks.
+
 ### 8.1 Layout
 
 Reuses the visualizer grid (`.viz-layout`): left column = three stacked editors,
