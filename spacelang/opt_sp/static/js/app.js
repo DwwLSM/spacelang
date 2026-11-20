@@ -557,11 +557,13 @@ if (page === "editor") {
       }
       if (name === "py") {
         updateSyncButton();
-        if (state === "stale") maybeAutoSync();
       }
     },
     onWrite: (name) => {
       if (name === "sp") renderPreview();
+    },
+    onDerived: (name) => {
+      if (name !== "py") scheduleAutoSync();
     },
   });
 
@@ -595,6 +597,7 @@ if (page === "editor") {
   let syncing = false;
   let lastSyncAt = 0;
   let autoTimer = null;
+  let lastAttempt = null;
 
   function setSyncStatus(text, isError = false) {
     if (!syncStatus) return;
@@ -605,15 +608,27 @@ if (page === "editor") {
 
   function updateSyncButton() {
     if (!syncButton) return;
-    const mode = llmSettings.read().mode;
+    const mode = llmSettings.get().mode;
     syncButton.hidden = mode === "off" || syncing || engine.state.py !== "stale";
   }
 
-  function maybeAutoSync() {
-    if (llmSettings.read().mode !== "auto" || syncing) return;
-    if (Date.now() - lastSyncAt < 5000) return;
+  /**
+   * Arm the auto sync. Called after every completed derivation, so repeated
+   * edits keep re-arming it; the cooldown delays the call instead of dropping
+   * it, and an identical retry after a failure is skipped so a hopeless request
+   * cannot loop forever.
+   */
+  function scheduleAutoSync() {
+    if (llmSettings.get().mode !== "auto" || syncing) return;
+    if (!panes.py.value.trim()) return;
     clearTimeout(autoTimer);
-    autoTimer = setTimeout(() => { void syncPy(); }, 1500);
+    if (lastAttempt
+      && lastAttempt.py === panes.py.value
+      && lastAttempt.spasm === panes.spasm.value) {
+      return;
+    }
+    const cooldownLeft = Math.max(0, 5000 - (Date.now() - lastSyncAt));
+    autoTimer = setTimeout(() => { void syncPy(); }, Math.max(1500, cooldownLeft));
   }
 
   async function syncPy() {
@@ -624,6 +639,7 @@ if (page === "editor") {
       return;
     }
     syncing = true;
+    lastAttempt = { py: panes.py.value, spasm };
     if (syncButton) syncButton.disabled = true;
     updateSyncButton();
     setSyncStatus("asking the model\u2026");
@@ -631,10 +647,16 @@ if (page === "editor") {
       const result = await refinePy({
         py: panes.py.value,
         spasm,
-        headers: llmHeaders(llmSettings.read()),
+        headers: llmHeaders(llmSettings.get()),
       });
       if (!result.ok) {
         setSyncStatus(describeError(result), true);
+        return;
+      }
+      if (panes.spasm.value !== spasm) {
+        // The assembly moved while the model was working: this answer describes
+        // the previous program, so it must not be written.
+        setSyncStatus("the assembly changed while syncing; the answer was discarded", true);
         return;
       }
       engine.write("py", result.py);
@@ -646,11 +668,16 @@ if (page === "editor") {
       lastSyncAt = Date.now();
       if (syncButton) syncButton.disabled = false;
       updateSyncButton();
+      if (engine.state.py === "stale") scheduleAutoSync();
     }
   }
 
   syncButton?.addEventListener("click", () => void syncPy());
-  llmDialog?.addEventListener("close", () => updateSyncButton());
+  llmDialog?.addEventListener("close", () => {
+    updateSyncButton();
+    if (llmSettings.get().mode !== "auto") clearTimeout(autoTimer);
+    else scheduleAutoSync();
+  });
   updateSyncButton();
 
   const optSpLink = document.querySelector("#opt-sp-link");

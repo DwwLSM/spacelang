@@ -104,6 +104,14 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         if os.environ.get("SPACELANG_OPT_SP_VERBOSE") == "1":
             super().log_message(format, *args)
 
+    def end_headers(self) -> None:
+        # ES module imports carry no cache-busting query, so a stale js/ or css/
+        # file would survive a version bump on the page itself. Revalidate them
+        # on every load instead (Last-Modified makes it a cheap 304).
+        if urlsplit(self.path).path.startswith(("/js/", "/css/")):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def do_GET(self) -> None:
         request = urlsplit(self.path)
         if request.path == "/__opt_sp/status":

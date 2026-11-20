@@ -24,10 +24,11 @@ export function stripAnnotations(text) {
 }
 
 export class SyncEngine {
-  constructor({ panes, onStateChange, onWrite, annotations = true }) {
+  constructor({ panes, onStateChange, onWrite, onDerived, annotations = true }) {
     this.panes = panes;
     this.onStateChange = onStateChange ?? (() => {});
     this.onWrite = onWrite ?? (() => {});
+    this.onDerived = onDerived ?? (() => {});
     this.annotations = annotations;
     this.revision = { py: 0, spasm: 0, sp: 0 };
     this.timer = { py: null, spasm: null, sp: null };
@@ -86,6 +87,9 @@ export class SyncEngine {
       this.setState(target, "synced");
     }
     if (name !== "py") this.setState("py", "stale");
+    // Fires on every completed derivation, not only when the badge changes:
+    // auto-sync must run again after each edit, even while py stays stale.
+    this.onDerived(name);
   }
 
   /**

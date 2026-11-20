@@ -52,11 +52,15 @@ export function llmHeaders(settings = loadLLMSettings()) {
 }
 
 /**
- * Wire the settings dialog. Returns a reader for the current settings so the
- * caller can react to changes (for example to re-evaluate the sync mode).
+ * Wire the settings dialog.
+ *
+ * `get()` is the saved configuration and is what callers should use; `read()`
+ * reflects the dialog inputs and is only meaningful while editing them. Reading
+ * the dialog for runtime decisions breaks after a reload, when no radio is
+ * checked yet.
  */
 export function initLLMSettings({ dialog, openers = [] }) {
-  if (!dialog) return { read: loadLLMSettings, open: () => {} };
+  if (!dialog) return { get: loadLLMSettings, read: loadLLMSettings, open: () => {} };
   const baseUrl = dialog.querySelector("#llm-base-url");
   const model = dialog.querySelector("#llm-model");
   const key = dialog.querySelector("#llm-key");
@@ -102,5 +106,5 @@ export function initLLMSettings({ dialog, openers = [] }) {
     fill();
   });
 
-  return { read, open };
+  return { get: loadLLMSettings, read, open };
 }

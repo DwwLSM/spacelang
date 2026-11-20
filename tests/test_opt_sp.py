@@ -166,6 +166,20 @@ def test_static_check_passes():
     assert module._check() == 0
 
 
+def test_static_scripts_must_revalidate():
+    # ES module imports carry no version query, so js/ and css/ must not be
+    # served from cache without checking; otherwise a version bump on the page
+    # leaves the browser running an older module.
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        for path in ("/js/app.js", "/js/sync-engine.js", "/css/opt-sp.css"):
+            with urlopen(f"{url}{path}") as response:
+                assert response.headers.get("Cache-Control") == "no-cache", path
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_server_assets_use_paths_relative_to_app():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:
