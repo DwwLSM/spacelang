@@ -2,7 +2,7 @@ import pytest
 
 from spacelang.asm import assemble
 from spacelang.decoder import decode
-from spacelang.web_bridge import canon, convert, trace_program, verify_py
+from spacelang.web_bridge import annotate, canon, convert, trace_program, verify_py
 
 PY_SOURCE = """\
 def double(value):
@@ -113,6 +113,24 @@ def test_canon_ignores_line_numbers():
         try_table=list(program.try_table),
     )
     assert canon(program) == canon(shifted)
+
+
+def test_annotate_restores_encoder_comments():
+    asm = _asm()
+    assert "; line=" in asm
+    plain = "\n".join(line.split(" ; line=")[0] for line in asm.split("\n"))
+    assert "; line=" not in plain
+
+    result = annotate(plain)
+    assert result["ok"] is True
+    assert "; line=" in result["text"]
+    assert canon(assemble(result["text"])) == canon(assemble(asm))
+
+
+def test_annotate_reports_bad_assembly():
+    result = annotate("BOGUS")
+    assert result["ok"] is False
+    assert result["text"] is None
 
 
 def test_trace_program_still_works():

@@ -12,7 +12,7 @@
 <body data-page="studio">
   <!-- #include partials/app-header.html -->
   <main class="studio-layout">
-    <section class="studio-editors" aria-label="Program representations">
+    <section class="studio-editors" data-orientation="vertical" aria-label="Program representations">
       <section class="editor-pane" data-pane="py">
         <h2 class="pane-header">
           <span>py</span>
@@ -23,13 +23,18 @@
         </h2>
         <textarea id="py-editor" class="pane-editor" spellcheck="false" wrap="off" aria-label="Python surface syntax"></textarea>
       </section>
+      <div class="pane-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize py and spasm panes" tabindex="0" data-split="0"></div>
       <section class="editor-pane" data-pane="spasm">
         <h2 class="pane-header">
           <span>spasm</span>
           <span id="spasm-badge" class="pane-badge" data-state="synced">synced</span>
+          <span class="pane-actions">
+            <button id="spasm-annotations-toggle" type="button" aria-pressed="true">annotations</button>
+          </span>
         </h2>
         <textarea id="spasm-editor" class="pane-editor" spellcheck="false" wrap="off" aria-label="Assembly source"></textarea>
       </section>
+      <div class="pane-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize spasm and sp panes" tabindex="0" data-split="1"></div>
       <section class="editor-pane" data-pane="sp">
         <h2 class="pane-header">
           <span>sp</span>
@@ -44,7 +49,7 @@
       </section>
     </section>
     <section class="trace-column" aria-label="Trace">
-      <pre id="trace-code" class="code-view"></pre>
+      <pre id="trace-code" class="code-view" hidden></pre>
       <!-- #include partials/state-panels.html -->
     </section>
     <!-- #include partials/step-controls.html -->

@@ -81,6 +81,20 @@ def convert(source: str, src: str) -> dict[str, Any]:
     return {"ok": True, "texts": texts, "error": None}
 
 
+def annotate(spasm_src: str) -> dict[str, Any]:
+    """Re-render assembly with the ``; line=... spaces=...`` annotations.
+
+    ``disassemble`` always appends the encoded token values as a trailing
+    comment; the studio can hide them, and needs a way to bring them back
+    without recompiling from a higher-level source.
+    """
+    try:
+        text = disassemble(assemble(spasm_src))
+    except Exception:
+        return {"ok": False, "text": None, "error": traceback.format_exc()}
+    return {"ok": True, "text": text, "error": None}
+
+
 def verify_py(py_src: str, spasm_src: str) -> dict[str, Any]:
     """Check that a proposed Python mirror compiles to the same program.
 
@@ -112,4 +126,4 @@ def verify_py(py_src: str, spasm_src: str) -> dict[str, Any]:
     }
 
 
-__all__ = ["trace_program", "convert", "verify_py", "canon"]
+__all__ = ["trace_program", "convert", "annotate", "verify_py", "canon"]

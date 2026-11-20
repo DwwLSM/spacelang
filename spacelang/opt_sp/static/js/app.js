@@ -5,6 +5,7 @@ import { getFileHandle, storeFileHandle } from "./file-handles.js";
 import { checkAssets } from "./health.js";
 import { takeHandout, writeHandout } from "./handout.js";
 import { SyncEngine } from "./sync-engine.js";
+import { initStudioLayout } from "./studio-layout.js";
 
 const page = document.body.dataset.page;
 
@@ -556,6 +557,18 @@ if (page === "editor") {
     spacesToggle.setAttribute("aria-pressed", String(next));
     preview.hidden = !next;
     renderPreview();
+  });
+
+  const annotationsToggle = document.querySelector("#spasm-annotations-toggle");
+  annotationsToggle?.addEventListener("click", () => {
+    const next = annotationsToggle.getAttribute("aria-pressed") !== "true";
+    annotationsToggle.setAttribute("aria-pressed", String(next));
+    void engine.setAnnotations(next);
+  });
+
+  initStudioLayout({
+    container: document.querySelector(".studio-editors"),
+    toggleButton: document.querySelector("#pane-layout-toggle"),
   });
 
   copyButton?.addEventListener("click", async () => {

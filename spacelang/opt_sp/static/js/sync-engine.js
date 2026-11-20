@@ -12,12 +12,23 @@ import { kernel } from "./spacelang-kernel.js";
 const DEBOUNCE_MS = 250;
 const DERIVATIONS = { py: ["spasm", "sp"], spasm: ["sp"], sp: ["spasm"] };
 const NAMES = ["py", "spasm", "sp"];
+// disassemble() ends every instruction with "; line=4 spaces=17,10".
+const ANNOTATION = /\s*; line=\d+ spaces=[0-9,]*$/;
+
+/** Drop the encoder debug comments from an assembly listing. */
+export function stripAnnotations(text) {
+  return text
+    .split("\n")
+    .map((line) => line.replace(ANNOTATION, ""))
+    .join("\n");
+}
 
 export class SyncEngine {
-  constructor({ panes, onStateChange, onWrite }) {
+  constructor({ panes, onStateChange, onWrite, annotations = true }) {
     this.panes = panes;
     this.onStateChange = onStateChange ?? (() => {});
     this.onWrite = onWrite ?? (() => {});
+    this.annotations = annotations;
     this.revision = { py: 0, spasm: 0, sp: 0 };
     this.timer = { py: null, spasm: null, sp: null };
     this.applying = { py: false, spasm: false, sp: false };
@@ -68,12 +79,44 @@ export class SyncEngine {
     this.setState(name, "synced");
     for (const target of DERIVATIONS[name]) {
       if (this.revision[target] !== stamps[target]) continue;
-      const text = result.texts?.[target];
+      let text = result.texts?.[target];
       if (typeof text !== "string") continue;
+      if (target === "spasm" && !this.annotations) text = stripAnnotations(text);
       this.write(target, text);
       this.setState(target, "synced");
     }
     if (name !== "py") this.setState("py", "stale");
+  }
+
+  /**
+   * Show or hide the encoder comments in the assembly pane.
+   *
+   * Hiding is a pure text transform, and the annotated form is cached so a
+   * toggle round-trip that changes nothing restores the exact original listing
+   * (regenerating from the plain text would renumber the `line=` fields).
+   * Restoring after an edit falls back to regenerating from the program.
+   */
+  async setAnnotations(annotations) {
+    this.annotations = annotations;
+    const pane = this.panes.spasm;
+    if (!annotations) {
+      this.annotated = pane.value;
+      this.write("spasm", stripAnnotations(pane.value));
+      return;
+    }
+    if (typeof this.annotated === "string" && stripAnnotations(this.annotated) === pane.value) {
+      this.write("spasm", this.annotated);
+      return;
+    }
+    let result;
+    try {
+      result = await kernel.annotate(pane.value);
+    } catch {
+      return;
+    }
+    if (result?.ok && typeof result.text === "string") {
+      this.write("spasm", result.text);
+    }
   }
 
   write(name, text) {

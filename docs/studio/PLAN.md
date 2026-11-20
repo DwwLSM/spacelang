@@ -324,6 +324,22 @@ Failure to parse or a stale timestamp silently yields an empty workspace.
   `<pre>` (implementation detail; must not alter the textarea value).
 - "Copy raw" writes `textarea.value` to the clipboard without transformation.
 
+### 8.4 Pane layout and annotation controls
+
+- The settings menu carries a `Panes: stacked` / `Panes: side by side` toggle
+  (studio page only). The split between the three editors is draggable, exactly
+  like the state-panel resizers on the right, and persisted in
+  `localStorage["opt-sp-studio-layout"]`. Below 1100 px the editors always stack,
+  whatever the saved orientation says.
+- The assembly pane header carries an `annotations` toggle for the
+  `; line=N spaces=...` comments that `disassemble()` appends to every
+  instruction. Hiding is a pure text transform; restoring reuses the cached
+  listing so an unchanged round-trip does not renumber the `line=` fields, and
+  falls back to `web_bridge.annotate()` (disassemble of the pane's own program)
+  after an edit.
+- The trace code view stays hidden until a trace exists; the empty reserved area
+  was confusing and is not part of the empty state.
+
 ## 9. Conversion graph
 
 ```
