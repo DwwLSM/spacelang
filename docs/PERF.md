@@ -1,4 +1,4 @@
-@ 560b22e5c1bda36e63a3ab0a5ea5e33ea4605c99
+@ e15e54f835283e3ca32077e9bb062290b91d9186
 
 # Native engine performance baseline
 
@@ -37,28 +37,56 @@ The last two programs were added by `59e78db`. The five original programs never
 reach `CALL_OBJ` or `MAKE_CLOSURE*`, which is where the second half of the win
 is.
 
-Same build, one later invocation, including the Python baseline:
+### Second pass: call frames and closure fields
+
+`e15e54f` removes the two costs that dominated call-heavy programs afterwards:
+two vector allocations per call for the locals, and four to six `Closure`
+attribute reads through `PyObject_GetAttrString` per `CALL_OBJ`.
+
+| program | pass 1 (ns/instr) | pass 2 (ns/instr) | gain |
+| --- | ---: | ---: | ---: |
+| `arithmetic` | 16.2 | 14.7 | 1.10x |
+| `calls` | 18.1 | 12.0 | 1.51x |
+| `strings` | 37.2 | 33.2 | 1.12x |
+| `lists` | 53.8 | 40.4 | 1.33x |
+| `modules` | 41.2 | 45.4 | 0.91x |
+| `closure` | 57.0 | 28.7 | 1.99x |
+| `higher-order` | 75.7 | 36.4 | 2.08x |
+
+Only `calls`, `closure` and `higher-order` are signal here. They improved in
+both measurement orders. The other four do not execute a single call, so their
+moves are noise: `lists` ranged from 40 to 54 ns/instruction across invocations,
+and `modules` moved in the opposite direction in the two runs. Do not quote the
+non-call rows.
+
+Cumulative, against the pre-optimisation build: `calls` 118.5 -> 12.0,
+`closure` 174.9 -> 28.7, `higher-order` 159.1 -> 36.4. Those ratios multiply two
+separate A/B sessions, so treat them as approximate (about 10x, 6x and 4x).
+
+At this commit, one invocation including the Python baseline:
 
 | program | py ms | cpp ms | speedup | cpp ns/instr |
 | --- | ---: | ---: | ---: | ---: |
-| `arithmetic` | 144.59 | 2.77 | 52.2x | 15.4 |
-| `calls` | 59.70 | 1.09 | 54.7x | 17.6 |
-| `strings` | 19.07 | 0.66 | 29.1x | 31.2 |
-| `lists` | 20.00 | 0.79 | 25.5x | 37.4 |
-| `modules` | 16.61 | 0.76 | 22.0x | 41.9 |
-| `closure` | 35.33 | 1.77 | 19.9x | 55.3 |
-| `higher-order` | 30.00 | 2.06 | 14.6x | 68.5 |
+| `arithmetic` | 145.09 | 2.92 | 49.7x | 16.2 |
+| `calls` | 60.75 | 0.72 | 84.0x | 11.7 |
+| `strings` | 20.93 | 0.62 | 33.5x | 29.7 |
+| `lists` | 20.52 | 0.92 | 22.2x | 44.0 |
+| `modules` | 16.29 | 0.74 | 22.1x | 41.0 |
+| `closure` | 34.27 | 1.08 | 31.6x | 33.8 |
+| `higher-order` | 30.06 | 1.17 | 25.7x | 39.0 |
 
-The absolute figures differ from the A/B table by up to about 10% because the
-after column there is an interleaved median and this table is a single
-invocation. Treat the A/B ratios as the claim and the absolute numbers as
-representative.
+The absolute figures differ from the A/B tables because those are interleaved
+medians and this table is a single invocation. Treat the A/B ratios as the claim
+and the absolute numbers as representative.
 
-Variance is not uniform: cases that finish in well under a millisecond move
-10-15% between invocations, so compare like for like on one machine and one
-session. Do not compare a number here with a number from another machine, and do
-not compare a run made with the five-program harness against a run made after
-`59e78db` added `closure` and `higher-order`.
+Variance is worse than it first appeared: programs that finish in well under a
+millisecond moved up to 30% between invocations during the second pass, and a
+run that measured all of one build before all of the other produced an 11%
+"regression" that interleaving turned into a 33% improvement. Compare like for
+like on one machine, interleave the two builds invocation by invocation, and
+ignore any single-row difference that does not reproduce in both orders. Do not
+compare a number here with a number from another machine, and do not compare a
+run made with the five-program harness against a run made after `59e78db`.
 
 ## What changed
 
@@ -79,6 +107,10 @@ not compare a run made with the five-program harness against a run made after
 - Globals and attributes go through `PyDict_GetItemWithError`, `PyDict_SetItem`,
   `PyObject_GetAttr` and `PyObject_SetAttr` instead of rebuilding a Python string
   per access.
+- `e15e54f` recycles frame locals through a free list capped at 64 frames, and
+  interns the nine `Closure` attribute names so `CALL_OBJ` reads them through
+  `PyObject_GetAttr`. Pooled vectors are cleared before reuse, so no argument
+  reference survives into the next call.
 
 ## Environment
 
@@ -147,12 +179,15 @@ full (99 tests).
 ## Not covered, and next levers
 
 - **GCC/Clang computed goto** — one CI job on Linux would close this.
-- **`CALL_OBJ` attribute reads** — every call reads four to six `Closure`
-  attributes through `PyObject_GetAttrString`, which rebuilds a `str` each time.
-  Interning those names is the next cheap win, estimated 20% on `closure` and
-  `higher-order`.
-- **Frame allocation** — each call allocates `std::vector<Value>` for locals.
-  Reusing frames is a small refactor that needs the parity tests as a net.
+- **Cell access is now the hot path.** A read of a cell local costs two
+  attribute operations (`initialized`, then `value`) and a write costs two more.
+  `LOAD_LOCAL`/`STORE_LOCAL` also still type-check every local. A per-frame
+  slot-kind flag would remove the check, and reading the instance `__dict__`
+  directly would halve the attribute cost — both trade a little safety for speed
+  and should be measured against the parity tests, not assumed.
+- **`lists` and `modules` did not move** across either pass. If they matter,
+  they need their own investigation (container mutation and method dispatch),
+  not another sweep over the dispatch loop.
 - **The baseline is recorded but not enforced.** `benchmarks/baselines/` holds a
   snapshot per platform and the perf workflow uploads one per run, so a
   regression can be spotted and bisected. Nothing fails the build yet: a hard

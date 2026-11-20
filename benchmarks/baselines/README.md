@@ -11,7 +11,10 @@ millisecond.
 
 | file | platform | python | state |
 | --- | --- | --- | --- |
-| `windows-msvc-cp313.json` | Windows, MSVC 19.44, switch dispatch | 3.13 | after `c735ce0` |
+| `windows-msvc-cp313.json` | Windows, MSVC 19.44, switch dispatch | 3.13 | after `e15e54f` |
+
+A file is refreshed in place when the engine changes; the `commit` field says
+which state it describes, and older snapshots stay in git history.
 
 Regenerate:
 
