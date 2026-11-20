@@ -872,6 +872,14 @@ compiling that listing on the server, never written by the model, and a guessed
 `.sp` block is dropped. The panel draws those runs of spaces as `·` so the
 encoded form is visible at all.
 
+The reverse direction is checked rather than trusted. When the question contains
+an assembly listing and the answer offers Python, the server compiles both and
+appends the verdict: either the two compile to the same instructions, or the
+answer is called a sketch with the reason. Suggested mirrors are often wrong —
+`result = 2 + 3` adds `STORE_GLOBAL`, and a bare `2 + 3` adds `STACK 3` — so a
+listing with no value-consuming instruction has no Python source at all, and the
+Studio's sync would reject every candidate.
+
 Requests share the mirror sync's key, token bucket and single-flight gate, and
 switch the model's hidden reasoning off; an answer cut off by the token limit is
 still shown, with a note next to the input. Like the other model endpoints it is

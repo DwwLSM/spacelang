@@ -635,6 +635,52 @@ def test_chat_still_works_without_the_documents(monkeypatch, stub_llm):
     assert "SpaceLang" in system
 
 
+def _stub_reply(stub_llm, content):
+    stub_llm.payload = {
+        "model": "Socrates",
+        "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+        "usage": {},
+    }
+
+
+def _convert_question(listing):
+    return "Convert this assembly to Python:\n```spasm\n" + listing + "\n```"
+
+
+def test_chat_verifies_an_equivalent_python_answer(stub_llm):
+    # `2 + 3` compiles to PUSH_INT/PUSH_INT/OP 1, discards the value with STACK 3
+    # and halts, so this pair really is equivalent.
+    listing = "PUSH_INT 2\nPUSH_INT 3\nOP 1\nSTACK 3\nHALT"
+    _stub_reply(stub_llm, "```python\n2 + 3\n```")
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _post_chat(url, {
+            "messages": [{"role": "user", "content": _convert_question(listing)}],
+        })
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 200
+    assert "Checked by the compiler" in body["reply"]["content"]
+    assert "same instructions" in body["reply"]["content"]
+
+
+def test_chat_flags_a_python_answer_that_does_not_match(stub_llm):
+    listing = "PUSH_INT 2\nPUSH_INT 3\nOP 1\nHALT"
+    _stub_reply(stub_llm, "```python\nresult = 2 + 3\n```")
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _post_chat(url, {
+            "messages": [{"role": "user", "content": _convert_question(listing)}],
+        })
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 200
+    assert "not equivalent" in body["reply"]["content"]
+    assert "would reject it" in body["reply"]["content"]
+
+
 def test_llm_status_hides_the_key(stub_llm):
     httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
     try:

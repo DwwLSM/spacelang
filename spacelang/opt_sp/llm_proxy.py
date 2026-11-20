@@ -612,6 +612,55 @@ def _compile_listing(listing: str) -> str | None:
     return (result.get("texts") or {}).get("sp")
 
 
+def _python_answer_verdict(history: list[dict[str, str]], content: str) -> str | None:
+    """Check a spasm-to-Python answer with the same gate the Studio uses.
+
+    The chat can suggest a mirror but cannot compile it, and the one I sampled
+    for `1 + 1` was not equivalent: `result = 2 + 3` also stores the value. When
+    the user pasted assembly and the answer offers Python, the server compiles
+    both and says which it is.
+    """
+    listing = None
+    for message in reversed(history):
+        if message["role"] != "user":
+            continue
+        for match in _CHAT_FENCE.finditer(message["content"]):
+            if match.group(1).strip().lower() not in _ASSEMBLY_LABELS:
+                continue
+            if _compile_listing(match.group(2)):
+                listing = match.group(2)
+                break
+        if listing:
+            break
+    if not listing:
+        return None
+
+    python_code = None
+    for match in _CHAT_FENCE.finditer(content):
+        if match.group(1).strip().lower() in ("python", "py"):
+            python_code = match.group(2)
+            break
+    if not python_code:
+        return None
+
+    try:
+        report = verify_py(python_code, listing)
+    except Exception:  # noqa: BLE001 - a verdict is a bonus, never a blocker
+        return None
+    if report.get("ok"):
+        return (
+            "> **Checked by the compiler:** this Python produces exactly the same "
+            "instructions as that listing."
+        )
+    reason = report.get("error") or "not_equivalent"
+    detail = [line for line in (report.get("detail") or "").splitlines() if line.strip()]
+    tail = f" — {detail[-1].strip()}" if detail else ""
+    return (
+        f"> **Checked by the compiler:** not equivalent — `{reason}`{tail}. "
+        "It is a sketch, not a mirror; the Studio's sync would reject it."
+    )
+
+
 def with_compiled_sp(content: str) -> str:
     """Replace any hand-written ``.sp`` block with one the compiler produced.
 
@@ -706,13 +755,15 @@ def chat_reply(
             allow_truncation=True,
         )
 
+    content = with_compiled_sp(answer["content"].strip())
+    verdict = _python_answer_verdict(history, content)
+    if verdict:
+        content = content + "\n\n" + verdict
+
     return {
         "ok": True,
         "page": page,
-        "reply": {
-            "role": "assistant",
-            "content": with_compiled_sp(answer["content"].strip()),
-        },
+        "reply": {"role": "assistant", "content": content},
         "truncated": bool(answer.get("truncated")),
         "model": answer["model"],
         "usage": answer["usage"],
