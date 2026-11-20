@@ -132,6 +132,15 @@ if (page === "editor") {
     );
   }
 
+  function selectProjectFileInList(path) {
+    if (!path) {
+      projectFileSelect.selectedIndex = -1;
+      return;
+    }
+    const option = [...projectFileSelect.options].find((item) => item.value === path);
+    projectFileSelect.value = option ? path : "";
+  }
+
   function renderProjectFileOptions() {
     const query = projectFileSearch.value.trim().toLowerCase();
     const files = projectFiles.filter((file) => file.path.toLowerCase().includes(query));
@@ -151,7 +160,7 @@ if (page === "editor") {
     for (const file of files) {
       projectFileSelect.add(new Option(file.path, file.path));
     }
-    projectFileSelect.selectedIndex = -1;
+    selectProjectFileInList(projectFilePath);
     projectFileSelect.disabled = isProjectFileLoading;
   }
 
@@ -200,7 +209,7 @@ if (page === "editor") {
         renderProjectFileOptions();
         projectFileSearch.disabled = true;
         openProjectFileBrowserButton.disabled = true;
-        setProjectFileButtonLabel();
+        setProjectFileButtonLabel(projectFilePath ?? "");
         projectFileStatus.classList.add("empty");
         projectFileStatus.textContent = `No .py, .sp, or .spasm files in ${result.root}.`;
         return;
@@ -208,11 +217,15 @@ if (page === "editor") {
 
       projectFileSearch.disabled = false;
       openProjectFileBrowserButton.disabled = false;
-      setProjectFileButtonLabel();
+      setProjectFileButtonLabel(projectFilePath ?? "");
       projectFileSummary = `${projectFiles.length} source file${projectFiles.length === 1 ? "" : "s"} in ${result.root}`;
-      selectedProjectFilePath = projectFiles[0].path;
       renderProjectFileOptions();
-      await loadProjectFile(selectedProjectFilePath);
+      projectFileStatus.classList.remove("empty", "error");
+      projectFileStatus.textContent = projectFileSummary;
+      // Do not open a file here: the editor already shows the restored workspace
+      // (or the start-a-file dialog), and auto-loading the first entry used to
+      // replace both with whatever sorted first.
+      selectProjectFileInList(projectFilePath);
     } catch (error) {
       projectFileSelect.replaceChildren(new Option("Project files unavailable", ""));
       projectFileSelect.disabled = true;
