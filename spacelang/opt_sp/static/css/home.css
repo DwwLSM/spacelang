@@ -6,6 +6,7 @@
 }
 
 .home-art {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -15,6 +16,45 @@
   border-right: 1px solid var(--border);
   background:
     radial-gradient(120% 90% at 50% 18%, #101a3c 0%, #0a1128 42%, #05070f 78%, #020309 100%);
+}
+
+/* The scene draws into the whole column, so the fallback text steps aside. */
+.home-art-live { padding: 0; }
+.home-art-live .home-art-code { display: none; }
+
+.ascii-scene-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+.ascii-scene-canvas.is-dragging { cursor: grabbing; }
+
+.home-scene-styles {
+  position: absolute;
+  top: .7rem;
+  left: .7rem;
+  z-index: 2;
+  display: none;
+  gap: .3rem;
+}
+.home-art-live .home-scene-styles { display: flex; }
+.home-scene-styles button {
+  padding: .25rem .5rem;
+  font: 600 .62rem/1.2 inherit;
+  letter-spacing: .12em;
+  color: var(--muted);
+  text-transform: uppercase;
+  background: #0b1220cc;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.home-scene-styles button:hover { color: var(--text); border-color: var(--accent-border); }
+.home-scene-styles button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent-border);
 }
 
 .home-art-code {

@@ -151,6 +151,40 @@ def test_home_page_links_the_workspace():
     assert "github.com/DwwLSM/spacelang" in page
 
 
+def test_home_page_offers_scene_styles():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/") as response:
+            page = response.read().decode("utf-8")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    # The static tree remains the no-script fallback; the switcher only works
+    # once home.js has started the scene.
+    assert 'id="home-art"' in page
+    assert 'id="scene-styles"' in page
+    assert 'data-style="christmas-tree"' in page
+    assert 'data-style="token-rain"' in page
+
+
+def test_scene_modules_are_served():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        for path in (
+            "/js/ascii-scene.js",
+            "/js/scene-christmas-tree.js",
+            "/js/scene-token-rain.js",
+            "/js/home.js",
+        ):
+            with urlopen(f"{url}{path}") as response:
+                assert response.status == 200, path
+                assert response.headers.get("Cache-Control") == "no-cache", path
+                assert response.read(), path
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_editor_offers_a_new_file_dialog():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:

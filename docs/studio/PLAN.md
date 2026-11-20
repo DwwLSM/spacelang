@@ -192,6 +192,22 @@ document to `spacelang/opt_sp/static/documentation.md` and `--check` reports a
 stale copy. A checkout always prefers the root file, so editing the document
 never serves a stale build.
 
+### ADR-011 — The home scene is a component, not a page
+
+`design/ascii-christmas-tree.html` is standalone artwork: a full-window canvas
+with its own HUD, tuned for a 16:9 desktop window. Embedding it as-is would take
+over the page, so its geometry, shading and camera moved into
+`static/js/scene-christmas-tree.js` and registered as one style of
+`static/js/ascii-scene.js`. The factory owns the surface — container sizing,
+`ResizeObserver`, visibility pause, pointer/wheel forwarding, `destroy()` — and
+the shared ASCII raster; a style only projects and shades into the grid.
+
+`token-rain` exists to keep that boundary honest: it uses the same grid and the
+same run-merged text pass, carries no 3D state, and still shares lifecycle,
+resize and input plumbing. The home page reaches the scene through a dynamic
+`import()`, so other pages never parse it, and the static tree in `home.html`
+remains the no-script fallback.
+
 ## 6. Current-state inventory
 
 Files that matter (line counts from the working tree):
@@ -916,3 +932,4 @@ treated as errors, never as empty code; `reasoning_content` is discarded.
 | 12 | Narrow screens keep the three editors stacked, semantic order | yes |
 | 13 | AI mode is a Settings radio; no confirmation popup | yes |
 | 14 | `/docs` renders `documentation.md` on the server; the tutorial stays static HTML | yes |
+| 15 | `/` runs the ASCII scene with a style registry (`christmas-tree`, `token-rain`); the static tree stays as the fallback | yes |

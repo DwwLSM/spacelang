@@ -1012,6 +1012,11 @@ if (page === "editor") {
   }
 } else if (page === "docs" || page === "tutorial") {
   initDocNavigation();
+} else if (page === "home") {
+  // The scene (3D point cloud + styles) is only fetched on the home page.
+  import("./home.js")
+    .then((module) => module.initHomeScene())
+    .catch((error) => console.error("Home scene module failed to load:", error));
 }
 
 const settingsButton = document.querySelector("#settings-button");

@@ -809,6 +809,24 @@ and raw HTML in the document is escaped rather than inserted. Editing
 step. The copy that an installed wheel renders is produced by
 `tools/build_static.py`, described under *Prepare browser assets*.
 
+### Home scene
+
+The home page's art column runs an animated ASCII scene instead of a static
+drawing. Two styles are registered: `christmas-tree`, which is the software 3D
+point cloud from `design/ascii-christmas-tree.html` ported to a component, and
+`token-rain`, in which SpaceLang tokens fall onto a skyline of landed
+instructions. The switcher in the corner of the panel remembers the choice in
+`localStorage`.
+
+The factory is `static/js/ascii-scene.js`. It sizes the canvas to its container,
+follows layout changes with a `ResizeObserver`, stops the render loop while the
+tab is hidden or the panel is scrolled out of view, and releases observers,
+listeners and buffers on `destroy()`. A style only projects and shades into the
+shared character grid, which is what keeps the two so different scenes on one
+lifecycle. The home page imports the scene with a dynamic `import()`, so the
+editor and studio pages never download it, and the static tree in `home.html`
+stays in the DOM as the no-script fallback.
+
 ### Start the server
 
 The installed entry point is:

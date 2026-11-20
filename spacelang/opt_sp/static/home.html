@@ -12,8 +12,8 @@
 <body data-page="home">
   <!-- #include partials/app-header.html -->
   <main class="home-layout">
-    <section class="home-art" aria-hidden="true">
-      <pre class="home-art-code" id="home-art">                 *
+    <section class="home-art" aria-label="Animated ASCII scene">
+      <pre class="home-art-code" id="home-art" aria-hidden="true">                 *
                 / \
                /   \
               /     \
@@ -30,6 +30,10 @@
                 |
         ~  ~  ~ | ~  ~  ~
 </pre>
+      <div class="home-scene-styles" id="scene-styles" role="group" aria-label="Scene style">
+        <button type="button" data-style="christmas-tree" aria-pressed="true">tree</button>
+        <button type="button" data-style="token-rain" aria-pressed="false">rain</button>
+      </div>
     </section>
     <section class="home-center">
       <h2 class="home-title">SpaceLang</h2>
