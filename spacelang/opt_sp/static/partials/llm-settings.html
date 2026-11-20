@@ -1,0 +1,28 @@
+<dialog id="llm-settings" class="app-dialog" aria-labelledby="llm-settings-title">
+  <h2 id="llm-settings-title">LLM settings</h2>
+  <label class="llm-field">
+    <span>Base URL</span>
+    <input id="llm-base-url" type="url" spellcheck="false" placeholder="https://host/litellm/v1">
+  </label>
+  <label class="llm-field">
+    <span>Model</span>
+    <input id="llm-model" type="text" spellcheck="false" placeholder="Socrates">
+  </label>
+  <label class="llm-field">
+    <span>API key</span>
+    <input id="llm-key" type="password" spellcheck="false" placeholder="leave empty to use the server key">
+  </label>
+  <fieldset class="llm-modes">
+    <legend>Sync mode</legend>
+    <label><input type="radio" name="llm-mode" value="manual"> Manual</label>
+    <label><input type="radio" name="llm-mode" value="auto"> Auto</label>
+    <label><input type="radio" name="llm-mode" value="off"> Off</label>
+    <p class="llm-hint">Auto syncs the Python mirror about 1.5&nbsp;s after you stop editing. It shares a 40 requests/min quota with everyone using the same key.</p>
+  </fieldset>
+  <p class="llm-hint">A key stored here is readable by any script on this page. Use it only for local work; never expose the studio on a network.</p>
+  <form method="dialog" class="llm-actions">
+    <button id="llm-clear" type="button">Clear</button>
+    <button id="llm-save" type="button">Save</button>
+    <button value="close">Close</button>
+  </form>
+</dialog>

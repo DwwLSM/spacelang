@@ -136,6 +136,23 @@ def test_studio_route_serves_page():
     ]
 
 
+def test_every_page_shares_the_settings_menu():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        for path in ("/", "/editor", "/visualize.html", "/studio", "/docs", "/tutorial"):
+            with urlopen(f"{url}{path}") as response:
+                page = response.read().decode("utf-8")
+            # Home and the LLM settings dialog are global; the dialog is a
+            # partial, so it must be included exactly once per page.
+            assert 'id="home-menu-link"' in page, path
+            assert 'id="llm-settings-button"' in page, path
+            assert page.count('id="llm-settings"') == 1, path
+            assert page.count('id="llm-base-url"') == 1, path
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_pages_have_no_unresolved_includes():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:

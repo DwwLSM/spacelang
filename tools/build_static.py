@@ -58,6 +58,7 @@ def _check() -> int:
         STATIC / "js" / "trace-panel.js",
         STATIC / "js" / "workspace.js",
         STATIC / "partials" / "app-header.html",
+        STATIC / "partials" / "llm-settings.html",
         STATIC / "partials" / "settings-menu.html",
         STATIC / "partials" / "state-panels.html",
         STATIC / "partials" / "step-controls.html",

@@ -1223,6 +1223,20 @@ if (page === "editor") {
     .catch((error) => console.error("Home scene module failed to load:", error));
 }
 
+// The settings menu is shared by every page. Entries that only make sense
+// somewhere specific are unhidden there (the studio and the editor branch do
+// that for their own items); these two are global.
+const homeMenuLink = document.querySelector("#home-menu-link");
+if (homeMenuLink) homeMenuLink.hidden = page === "home";
+
+const llmMenuButton = document.querySelector("#llm-settings-button");
+if (llmMenuButton) llmMenuButton.hidden = false;
+const llmMenuDialog = document.querySelector("#llm-settings");
+// The studio already wired this dialog for its sync engine.
+if (page !== "studio" && llmMenuButton && llmMenuDialog) {
+  initLLMSettings({ dialog: llmMenuDialog, openers: [llmMenuButton] });
+}
+
 const settingsButton = document.querySelector("#settings-button");
 const settingsMenu = document.querySelector("#settings-menu");
 if (settingsButton && settingsMenu) {
@@ -1239,6 +1253,12 @@ if (settingsButton && settingsMenu) {
     if (willOpen) {
       settingsMenu.querySelector("[role='menuitem']")?.focus();
     }
+  });
+
+  // Choosing an entry ends the menu's job, including when the entry opens a
+  // dialog (the dialog then owns the screen, not the menu).
+  settingsMenu.addEventListener("click", (event) => {
+    if (event.target.closest(".settings-menu-item")) closeSettingsMenu();
   });
 
   document.addEventListener("click", (event) => {

@@ -823,6 +823,14 @@ and raw HTML in the document is escaped rather than inserted. Editing
 step. The copy that an installed wheel renders is produced by
 `tools/build_static.py`, described under *Prepare browser assets*.
 
+The header's **Settings** menu is on every page: **Home** (left out on the home
+page itself), **Studio (new tab)**, **LLM settings**, **Reload page** and
+**Stop server**, plus the entries that only make sense where they apply —
+**New file…** in the editor, the pane layout switch and the editor/visualizer
+shortcuts in the studio. The LLM settings dialog is the same one the studio
+uses for the mirror sync, so the endpoint, model and key can be set before any
+editor tab is open; they live in `localStorage` and travel as request headers.
+
 ### Home scene
 
 The home page's art column runs an animated ASCII scene instead of a static
