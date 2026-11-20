@@ -116,6 +116,11 @@ python -m pip install -e .          # or rebuild the extension by any means
 python benchmarks/profile_vm.py --repeat 9 --warmup 2
 ```
 
+Add `--json PATH` (`-` for stdout) to write a snapshot. `benchmarks/baselines/`
+holds one per platform, and `.github/workflows/perf.yml` uploads a Linux/GCC
+snapshot on every change to `csrc/` or `benchmarks/`; that job is also the only
+place the computed-goto dispatcher gets exercised.
+
 To compare two builds, swap the `.pyd` between runs instead of comparing across
 sessions:
 
@@ -148,6 +153,8 @@ full (99 tests).
   `higher-order`.
 - **Frame allocation** — each call allocates `std::vector<Value>` for locals.
   Reusing frames is a small refactor that needs the parity tests as a net.
-- **No machine-readable baseline yet.** `profile_vm.py` prints a table only, so
-  regression detection is still manual. A `--json` mode plus a CI artifact would
-  make these numbers enforceable rather than descriptive.
+- **The baseline is recorded but not enforced.** `benchmarks/baselines/` holds a
+  snapshot per platform and the perf workflow uploads one per run, so a
+  regression can be spotted and bisected. Nothing fails the build yet: a hard
+  threshold on a shared runner would mostly measure the runner. Turning this
+  into a gate needs stable timings first.
