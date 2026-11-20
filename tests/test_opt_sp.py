@@ -529,7 +529,11 @@ def test_server_creates_new_project_file(tmp_path, monkeypatch):
         with create({"path": "hello.py", "code": "print('hi')\n"}) as response:
             assert response.status == 201
             result = json.load(response)
-        assert result == {"path": "hello.py", "message": "Project file created."}
+        assert result == {
+            "path": "hello.py",
+            "mode": "python",
+            "message": "Project file created.",
+        }
         assert (tmp_path / "hello.py").read_text(encoding="utf-8") == "print('hi')\n"
 
         # Creating never replaces: the same name is a conflict, and the original

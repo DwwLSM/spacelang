@@ -585,6 +585,8 @@ if (page === "editor") {
       localFileHandle = null;
       localFileHandleId = null;
       localFileName = null;
+      // The file suffix decides the representation, exactly as when loading one.
+      if (result.mode) setSourceMode(result.mode);
       updateFileButtonLabel();
       updateFileActions();
       updateEditorPlaceholder();

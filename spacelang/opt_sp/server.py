@@ -651,6 +651,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
 
         self._send_json(201, {
             "path": target.relative_to(self.project_root).as_posix(),
+            "mode": _SOURCE_MODES[target.suffix.lower()],
             "message": "Project file created.",
         })
 
