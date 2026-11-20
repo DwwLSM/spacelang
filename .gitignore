@@ -24,6 +24,7 @@ native/examples/*.sp
 .env
 .env.local
 .env.*.local
+.git-token
 
 # local scratch output from manual checks
 .artifacts/
