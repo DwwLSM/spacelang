@@ -167,6 +167,38 @@ SYSTEM_PROMPT_FULL = (
 _ANNOTATION = re.compile(r"\s*; line=\d+ spaces=[0-9,]*$")
 _MAX_DIFF_CHARS = 6000
 
+# Mirrors spacelang/pyfront.py (BinOp.op_map) and csrc/vm.cpp (try_numeric_binary_fast).
+# The assembly only carries the number, so the model needs the legend to know
+# that "OP 2" is a subtraction rather than a guess.
+BINARY_OPERATORS = {
+    1: "+",
+    2: "-",
+    3: "*",
+    4: "/",
+    5: "%",
+    6: "==",
+    7: "<",
+    8: ">",
+    9: "!=",
+    10: "<=",
+    11: ">=",
+    16: "//",
+    17: "**",
+}
+
+
+def operator_legend(spasm_src: str, previous_asm: str = "") -> str:
+    """Explain every operator code in the listing, and in the removed side."""
+    codes = sorted({
+        int(code)
+        for text in (spasm_src, previous_asm)
+        for code in re.findall(r"^OP (\d+)", text, re.MULTILINE)
+    })
+    if not codes:
+        return ""
+    parts = [f"OP {code} = {BINARY_OPERATORS.get(code, 'unknown operator')}" for code in codes]
+    return "Operator codes used by this program: " + ", ".join(parts) + ".\n\n"
+
 
 def _plain_assembly(text: str) -> list[str]:
     return [_ANNOTATION.sub("", line) for line in text.split("\n")]
@@ -209,12 +241,14 @@ def build_messages(py_src: str, spasm_src: str) -> list[dict[str, str]]:
 
     previous = _previous_assembly(py_src)
     diff = assembly_diff(previous, spasm_src) if previous else None
+    legend = operator_legend(spasm_src, previous or "")
     if diff:
         user = (
             "## Current Python\n"
             "```python\n"
             f"{py_src}\n"
             "```\n\n"
+            f"{legend}"
             "## Change in the program (assembly diff)\n"
             "```diff\n"
             f"{diff}\n"
@@ -232,6 +266,7 @@ def build_messages(py_src: str, spasm_src: str) -> list[dict[str, str]]:
         "```python\n"
         f"{py_src}\n"
         "```\n\n"
+        f"{legend}"
         "## Current program (assembly)\n"
         f"{spasm_src}\n\n"
         "## Task\n"

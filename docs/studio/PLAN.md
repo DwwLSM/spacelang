@@ -515,6 +515,7 @@ user:   ## Current Python
         ```python
         {py}
         ```
+        Operator codes used by this program: OP 1 = +, OP 2 = -.
         ## Change in the program (assembly diff)
         ```diff
         {diff}
@@ -522,6 +523,12 @@ user:   ## Current Python
         ## Task
         Apply this change to the Python and output the whole file.
 ```
+
+The operator legend is mandatory: `OP <n>` carries only a number, so without it
+the model guesses. First observed on a real user edit of `OP 1` → `OP 2`: the
+answer used `*` (opcode 3) and the gate rejected it with "expected OP 2, got
+OP 3". The legend is generated from the codes that appear in the current listing
+and in the removed side of the diff.
 
 When the stale mirror does not compile, or the diff exceeds 6000 characters, the
 server falls back to sending the full annotated listing with an instruction to

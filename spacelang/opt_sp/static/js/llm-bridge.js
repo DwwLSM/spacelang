@@ -25,9 +25,12 @@ export function describeError(result) {
     return `${base} Retry in ${Math.ceil(result.retry_after)}s.`;
   }
   if (result.error === "not_equivalent") {
-    const want = result.want_len ?? "?";
-    const got = result.got_len ?? "?";
-    return `Mirror rejected - ${got}/${want} instructions differ.`;
+    const first = result.first;
+    if (first) {
+      return `Mirror rejected at instruction ${Number(first.index) + 1}: `
+        + `the program needs "${first.want}" but the answer compiles to "${first.got}".`;
+    }
+    return `Mirror rejected - ${result.got_len ?? "?"}/${result.want_len ?? "?"} instructions differ.`;
   }
   return base;
 }

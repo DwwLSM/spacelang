@@ -240,6 +240,42 @@ def test_refine_py_not_equivalent_is_rejected(stub_llm):
     assert "py" not in body
 
 
+def test_prompt_explains_the_operator_codes(stub_llm):
+    program = "a = 3\nb = 4\nc = a + b\nprint(c)\n"
+    asm = convert(program, "py")["texts"]["spasm"].replace("OP 1", "OP 2")
+    stub_llm.payload = {
+        "choices": [{"finish_reason": "stop", "message": {"content": "a = 3\nb = 4\nc = a - b\nprint(c)\n"}}],
+    }
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _post(url, {"py": program, "spasm": asm})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 200
+    assert body["verified"] is True
+    user = stub_llm.requests[0]["body"]["messages"][1]["content"]
+    assert "OP 2 = -" in user
+    assert "OP 1 = +" in user
+
+
+def test_refine_py_reports_the_first_difference(stub_llm):
+    program = "a = 3\nb = 4\nc = a + b\nprint(c)\n"
+    asm = convert(program, "py")["texts"]["spasm"].replace("OP 1", "OP 2")
+    stub_llm.payload = {
+        "choices": [{"finish_reason": "stop", "message": {"content": "a = 3\nb = 4\nc = a * b\nprint(c)\n"}}],
+    }
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _expect_error(url, {"py": program, "spasm": asm})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 422
+    assert body["first"]["want"] == "OP 2"
+    assert body["first"]["got"] == "OP 3"
+
+
 def test_refine_py_rate_limited(stub_llm):
     httpd, url = server(
         open_browser=False,
