@@ -570,10 +570,23 @@ def chat_prompt_with_documents(page: str) -> str:
     documents = project_documents()
     if not documents:
         return prompt
+    # The reference lands in the middle of the prompt, so a short reminder sits
+    # after it: recency matters, and a conversation that already contains a
+    # refusal ("I have no instruction table") would otherwise stay anchored to
+    # it for the rest of the session.
     return (
         prompt
         + "\n\n## Project README and documentation (authoritative)\n\n"
         + documents
+        + "\n\n## Before you answer\n"
+        "The text above is this project's own README and documentation: it holds "
+        "the instruction set with its OP codes, the .sp file format and the "
+        "assembly syntax. Answer from it. Give a program as a ```spasm listing "
+        "using those mnemonics; the server compiles it to the encoded form, so "
+        "you never write runs of spaces. If an earlier turn of this conversation "
+        "claimed the instruction set or the token table was unavailable, that turn "
+        "was wrong — you have it above. If the documents genuinely do not cover "
+        "something, say so plainly instead of inventing operands."
     )
 
 

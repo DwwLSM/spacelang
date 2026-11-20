@@ -863,7 +863,9 @@ the assistant answers as that page's helper rather than as a generic chatbot.
 `README.md` and `documentation.md` are appended to it — re-read only when they
 change, capped at 80 000 characters — because the answers live there: the
 instruction table, the operator codes and the `.sp` format. That is why a turn
-carries roughly 19 000 prompt tokens even before the conversation.
+carries roughly 19 000 prompt tokens even before the conversation. A short
+reminder closes the prompt, after the documents, so a conversation that started
+with a refusal ("I have no instruction table") does not stay anchored to it.
 It is asked to answer in assembly (`spasm`), because that is the readable form
 of the language; the encoded `.sp` block under each listing is produced by
 compiling that listing on the server, never written by the model, and a guessed

@@ -611,6 +611,10 @@ def test_chat_prompt_carries_the_project_documents(stub_llm):
     assert "### documentation.md" in system
     assert "STORE_GLOBAL" in system
     assert "authoritative" in system
+    # The reminder closes the prompt, after the long documents, and it overrides
+    # a refusal that an earlier turn of the conversation may contain.
+    assert system.rstrip().endswith("instead of inventing operands.")
+    assert "earlier turn of this conversation" in system
 
 
 def test_chat_still_works_without_the_documents(monkeypatch, stub_llm):
