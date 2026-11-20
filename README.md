@@ -149,6 +149,26 @@ spacelang-opt-sp --port 8000
 
 The build command downloads the pinned Pyodide files and prepares the browser
 assets. `python tools/build_static.py --check` verifies that they are present.
+
+### Studio: edit the same program in three representations
+
+`/studio` opens a workspace with the program shown as `py`, `spasm` and `sp` at
+the same time. Editing one pane derives the other two (250 ms debounce), each
+pane has its own **Run** button that traces that pane into the shared state
+panels, and every divider is draggable.
+
+Because `.sp` and `spasm` are compiler output, the Python mirror cannot be
+derived by rule; it is marked `stale` after such an edit and must be rewritten
+by a model. That is the only AI-assisted step in the tool: it is opt-in, it runs
+against an OpenAI-compatible endpoint you configure, and its answer is only
+accepted when `compile_py(answer)` reproduces the assembly instruction for
+instruction. See `docs/studio/README.md` for setup and the design notes in
+`docs/studio/PLAN.md`.
+
+```bash
+spacelang-opt-sp --port 8000 --llm-api-key-file ~/.config/spacelang/llm-key
+# then open http://127.0.0.1:8000/studio
+```
 The interface assets and requests use paths relative to the app, so the
 debugger also works when served behind a URL path prefix (such as a hosted
 VS Code port proxy).

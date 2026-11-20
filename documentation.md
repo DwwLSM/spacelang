@@ -839,6 +839,68 @@ network.
 Published PyPI wheels include the prepared browser assets, so no asset build
 step is needed after a wheel installation.
 
+### Studio, the multi-pane workspace
+
+`http://127.0.0.1:8000/studio` (or the **Studio (new tab)** item in the settings
+menu) shows one program in three representations at once:
+
+| Pane | Content | Produced by |
+|---|---|---|
+| `py` | Python surface syntax | a person, or the model |
+| `spasm` | assembly text | `disassemble(program)` |
+| `sp` | encoded token stream | `encode(program)` |
+
+Editing a pane re-derives the others after a 250 ms pause. The forward
+direction is deterministic (`py` compiles to a program, which disassembles and
+encodes); there is no rule that turns a program back into Python, so editing
+`spasm` or `sp` marks `py` as `stale` and leaves its text untouched. The
+`annotations` button on the assembly pane hides or restores the
+`; line=N spaces=...` comments; the `follow` button keeps the active line of a
+trace in view; every divider is draggable and remembered, and the settings menu
+switches the panes between stacked and side by side.
+
+Each pane carries its own **Run** button. Tracing happens in the browser and
+fills the shared Call Stack, Operand Stack, Heap and Printed Output panels, so
+the same page works for a `.py` source, an assembly listing and an encoded
+artifact.
+
+#### Rewriting the Python mirror
+
+The `stale` mirror can be rewritten by a model, once you point the studio at an
+OpenAI-compatible endpoint. Configuration is layered, highest first: the **LLM
+settings** dialog (stored in `localStorage`), the command line, the environment
+or a `.env.local` file in the working directory, then built-in defaults.
+
+```bash
+spacelang-opt-sp --port 8000 \
+  --llm-base-url https://host/litellm/v1 \
+  --llm-model ModelName \
+  --llm-api-key-file ~/.config/spacelang/llm-key
+```
+
+The equivalent environment variables are `LITELLM_BASE_URL`, `LITELLM_MODEL` and
+`LITELLM_API_KEY`; `.env.local` is read in the same order and never overrides a
+real environment variable. There is deliberately no `--llm-api-key` flag: keys on
+a command line end up in process listings and shell history.
+
+Three modes are offered: `manual` (a **Sync with AI** button appears while the
+mirror is stale, and nothing runs until it is clicked), `auto` (sync about 1.5 s
+after an edit stops, with a cooldown) and `off`. Requests are capped by a shared
+token bucket, 40 per minute by default, and `busy`/`rate_limited` answers carry a
+`retry_after`.
+
+Every answer is verified locally before it is shown: `compile_py(answer)` must
+produce the same instruction stream as `assemble(spasm)`, ignoring line numbers
+and symbol tables. A mismatch is reported as `not_equivalent` with the first
+differing instruction, and the editor keeps its text. There is no way to accept
+an unverified answer.
+
+The encoded `.sp` program is never sent to the model: the request carries the
+Python mirror and the assembly only, and the server derives the previous
+assembly by compiling the stale mirror itself. The endpoint is loopback-only;
+binding the server to a non-loopback host disables both `/api/refine-py` and
+`/api/llm-status`.
+
 ### Prepare browser assets
 
 Generated Pyodide and SpaceLang module assets are excluded from Git. Contributors

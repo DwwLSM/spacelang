@@ -666,6 +666,13 @@ if (page === "editor") {
   let controlsBound = false;
   let tracedPane = "py";
 
+  window.addEventListener("keydown", (event) => {
+    if (event.target instanceof HTMLElement &&
+      event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+    if (event.key === "ArrowLeft") panel.render(panel.stepIndex - 1);
+    if (event.key === "ArrowRight") panel.render(panel.stepIndex + 1);
+  });
+
   const followToggle = document.querySelector("#trace-follow-toggle");
   const FOLLOW_KEY = "opt-sp-trace-follow";
   let follow = localStorage.getItem(FOLLOW_KEY) !== "0";
