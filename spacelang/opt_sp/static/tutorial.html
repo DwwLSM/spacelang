@@ -14,50 +14,104 @@
   <main class="page-layout">
     <article class="doc-body" aria-label="SpaceLang tutorial">
       <h1>First five minutes</h1>
-
-      <h2>1. Write something</h2>
       <p>
-        Open the <a href="/editor">OPT_SP editor</a>, keep <strong>Assembly</strong>
-        as the mode and press <strong>Run</strong>. The default listing pushes two
-        numbers, adds them and halts.
+        This walkthrough opens every part of the debugger once, using the program
+        that ships in the editor. Nothing needs to be installed beyond the server
+        you are already running.
       </p>
 
-      <h2>2. Read the trace</h2>
+      <h2 id="1-write-something">1. Write something</h2>
       <p>
-        The visualizer shows the instruction being executed, the operand stack,
-        the call stack, the heap and anything printed. Step through it with the
-        arrow keys or the slider; nothing is hidden behind a debugger build.
+        Open the <a href="/editor">OPT_SP editor</a>. The listing starts as four
+        instructions:
+      </p>
+      <pre><code>PUSH_INT 2
+PUSH_INT 3
+OP 1
+HALT</code></pre>
+      <p>
+        <code>OP 1</code> is addition, so the operand stack ends up holding a
+        single <code>5</code>. Keep <strong>Assembly</strong> selected and press
+        <strong>Run</strong>. The editor accepts three modes: Python, assembly and
+        encoded <code>.sp</code>; the mode picker decides how the text is read.
+      </p>
+      <p>
+        Switching pages does not lose work. The editor stores the listing, the
+        mode and the open file in <code>sessionStorage</code>, so
+        <strong>Run</strong> → visualizer → <em>Back to editor</em> returns you to
+        the same text and the same file.
       </p>
 
-      <h2>3. See the encoded form</h2>
+      <h2 id="2-read-the-trace">2. Read the trace</h2>
       <p>
-        Open the <a href="/studio">Studio</a> and type the same program as
-        Python. Two more panes fill themselves: the assembly listing and the
-        encoded <code>.sp</code>, where every token is a run of spaces. That is
-        the artifact the language actually ships.
+        The visualizer replays every instruction with its state side by side: the
+        instruction about to run, the operand stack, the call stack, the heap and
+        anything the program printed. Ints, strings, lists and dicts are shown as
+        values, not as opaque references.
+      </p>
+      <p>
+        Step with the ⏮ / ⏪ / ⏩ / ⏭ buttons, drag the slider, or use the
+        <kbd>←</kbd> and <kbd>→</kbd> keys. <strong>Autoplay</strong> runs the
+        trace hands-free; the speed slider sets the delay between steps.
       </p>
 
-      <h2>4. Change the low level, keep the mirror</h2>
+      <h2 id="3-see-the-encoded-form">3. See the encoded form</h2>
+      <p>
+        Open the <a href="/studio">Studio</a> and write the same program as
+        Python:
+      </p>
+      <pre><code>print(2 + 3)</code></pre>
+      <p>
+        Two more panes fill themselves: the assembly listing the Python frontend
+        emits, and the encoded <code>.sp</code> file in which every token is a
+        run of spaces. That whitespace file is what the language actually ships.
+        Toggle <strong>show spaces</strong> to render the runs as visible marks,
+        and <strong>Copy raw</strong> to take the exact bytes away.
+      </p>
+
+      <h2 id="4-change-the-low-level-keep-the-mirror">4. Change the low level, keep the mirror</h2>
       <p>
         Edit the assembly pane: swap <code>OP 1</code> (add) for <code>OP 2</code>
-        (subtract). The Python pane is marked <em>stale</em> instead of being
-        overwritten, because nothing turns a program back into Python. Press
-        <strong>Sync with AI</strong> to have a model rewrite the mirror; the
-        answer is only accepted if it compiles to the same instructions.
+        (subtract). The Python pane turns <em>stale</em> instead of being
+        overwritten, because nothing in the toolchain turns instructions back into
+        Python.
       </p>
-
-      <h2>5. Run it without Python</h2>
       <p>
-        The repository ships a standalone interpreter (<code>native/spvm</code>)
-        and a compiler written in SpaceLang itself. Build them with
-        <code>native/build.ps1</code>, then run any compiled
-        <code>.sp</code> with no CPython in the loop.
+        <strong>Sync with AI</strong> asks a model for a new Python mirror. The
+        answer is compiled locally first and accepted only when it produces the
+        same instructions; otherwise the pane keeps your text and reports why.
+        The encoded <code>.sp</code> is never sent to the model, only the Python
+        and the assembly. Endpoint, model and key live in the settings menu — with
+        no key configured, sync stays disabled and the rest of the page is
+        unaffected.
       </p>
 
-      <h2>Where to go next</h2>
+      <h2 id="5-run-it-without-python">5. Run it without Python</h2>
+      <p>
+        Two alternatives to the reference interpreter exist:
+      </p>
       <ul>
-        <li><a href="/docs">Documentation</a> — the language, the opcodes, the CLI.</li>
+        <li>
+          <code>native/spvm</code>, a standalone C++17 virtual machine built with
+          <code>native/build.ps1</code>.
+        </li>
+        <li>
+          A compiler written in SpaceLang itself, which compiles programs to
+          <code>.sp</code> and is documented in <code>SELFHOSTING.md</code>.
+        </li>
+      </ul>
+      <p>
+        Both read the same <code>.sp</code> artifact you just copied out of the
+        Studio, with no CPython in the loop. The debugger itself always uses the
+        Python traced VM: the native VM is faster, but it exposes no tracing
+        hooks, so there would be nothing to step through.
+      </p>
+
+      <h2 id="where-to-go-next">Where to go next</h2>
+      <ul>
+        <li><a href="/docs">Documentation</a> — the language, the opcodes, the CLI and the Python API.</li>
         <li><a href="https://github.com/DwwLSM/spacelang" rel="noopener">GitHub</a> — source, tests, self-hosting notes.</li>
+        <li><a href="https://github.com/DwwLSM/spacelang/blob/main/docs/studio/README.md" rel="noopener">Studio manual</a> — layouts, panes and annotations in detail.</li>
       </ul>
     </article>
     <nav class="doc-toc" aria-label="Contents">
@@ -67,6 +121,7 @@
       <a href="#3-see-the-encoded-form">3. See the encoded form</a>
       <a href="#4-change-the-low-level-keep-the-mirror">4. Change the low level</a>
       <a href="#5-run-it-without-python">5. Run it without Python</a>
+      <a href="#where-to-go-next">Where to go next</a>
     </nav>
   </main>
 </body>
