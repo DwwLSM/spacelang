@@ -416,8 +416,145 @@ def refine_py(
     }
 
 
-def status(config: LLMConfig, cli: "LLMConfig | Mapping[str, Any] | None" = None) -> dict[str, Any]:
+# --- assistant chat -------------------------------------------------------
+#
+# The system prompt is chosen by the server from the page name, never sent by
+# the browser: the page decides what the assistant is for, and a caller cannot
+# swap the persona for something else.
+
+CHAT_PAGES = ("home", "editor", "studio")
+MAX_CHAT_MESSAGES = 24
+MAX_CHAT_MESSAGE_CHARS = 4_000
+MAX_CHAT_CHARS = 24_000
+
+_CHAT_COMMON = (
+    "SpaceLang is a small language whose source file is .sp: token values encoded "
+    "as runs of spaces and newlines. A Python subset is an optional surface syntax "
+    "that lowers to .sp, and assembly is a readable view of the same program, not a "
+    "separate language. You cannot run the program, read files, or edit anything, so "
+    "never claim to have done so: answer with explanations, or with instructions and "
+    "code the user can paste. Keep replies short, concrete and in plain prose unless "
+    "code is asked for."
+)
+
+CHAT_SYSTEM_PROMPTS = {
+    "home": (
+        "You are the SpaceLang assistant on the debugger's home page. " + _CHAT_COMMON +
+        " The pages are: /editor (write one representation, run it, see the trace), "
+        "/studio (Python, assembly and encoded .sp side by side), /visualizer (trace "
+        "only), /docs (the project documentation) and /tutorial (a five-minute tour). "
+        "Help the visitor pick a starting point and understand what .sp is."
+    ),
+    "editor": (
+        "You are the SpaceLang assistant inside the editor. The user is writing one "
+        "representation at a time: assembly (.spasm), the Python subset (.py) or the "
+        "encoded .sp form. " + _CHAT_COMMON +
+        " Useful facts: the stack machine runs PUSH_INT, PUSH_STR, OP <code> "
+        "(1 = +, 2 = -, 3 = *, 4 = /, 16 = //, 17 = **), CALL, RET and HALT; the "
+        "operand stack is shown in the trace, so a wrong result is usually a wrong "
+        "push order or a wrong OP code. Encoded source is only spaces: it is not meant "
+        "to be read by eye."
+    ),
+    "studio": (
+        "You are the SpaceLang assistant inside the Studio, where Python, assembly and "
+        "encoded .sp are shown for the same program. " + _CHAT_COMMON +
+        " The Python pane is a mirror: editing the assembly or the encoded form marks "
+        "it stale, and nothing in the toolchain turns a program back into Python. The "
+        "mirror is rewritten by a model and accepted only when the rewritten Python "
+        "compiles to the same instructions as the assembly, so help the user judge "
+        "whether a mirror is right rather than promising a rewrite."
+    ),
+}
+
+
+def chat_system_prompt(page: str) -> str:
+    """The prompt for a page, falling back to the home page's."""
+    return CHAT_SYSTEM_PROMPTS.get(page, CHAT_SYSTEM_PROMPTS["home"])
+
+
+def normalise_chat_history(messages: Any) -> list[dict[str, str]]:
+    """Validate the browser's transcript; raise LLMError when it is unusable."""
+    if not isinstance(messages, list) or not messages:
+        raise LLMError("bad_history", "a list of messages is required")
+    if len(messages) > MAX_CHAT_MESSAGES:
+        raise LLMError(
+            "input_too_large",
+            f"the conversation is longer than {MAX_CHAT_MESSAGES} messages",
+        )
+    cleaned: list[dict[str, str]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise LLMError("bad_history", "every message must be an object")
+        role = message.get("role")
+        content = message.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            raise LLMError("bad_history", "messages need a role and text")
+        text = content.strip()
+        if not text:
+            continue
+        if len(text) > MAX_CHAT_MESSAGE_CHARS:
+            raise LLMError(
+                "input_too_large",
+                f"a message is longer than {MAX_CHAT_MESSAGE_CHARS} characters",
+            )
+        cleaned.append({"role": role, "content": text})
+    if not cleaned or cleaned[-1]["role"] != "user":
+        raise LLMError("bad_history", "the last message must come from the user")
+    if sum(len(message["content"]) for message in cleaned) > MAX_CHAT_CHARS:
+        raise LLMError(
+            "input_too_large",
+            f"the conversation is larger than {MAX_CHAT_CHARS} characters",
+        )
+    return cleaned
+
+
+def chat_reply(
+    config: LLMConfig,
+    page: str,
+    messages: Any,
+    *,
+    bucket: TokenBucket,
+    gate: Gate,
+) -> dict[str, Any]:
+    """One assistant turn. Shares the mirror sync's key, budget and gate."""
+    if not config.api_key:
+        raise LLMError("no_key", "no API key is configured")
+    history = normalise_chat_history(messages)
+    if page not in CHAT_SYSTEM_PROMPTS:
+        page = "home"
+
+    wait = bucket.take()
+    if wait is not None:
+        raise LLMError(
+            "rate_limited",
+            "the shared request budget is exhausted",
+            retry_after=round(wait, 1),
+        )
+
+    with gate:
+        answer = chat(
+            config.base_url,
+            config.api_key,
+            config.model,
+            [{"role": "system", "content": chat_system_prompt(page)}, *history],
+            max_tokens=config.max_output_tokens,
+            temperature=config.temperature,
+            timeout=config.timeout,
+            disable_thinking=config.disable_thinking,
+            allow_truncation=True,
+        )
+
     return {
+        "ok": True,
+        "page": page,
+        "reply": {"role": "assistant", "content": answer["content"].strip()},
+        "truncated": bool(answer.get("truncated")),
+        "model": answer["model"],
+        "usage": answer["usage"],
+    }
+
+
+def status(config: LLMConfig, cli: "LLMConfig | Mapping[str, Any] | None" = None) -> dict[str, Any]:    return {
         "base_url": config.base_url,
         "model": config.model,
         "mode": config.mode,
@@ -437,6 +574,9 @@ __all__ = [
     "Gate",
     "TokenBucket",
     "build_messages",
+    "chat_reply",
+    "chat_system_prompt",
+    "normalise_chat_history",
     "is_loopback",
     "key_source",
     "refine_py",

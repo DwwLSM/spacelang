@@ -57,8 +57,15 @@ def chat(
     temperature: float = 0.2,
     timeout: float = DEFAULT_TIMEOUT,
     disable_thinking: bool = True,
+    allow_truncation: bool = False,
 ) -> dict[str, Any]:
-    """Call ``/chat/completions`` and return the answer plus usage."""
+    """Call ``/chat/completions`` and return the answer plus usage.
+
+    ``allow_truncation`` exists for conversations: a reply cut off by
+    ``max_tokens`` is still a usable answer with a visible cut, while a rewritten
+    source file that stops mid-line is garbage, so the mirror path keeps it as an
+    error.
+    """
     url = base_url.rstrip("/") + "/chat/completions"
     payload = {
         "model": model,
@@ -110,7 +117,8 @@ def chat(
     finish_reason = choice.get("finish_reason")
 
     usage = data.get("usage") or {}
-    if finish_reason == "length":
+    truncated = finish_reason == "length"
+    if truncated and not allow_truncation:
         raise LLMError(
             "truncated",
             "the model exhausted max_tokens before writing code",
@@ -123,6 +131,7 @@ def chat(
         "content": content,
         "reasoning": message.get("reasoning_content") or "",
         "finish_reason": finish_reason,
+        "truncated": truncated,
         "usage": usage,
         "model": data.get("model") or model,
     }

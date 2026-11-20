@@ -1279,4 +1279,16 @@ if (settingsButton && settingsMenu) {
   });
 }
 
+// The assistant lives on the pages that have something to talk about. It is
+// loaded on demand so documentation pages never download it.
+const chatPanel = document.querySelector("#chat-panel");
+if (chatPanel) {
+  chatPanel.dataset.page = page;
+  import("./chat-panel.js")
+    .then((module) =>
+      module.initChatPanel({ root: chatPanel, page, drawer: page !== "home" })
+    )
+    .catch((error) => console.error("Assistant failed to load:", error));
+}
+
 void checkAssets();

@@ -33,6 +33,7 @@ from .llm_proxy import (
     Gate,
     LLMConfig,
     TokenBucket,
+    chat_reply,
     is_loopback,
     refine_py,
     resolve_config,
@@ -52,9 +53,11 @@ _IGNORED_DIRECTORIES = {
 }
 _MAX_SOURCE_FILE_SIZE = 1024 * 1024
 _MAX_LLM_REQUEST = 64 * 1024
+_MAX_CHAT_REQUEST = 64 * 1024
 _MAX_DRAIN = 1024 * 1024
 _LLM_STATUS = {
     "bad_config": 400,
+    "bad_history": 400,
     "no_key": 400,
     "input_too_large": 413,
     "rate_limited": 429,
@@ -253,6 +256,9 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         if request_path == "/api/file/new":
             self._create_project_file()
             return
+        if request_path == "/api/chat":
+            self._chat()
+            return
         if request_path == "/api/refine-py":
             self._refine_py()
             return
@@ -399,6 +405,64 @@ class _QuietHandler(SimpleHTTPRequestHandler):
                 body["retry_after"] = error.retry_after
             body.update(error.details)
             self._send_json(_LLM_STATUS.get(error.code, 502), body)
+            return
+        self._send_json(200, result)
+
+    def _chat(self) -> None:
+        """One assistant turn; the system prompt is chosen from ``page``."""
+        if not self._local_only():
+            return
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self._send_json(400, {"ok": False, "error": "bad_request_size"})
+            return
+        if length < 0 or length > _MAX_CHAT_REQUEST:
+            if 0 < length <= _MAX_DRAIN:
+                self.rfile.read(length)
+            self._send_json(413, {"ok": False, "error": "input_too_large"})
+            return
+        try:
+            body = self.rfile.read(length)
+        except OSError:
+            return
+        if self.headers.get_content_type() != "application/json":
+            self._send_json(415, {"ok": False, "error": "expected_json"})
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return
+        extra = set(payload) - {"messages", "page"}
+        if extra:
+            self._send_json(400, {
+                "ok": False,
+                "error": "unknown_field",
+                "message": f"unsupported fields: {', '.join(sorted(extra))}",
+            })
+            return
+
+        try:
+            config = resolve_config(self.llm_config, self.headers)
+            result = chat_reply(
+                config,
+                payload.get("page"),
+                payload.get("messages"),
+                bucket=self.llm_bucket,
+                gate=self.llm_gate,
+            )
+        except LLMError as error:
+            detail = {"ok": False, "error": error.code}
+            if error.message:
+                detail["message"] = error.message
+            if error.retry_after is not None:
+                detail["retry_after"] = error.retry_after
+            detail.update(error.details)
+            self._send_json(_LLM_STATUS.get(error.code, 502), detail)
             return
         self._send_json(200, result)
 

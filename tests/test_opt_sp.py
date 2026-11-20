@@ -180,6 +180,27 @@ def test_home_page_links_the_workspace():
     assert "github.com/DwwLSM/spacelang" in page
 
 
+def test_assistant_ships_with_the_three_pages():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        for path in ("/", "/editor", "/studio"):
+            with urlopen(f"{url}{path}") as response:
+                page = response.read().decode("utf-8")
+            assert 'id="chat-panel"' in page, path
+            assert 'id="chat-input"' in page, path
+            assert 'data-role="log"' in page, path
+        # The documentation pages have nothing to converse about and skip it,
+        # but they still carry the (hidden) header toggle from the shared header.
+        for path in ("/docs", "/tutorial", "/visualize.html"):
+            with urlopen(f"{url}{path}") as response:
+                page = response.read().decode("utf-8")
+            assert 'id="chat-panel"' not in page, path
+            assert 'id="chat-toggle"' in page, path
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_home_page_offers_scene_styles():
     httpd, url = server(open_browser=False, blocking=False, port=0)
     try:

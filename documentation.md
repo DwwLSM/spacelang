@@ -849,6 +849,23 @@ lifecycle. The home page imports the scene with a dynamic `import()`, so the
 editor and studio pages never download it, and the static tree in `home.html`
 stays in the DOM as the no-script fallback.
 
+### Assistant
+
+The home page carries the assistant in its right column; the editor and the
+studio keep it in a drawer that **Assistant** in the header opens. The
+transcript is per page and lives in `localStorage`: forty messages are kept, the
+last twelve travel with the next request, and **Clear** forgets the
+conversation.
+
+The system prompt is chosen by the server from the page name (`home`, `editor`,
+`studio`) and never comes from the browser, so the assistant answers as the
+editor's or the studio's helper rather than as a generic chatbot. Requests share
+the mirror sync's key, token bucket and single-flight gate, and switch the
+model's hidden reasoning off; an answer cut off by the token limit is still
+shown, with a note next to the input. Like the other model endpoints it is
+loopback only, and the page never sends the encoded `.sp` program because it
+never has it: the transcript is whatever the user typed.
+
 ### Start the server
 
 The installed entry point is:

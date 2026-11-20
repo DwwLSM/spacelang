@@ -1,0 +1,20 @@
+<aside class="chat-panel" id="chat-panel" data-page="" aria-label="SpaceLang assistant">
+  <header class="chat-panel-head">
+    <h2>Assistant</h2>
+    <div class="chat-panel-tools">
+      <button type="button" data-role="clear" title="Forget this conversation">Clear</button>
+      <button type="button" data-role="toggle" aria-expanded="true">Hide</button>
+    </div>
+  </header>
+  <div class="chat-body" id="chat-body">
+    <div class="chat-log" data-role="log" role="log" aria-live="polite" aria-relevant="additions"></div>
+    <form class="chat-form" data-role="form">
+      <label class="visually-hidden" for="chat-input">Message</label>
+      <textarea id="chat-input" data-role="input" rows="2" spellcheck="false" placeholder="Ask about SpaceLang…"></textarea>
+      <div class="chat-form-actions">
+        <span class="chat-status" data-role="status" role="status"></span>
+        <button type="submit" data-role="send">Send</button>
+      </div>
+    </form>
+  </div>
+</aside>
