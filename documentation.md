@@ -151,8 +151,9 @@ Hello, world!
 ```
 
 `compile-py` optimizes by default and embeds the program name table in the
-output. `disasm` shows the decoded instructions. `run` uses the Python
-reference VM unless `--engine cpp` is specified.
+output. `disasm` shows the decoded instructions. `run` prefers the native
+engine when it is built and falls back to the Python reference VM otherwise;
+`--engine py` and `--engine cpp` force one engine.
 
 ### Compile and execute in Python
 
@@ -600,11 +601,16 @@ The native engine is implemented in `csrc/vm.cpp` and exposed as
 through `CMakeLists.txt` and scikit-build-core. GCC and Clang builds use
 computed-goto dispatch; other compilers use a portable switch dispatcher.
 
-Use the native engine explicitly:
+The native engine is the default when it is built:
 
 ```bash
+spacelang run program.sp          # native engine when available
+spacelang run program.sp --engine py
 spacelang run program.sp --engine cpp
 ```
+
+If the extension is missing, `--engine auto` (the default) prints one warning
+and runs on the Python engine; `--engine cpp` fails instead of falling back.
 
 It is experimental. The Python VM is the reference behavior for cases that
 have not been checked for parity. The differential tests and benchmark compare
@@ -665,7 +671,7 @@ the live argument parser.
 | `spacelang compile-py SRC DST` | Compile supported Python source to `.sp` or `.spz`. |
 | `spacelang asm SRC DST` | Assemble mnemonic source into encoded program output. |
 | `spacelang disasm SRC [-o OUTPUT]` | Disassemble a `.sp` or `.spz` file to stdout or a file. |
-| `spacelang run SRC [--engine py\|cpp]` | Execute a `.sp` or `.spz` program; Python engine is default. |
+| `spacelang run SRC [--engine auto\|py\|cpp]` | Execute a `.sp` or `.spz` program; uses the native engine when built, otherwise the Python engine. |
 | `spacelang pack SRC [DST]` | Gzip a `.sp` file into `.spz`; default destination uses `.spz`. |
 | `spacelang unpack SRC [DST]` | Decompress `.spz`; default destination uses `.sp`. |
 
@@ -680,6 +686,7 @@ Examples:
 spacelang compile-py source.py output.sp
 spacelang compile-py source.py output.sp --no-optimize
 spacelang compile-py source.py output.sp --compress-source
+spacelang run output.sp
 spacelang run output.sp --engine py
 spacelang run output.sp --engine cpp
 spacelang pack output.sp
