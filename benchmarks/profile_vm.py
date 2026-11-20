@@ -11,9 +11,15 @@ This script only observes; nothing under spacelang/ is modified.
 from __future__ import annotations
 
 import argparse
+import json
+import platform as platform_info
 import statistics
+import subprocess
+import sys
 import time
 from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
 
 from spacelang.ir import OP
 from spacelang.pyfront import compile_py
@@ -129,6 +135,69 @@ def describe_engine(vm_type, program) -> object:
     return vm.globals_.get("result")
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def git_state() -> tuple[str | None, bool | None]:
+    """Return (HEAD commit, working tree dirty) or (None, None) outside git."""
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None, None
+    return commit or None, bool(status)
+
+
+def build_payload(rows: list[tuple[str, int, Counter[int], float, float]], args) -> dict:
+    """Everything needed to compare two runs later without guessing context."""
+    commit, dirty = git_state()
+    return {
+        "schema": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "commit": commit,
+        "dirty": dirty,
+        "platform": {
+            "system": platform_info.system(),
+            "release": platform_info.release(),
+            "machine": platform_info.machine(),
+            "python": platform_info.python_version(),
+            "implementation": platform_info.python_implementation(),
+        },
+        "harness": {
+            "repeat": args.repeat,
+            "warmup": args.warmup,
+            "programs": [name for name, *_ in rows],
+        },
+        "results": [
+            {
+                "program": name,
+                "instructions": executed,
+                "python_seconds": py_seconds,
+                "cpp_seconds": cpp_seconds,
+                "python_ns_per_instruction": py_seconds * 1e9 / executed,
+                "cpp_ns_per_instruction": cpp_seconds * 1e9 / executed,
+                "speedup": py_seconds / cpp_seconds,
+                "opcodes": {
+                    OP_NAMES.get(op, str(op)): count for op, count in counts.most_common()
+                },
+            }
+            for name, executed, counts, py_seconds, cpp_seconds in rows
+        ],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repeat", type=int, default=5, help="measured runs (default 5)")
@@ -140,15 +209,22 @@ def main() -> int:
         help="limit to one or more programs",
     )
     parser.add_argument("--top", type=int, default=4, help="opcodes to list per program")
+    parser.add_argument(
+        "--json",
+        metavar="PATH",
+        help="write the results as JSON ('-' for stdout, which suppresses the table)",
+    )
     args = parser.parse_args()
+    quiet = args.json == "-"
 
     names = args.program or list(PROGRAMS)
     header = (
         f"{'program':<14}{'instrs':>9}{'py ms':>10}{'cpp ms':>10}"
         f"{'speedup':>9}{'py ns/i':>10}{'cpp ns/i':>10}"
     )
-    print(header)
-    print("-" * len(header))
+    if not quiet:
+        print(header)
+        print("-" * len(header))
 
     rows: list[tuple[str, int, Counter[int], float, float]] = []
     for name in names:
@@ -164,19 +240,32 @@ def main() -> int:
         cpp_seconds = time_engine(CppVM, program, repeats=args.repeat, warmup=args.warmup)
         py_ns = py_seconds * 1e9 / executed
         cpp_ns = cpp_seconds * 1e9 / executed
-        print(
-            f"{name:<14}{executed:>9,}{py_seconds * 1e3:>10.2f}{cpp_seconds * 1e3:>10.2f}"
-            f"{py_seconds / cpp_seconds:>8.1f}x{py_ns:>10.1f}{cpp_ns:>10.1f}"
-        )
+        if not quiet:
+            print(
+                f"{name:<14}{executed:>9,}{py_seconds * 1e3:>10.2f}{cpp_seconds * 1e3:>10.2f}"
+                f"{py_seconds / cpp_seconds:>8.1f}x{py_ns:>10.1f}{cpp_ns:>10.1f}"
+            )
         rows.append((name, executed, counts, py_seconds, cpp_seconds))
 
-    for name, executed, counts, _, _ in rows:
-        top = counts.most_common(args.top)
-        share = ", ".join(
-            f"{OP_NAMES.get(op, str(op))} {count:,} ({count * 100 / executed:.0f}%)"
-            for op, count in top
-        )
-        print(f"\n{name}: {share}")
+    if not quiet:
+        for name, executed, counts, _, _ in rows:
+            top = counts.most_common(args.top)
+            share = ", ".join(
+                f"{OP_NAMES.get(op, str(op))} {count:,} ({count * 100 / executed:.0f}%)"
+                for op, count in top
+            )
+            print(f"\n{name}: {share}")
+
+    if args.json:
+        text = json.dumps(build_payload(rows, args), indent=2) + "\n"
+        if args.json == "-":
+            sys.stdout.write(text)
+        else:
+            destination = Path(args.json)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(text, encoding="utf-8")
+            if not quiet:
+                print(f"\nwrote {destination}")
 
     return 0
 
