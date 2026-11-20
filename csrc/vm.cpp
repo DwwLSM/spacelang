@@ -324,6 +324,90 @@ VM::VM(pybind11::object program) {
             entry[3].cast<std::int64_t>()
         );
     }
+
+    cache_python_objects();
+}
+
+void VM::cache_python_objects() {
+    const auto vm_py = pybind11::module_::import("spacelang.vm_py");
+    pybind11::object cell_type = vm_py.attr("Cell");
+    cell_type_ = cell_type.release().ptr();
+    pybind11::object closure_type = vm_py.attr("Closure");
+    closure_type_ = closure_type.release().ptr();
+
+    pybind11::module_ errors = pybind11::module_::import("spacelang.errors");
+    pybind11::object space_error_type = errors.attr("SpaceError");
+    space_error_type_ = space_error_type.release().ptr();
+    pybind11::object runtime_error_type = errors.attr("RuntimeError");
+    runtime_error_type_ = runtime_error_type.release().ptr();
+    errors_module_ = errors.release().ptr();
+
+    pybind11::module_ modules = pybind11::module_::import("spacelang.modules");
+    pybind11::object do_import = modules.attr("do_import");
+    do_import_ = do_import.release().ptr();
+
+    pybind11::module_ builtins_module = pybind11::module_::import("builtins");
+    pybind11::object bytes_type = builtins_module.attr("bytes");
+    bytes_type_ = bytes_type.release().ptr();
+    static const char* const builtin_names[] = {
+        "print", "input", "len", "int", "float", "str", "bool", "abs",
+        "range", "type", "open", "getattr", "setattr", "callable", "repr", "isinstance", "set",
+    };
+    builtins_.reserve(std::size(builtin_names));
+    for (const char* builtin_name : builtin_names) {
+        pybind11::object value = builtins_module.attr(builtin_name);
+        builtins_.push_back(value.release().ptr());
+    }
+
+    name_objects_.reserve(names_.size());
+    for (const auto& entry : names_) {
+        PyObject* text = PyUnicode_InternFromString(entry.second.c_str());
+        if (text == nullptr) {
+            throw pybind11::error_already_set();
+        }
+        name_objects_[entry.first] = text;
+    }
+    cell_value_name_ = PyUnicode_InternFromString("value");
+    cell_initialized_name_ = PyUnicode_InternFromString("initialized");
+    if (cell_value_name_ == nullptr || cell_initialized_name_ == nullptr) {
+        throw pybind11::error_already_set();
+    }
+}
+
+VM::~VM() {
+    for (PyObject* object : builtins_) {
+        Py_XDECREF(object);
+    }
+    for (const auto& entry : extra_builtins_) {
+        Py_XDECREF(entry.second);
+    }
+    for (const auto& entry : name_objects_) {
+        Py_XDECREF(entry.second);
+    }
+    Py_XDECREF(cell_value_name_);
+    Py_XDECREF(cell_initialized_name_);
+    Py_XDECREF(cell_type_);
+    Py_XDECREF(closure_type_);
+    Py_XDECREF(bytes_type_);
+    Py_XDECREF(do_import_);
+    Py_XDECREF(errors_module_);
+    Py_XDECREF(space_error_type_);
+    Py_XDECREF(runtime_error_type_);
+}
+
+bool VM::is_cell(const Value& value) const {
+    if (value.tag != Value::Tag::PYOBJ) {
+        return false;
+    }
+    PyObject* object = value.data.obj;
+    if (reinterpret_cast<PyObject*>(Py_TYPE(object)) == cell_type_) {
+        return true;
+    }
+    const int result = PyObject_IsInstance(object, cell_type_);
+    if (result < 0) {
+        throw pybind11::error_already_set();
+    }
+    return result != 0;
 }
 
 Value VM::pop(const char* name) {
@@ -343,45 +427,47 @@ const std::string& VM::name(std::int64_t name_id) const {
     return found->second;
 }
 
+PyObject* VM::name_object(std::int64_t name_id) const {
+    const auto found = name_objects_.find(name_id);
+    if (found == name_objects_.end()) {
+        raise_space_error("UndefinedName", "unknown name id " + std::to_string(name_id));
+    }
+    return found->second;
+}
+
 void VM::raise_space_error(const char* type, const std::string& message, std::int32_t line) const {
-    const auto error_type = pybind11::module_::import("spacelang.errors").attr(type);
+    const auto error_type = pybind11::reinterpret_borrow<pybind11::object>(errors_module_).attr(type);
     const auto exception = error_type(line, current_ip_, message);
     PyErr_SetObject(reinterpret_cast<PyObject*>(Py_TYPE(exception.ptr())), exception.ptr());
     throw pybind11::error_already_set();
 }
 
-pybind11::object VM::builtin(std::int64_t func_id) const {
-    static const char* builtin_names[] = {
-        "print", "input", "len", "int", "float", "str", "bool", "abs",
-        "range", "type", "open", "getattr", "setattr", "callable", "repr", "isinstance", "set",
-    };
-    if (func_id >= 0 && func_id < 17) {
-        return pybind11::module_::import("builtins").attr(builtin_names[func_id]);
+pybind11::object VM::builtin(std::int64_t func_id) {
+    if (func_id >= 0 && func_id < static_cast<std::int64_t>(builtins_.size())) {
+        return pybind11::reinterpret_borrow<pybind11::object>(
+            builtins_[static_cast<std::size_t>(func_id)]
+        );
     }
-    const std::pair<std::int64_t, const char*> module_functions[] = {
-        {1000, "sqrt"}, {1001, "sin"}, {1002, "cos"}, {1003, "tan"},
-        {1004, "floor"}, {1005, "ceil"}, {1006, "fabs"}, {1007, "exp"},
-        {1008, "log"},
+    const auto cached = extra_builtins_.find(func_id);
+    if (cached != extra_builtins_.end()) {
+        return pybind11::reinterpret_borrow<pybind11::object>(cached->second);
+    }
+    const std::pair<std::int64_t, std::pair<const char*, const char*>> table[] = {
+        {1000, {"math", "sqrt"}}, {1001, {"math", "sin"}}, {1002, {"math", "cos"}},
+        {1003, {"math", "tan"}}, {1004, {"math", "floor"}}, {1005, {"math", "ceil"}},
+        {1006, {"math", "fabs"}}, {1007, {"math", "exp"}}, {1008, {"math", "log"}},
+        {2000, {"random", "random"}}, {2001, {"random", "randint"}},
+        {3000, {"os", "system"}}, {4000, {"re", "compile"}}, {5000, {"sys", "exit"}},
     };
-    for (const auto& item : module_functions) {
-        if (item.first == func_id) {
-            return pybind11::module_::import("math").attr(item.second);
+    for (const auto& item : table) {
+        if (item.first != func_id) {
+            continue;
         }
-    }
-    if (func_id == 2000) {
-        return pybind11::module_::import("random").attr("random");
-    }
-    if (func_id == 2001) {
-        return pybind11::module_::import("random").attr("randint");
-    }
-    if (func_id == 3000) {
-        return pybind11::module_::import("os").attr("system");
-    }
-    if (func_id == 4000) {
-        return pybind11::module_::import("re").attr("compile");
-    }
-    if (func_id == 5000) {
-        return pybind11::module_::import("sys").attr("exit");
+        pybind11::object value =
+            pybind11::module_::import(item.second.first).attr(item.second.second);
+        PyObject* raw = value.release().ptr();
+        extra_builtins_[func_id] = raw;
+        return pybind11::reinterpret_borrow<pybind11::object>(raw);
     }
     raise_space_error("UndefinedFunc", "undefined function " + std::to_string(func_id));
 }
@@ -431,14 +517,12 @@ pybind11::object VM::run() {
         const auto& instr = instrs_[static_cast<std::size_t>(ip)];
         const auto dispatch_exception = [&](const pybind11::object& original) {
             auto exception = original;
-            const auto errors = pybind11::module_::import("spacelang.errors");
-            const auto space_error = errors.attr("SpaceError");
-            const int is_space_error = PyObject_IsInstance(exception.ptr(), space_error.ptr());
+            const int is_space_error = PyObject_IsInstance(exception.ptr(), space_error_type_);
             if (is_space_error < 0) {
                 throw pybind11::error_already_set();
             }
             if (!is_space_error) {
-                exception = errors.attr("RuntimeError")(
+                exception = pybind11::reinterpret_borrow<pybind11::object>(runtime_error_type_)(
                     instr.line,
                     ip,
                     pybind11::str(original).cast<std::string>()
@@ -509,11 +593,15 @@ pybind11::object VM::run() {
 #if defined(__GNUC__) || defined(__clang__)
             op_load_global:
 #endif
-                const auto key = pybind11::str(name(instr.args[0]));
-                if (!globals_.contains(key)) {
+                PyObject* key = name_object(instr.args[0]);
+                PyObject* value = PyDict_GetItemWithError(globals_.ptr(), key);
+                if (value == nullptr) {
+                    if (PyErr_Occurred()) {
+                        throw pybind11::error_already_set();
+                    }
                     raise_space_error("UndefinedName", "undefined global " + name(instr.args[0]), instr.line);
                 }
-                stack_.push_back(Value::from_python(globals_[key]));
+                stack_.push_back(Value::from_python(pybind11::handle(value)));
                 ++ip;
                 break;
             }
@@ -521,8 +609,11 @@ pybind11::object VM::run() {
 #if defined(__GNUC__) || defined(__clang__)
             op_store_global:
 #endif
-                const auto key = pybind11::str(name(instr.args[0]));
-                globals_[key] = pop("global value").to_python();
+                auto value = pop("global value");
+                const auto converted = value.to_python();
+                if (PyDict_SetItem(globals_.ptr(), name_object(instr.args[0]), converted.ptr()) < 0) {
+                    throw pybind11::error_already_set();
+                }
                 ++ip;
                 break;
             }
@@ -531,7 +622,13 @@ pybind11::object VM::run() {
             op_get_attr:
 #endif
                 const auto object = pop("object").to_python();
-                stack_.push_back(Value::from_python(object.attr(name(instr.args[0]).c_str())));
+                PyObject* attribute = PyObject_GetAttr(object.ptr(), name_object(instr.args[0]));
+                if (attribute == nullptr) {
+                    throw pybind11::error_already_set();
+                }
+                stack_.push_back(Value::from_python(
+                    pybind11::reinterpret_steal<pybind11::object>(attribute)
+                ));
                 ++ip;
                 break;
             }
@@ -648,8 +745,11 @@ pybind11::object VM::run() {
                 }
                 if (instr.op == CALL_OBJ || instr.op == CALL_OBJ_KW || instr.op == CALL_OBJ_EX) {
                     callable = pop("callable").to_python();
-                    const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
-                    if (pybind11::isinstance(callable, closure_type)) {
+                    const int is_closure = PyObject_IsInstance(callable.ptr(), closure_type_);
+                    if (is_closure < 0) {
+                        throw pybind11::error_already_set();
+                    }
+                    if (is_closure != 0) {
                         const auto func_id_value = callable.attr("func_id").cast<std::int64_t>();
                         const auto function = funcs_.find(func_id_value);
                         if (function == funcs_.end()) {
@@ -805,7 +905,12 @@ pybind11::object VM::run() {
                         break;
                     }
                 } else if (instr.op == CALL_METHOD) {
-                    callable = pop("method object").to_python().attr(name(instr.args[0]).c_str());
+                    const auto receiver = pop("method object").to_python();
+                    PyObject* attribute = PyObject_GetAttr(receiver.ptr(), name_object(instr.args[0]));
+                    if (attribute == nullptr) {
+                        throw pybind11::error_already_set();
+                    }
+                    callable = pybind11::reinterpret_steal<pybind11::object>(attribute);
                 }
                 auto result = callable(*positional, **keywords);
                 stack_.push_back(Value::from_python(result));
@@ -816,8 +921,10 @@ pybind11::object VM::run() {
 #if defined(__GNUC__) || defined(__clang__)
             op_import:
 #endif
-                const auto modules = pybind11::module_::import("spacelang.modules");
-                const auto result = modules.attr("do_import")(instr.args[0], globals_);
+                const auto result = pybind11::reinterpret_borrow<pybind11::object>(do_import_)(
+                    instr.args[0],
+                    globals_
+                );
                 stack_.push_back(Value::from_python(result));
                 ++ip;
                 break;
@@ -859,7 +966,7 @@ pybind11::object VM::run() {
 #endif
                 const auto object = pop("attribute object").to_python();
                 const auto value = pop("attribute value").to_python();
-                if (PyObject_SetAttrString(object.ptr(), name(instr.args[0]).c_str(), value.ptr()) < 0) {
+                if (PyObject_SetAttr(object.ptr(), name_object(instr.args[0]), value.ptr()) < 0) {
                     throw pybind11::error_already_set();
                 }
                 ++ip;
@@ -1166,7 +1273,7 @@ pybind11::object VM::run() {
                         pybind11::list sequence;
                         for (const auto& value : values) {
                             sequence.append(kind == 2 && PyByteArray_Check(value.ptr())
-                                ? pybind11::module_::import("builtins").attr("bytes")(value)
+                                ? pybind11::reinterpret_borrow<pybind11::object>(bytes_type_)(value)
                                 : value);
                         }
                         pybind11::object separator = kind == 1
@@ -1217,17 +1324,25 @@ pybind11::object VM::run() {
                     raise_space_error("UndefinedName", message, instr.line);
                 }
                 const auto& local = frame.locals[static_cast<std::size_t>(slot)];
-                if (instr.op == LOAD_LOCAL) {
-                    const auto value = local.to_python();
-                    const auto cell_type = pybind11::module_::import("spacelang.vm_py").attr("Cell");
-                    if (pybind11::isinstance(value, cell_type)) {
-                        if (!value.attr("initialized").cast<bool>()) {
-                            raise_space_error("UndefinedName", "undefined local slot " + std::to_string(slot), instr.line);
-                        }
-                        stack_.push_back(Value::from_python(value.attr("value")));
-                        ++ip;
-                        break;
+                if (instr.op == LOAD_LOCAL && is_cell(local)) {
+                    PyObject* initialized = PyObject_GetAttr(local.data.obj, cell_initialized_name_);
+                    if (initialized == nullptr) {
+                        throw pybind11::error_already_set();
                     }
+                    const bool is_initialized = initialized == Py_True;
+                    Py_DECREF(initialized);
+                    if (!is_initialized) {
+                        raise_space_error("UndefinedName", "undefined local slot " + std::to_string(slot), instr.line);
+                    }
+                    PyObject* cell_value = PyObject_GetAttr(local.data.obj, cell_value_name_);
+                    if (cell_value == nullptr) {
+                        throw pybind11::error_already_set();
+                    }
+                    stack_.push_back(Value::from_python(
+                        pybind11::reinterpret_steal<pybind11::object>(cell_value)
+                    ));
+                    ++ip;
+                    break;
                 }
                 stack_.push_back(local);
                 ++ip;
@@ -1247,16 +1362,18 @@ pybind11::object VM::run() {
                     frame.initialized.resize(slot + 1, false);
                 }
                 auto value = pop("local value");
-                if (frame.initialized[slot]) {
-                    const auto local = frame.locals[slot].to_python();
-                    const auto cell_type = pybind11::module_::import("spacelang.vm_py").attr("Cell");
-                    if (pybind11::isinstance(local, cell_type)) {
-                        local.attr("value") = value.to_python();
-                        local.attr("initialized") = true;
-                        frame.initialized[slot] = true;
-                        ++ip;
-                        break;
+                if (frame.initialized[slot] && is_cell(frame.locals[slot])) {
+                    const auto converted = value.to_python();
+                    PyObject* cell_object = frame.locals[slot].data.obj;
+                    if (PyObject_SetAttr(cell_object, cell_value_name_, converted.ptr()) < 0) {
+                        throw pybind11::error_already_set();
                     }
+                    if (PyObject_SetAttr(cell_object, cell_initialized_name_, Py_True) < 0) {
+                        throw pybind11::error_already_set();
+                    }
+                    frame.initialized[slot] = true;
+                    ++ip;
+                    break;
                 }
                 frame.locals[slot] = std::move(value);
                 frame.initialized[slot] = true;
@@ -1276,9 +1393,8 @@ pybind11::object VM::run() {
                     frame.locals.resize(slot + 1);
                     frame.initialized.resize(slot + 1, false);
                 }
-                const auto cell_type = pybind11::module_::import("spacelang.vm_py").attr("Cell");
-                if (!frame.initialized[slot]
-                    || !pybind11::isinstance(frame.locals[slot].to_python(), cell_type)) {
+                const auto cell_type = pybind11::reinterpret_borrow<pybind11::object>(cell_type_);
+                if (!frame.initialized[slot] || !is_cell(frame.locals[slot])) {
                     const bool initialized = frame.initialized[slot];
                     const auto value = initialized
                         ? frame.locals[slot].to_python()
@@ -1301,9 +1417,7 @@ pybind11::object VM::run() {
                 if (slot >= frame.locals.size() || !frame.initialized[slot]) {
                     raise_space_error("UndefinedName", "local slot is not a cell", instr.line);
                 }
-                const auto cell = frame.locals[slot].to_python();
-                const auto cell_type = pybind11::module_::import("spacelang.vm_py").attr("Cell");
-                if (!pybind11::isinstance(cell, cell_type)) {
+                if (!is_cell(frame.locals[slot])) {
                     raise_space_error("UndefinedName", "local slot is not a cell", instr.line);
                 }
                 stack_.push_back(frame.locals[slot]);
@@ -1319,10 +1433,13 @@ pybind11::object VM::run() {
                 }
                 const auto index = static_cast<std::size_t>(instr.args[0]);
                 const auto& cells = call_stack_.back().closure_cells;
-                if (index >= static_cast<std::size_t>(cells.size())) {
+                if (!cells || !PyList_Check(cells.ptr())
+                    || index >= static_cast<std::size_t>(PyList_GET_SIZE(cells.ptr()))) {
                     raise_space_error("UndefinedName", "undefined closure cell", instr.line);
                 }
-                stack_.push_back(Value::from_python(cells[index]));
+                stack_.push_back(Value::from_python(
+                    pybind11::handle(PyList_GET_ITEM(cells.ptr(), static_cast<Py_ssize_t>(index)))
+                ));
                 ++ip;
                 break;
             }
@@ -1349,7 +1466,7 @@ pybind11::object VM::run() {
                     for (std::size_t index = cell_count; index > 0; --index) {
                         cells[index - 1] = pop("closure cell").to_python();
                     }
-                    const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
+                    const auto closure_type = pybind11::reinterpret_borrow<pybind11::object>(closure_type_);
                     stack_.push_back(Value::from_python(closure_type(func_id, cells, instr.args[2])));
                     ++ip;
                     break;
@@ -1390,7 +1507,7 @@ pybind11::object VM::run() {
                     for (std::size_t index = cell_count; index > 0; --index) {
                         cells[index - 1] = pop("closure cell").to_python();
                     }
-                    const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
+                    const auto closure_type = pybind11::reinterpret_borrow<pybind11::object>(closure_type_);
                     stack_.push_back(
                         Value::from_python(closure_type(func_id, cells, parameter_names, defaults, positional_count))
                     );
@@ -1455,7 +1572,7 @@ pybind11::object VM::run() {
                     for (std::size_t index = cell_count; index > 0; --index) {
                         cells[index - 1] = pop("closure cell").to_python();
                     }
-                    const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
+                    const auto closure_type = pybind11::reinterpret_borrow<pybind11::object>(closure_type_);
                     stack_.push_back(Value::from_python(
                         closure_type(
                             func_id,
@@ -1494,7 +1611,7 @@ pybind11::object VM::run() {
                 for (std::size_t index = cell_count; index > 0; --index) {
                     cells[index - 1] = pop("closure cell").to_python();
                 }
-                const auto closure_type = pybind11::module_::import("spacelang.vm_py").attr("Closure");
+                const auto closure_type = pybind11::reinterpret_borrow<pybind11::object>(closure_type_);
                 stack_.push_back(Value::from_python(closure_type(func_id, cells, parameter_names, defaults)));
                 ++ip;
                 break;
