@@ -81,7 +81,10 @@ def test_health_reports_state():
         "studio_page",
     }
     assert report["ok"] == all(report["checks"].values())
-    assert report["checks"]["pyodide_js"] is True
+    # studio.html is tracked, so it must be found. The Pyodide bundle and the
+    # packaged SpaceLang modules are build artifacts (see .gitignore) and are
+    # absent on a clean checkout, so their presence is not asserted here.
+    assert report["checks"]["studio_page"] is True
 
 
 def test_health_marks_missing_asset(monkeypatch):
@@ -142,6 +145,17 @@ def test_back_link_only_on_secondary_pages():
         httpd.server_close()
 
 
+STATIC_ROOT = Path(__file__).resolve().parents[1] / "spacelang" / "opt_sp" / "static"
+BUILT_ASSETS = (
+    STATIC_ROOT / "pyodide" / "pyodide.js",
+    STATIC_ROOT / "spacelang_pkg" / "manifest.json",
+)
+
+
+@pytest.mark.skipif(
+    not all(path.is_file() for path in BUILT_ASSETS),
+    reason="OPT_SP static assets are produced by tools/build_static.py",
+)
 def test_static_check_passes():
     tools = Path(__file__).resolve().parents[1] / "tools"
     spec = importlib.util.spec_from_file_location(
