@@ -547,6 +547,54 @@ def test_chat_needs_a_key(stub_llm):
     assert body["error"] == "no_key"
 
 
+def test_chat_compiles_the_assembly_block_into_sp():
+    from spacelang.opt_sp.llm_proxy import with_compiled_sp
+    from spacelang.web_bridge import convert
+
+    listing = "PUSH_INT 1\nPUSH_INT 1\nOP 1\nHALT"
+    reply = with_compiled_sp("1 + 1 is:\n\n```spasm\n" + listing + "\n```\n")
+    encoded = convert(listing, "spasm")["texts"]["sp"]
+    assert "```sp\n" in reply
+    # The whitespace stream has to be the compiler's, character for character.
+    assert encoded.strip("\n") in reply
+
+
+def test_chat_drops_a_guessed_sp_block():
+    from spacelang.opt_sp.llm_proxy import with_compiled_sp
+
+    reply = with_compiled_sp("```sp\n   \n```\nThere is no assembly here.")
+    assert "```sp" not in reply
+    assert "There is no assembly here." in reply
+
+
+def test_chat_keeps_a_reply_whose_listing_does_not_compile():
+    from spacelang.opt_sp.llm_proxy import with_compiled_sp
+
+    reply = "```spasm\nBOGUS\n```"
+    assert with_compiled_sp(reply) == reply
+
+
+def test_chat_end_to_end_adds_the_encoded_program(stub_llm):
+    stub_llm.payload = {
+        "model": "Socrates",
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {"content": "```spasm\nPUSH_INT 1\nPUSH_INT 1\nOP 1\nHALT\n```"},
+        }],
+        "usage": {},
+    }
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _post_chat(url, {"messages": [{"role": "user", "content": "1 + 1?"}]})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 200
+    reply = body["reply"]["content"]
+    assert "```spasm" in reply
+    assert "```sp\n" in reply
+
+
 def test_llm_status_hides_the_key(stub_llm):
     httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
     try:

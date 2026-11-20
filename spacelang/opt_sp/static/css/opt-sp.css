@@ -1118,3 +1118,13 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
   border-radius: 4px;
 }
 .chat-message pre code { padding: 0; background: transparent; border: 0; }
+.chat-whitespace code {
+  white-space: pre;
+  color: #8fb6d8;
+  letter-spacing: .05em;
+}
+.chat-note {
+  margin: -.25rem 0 .35rem;
+  color: var(--muted);
+  font-size: .68rem;
+}

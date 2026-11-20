@@ -427,14 +427,33 @@ MAX_CHAT_MESSAGES = 24
 MAX_CHAT_MESSAGE_CHARS = 4_000
 MAX_CHAT_CHARS = 24_000
 
+_CHAT_INSTRUCTIONS = (
+    "Assembly mnemonics you may use, with their operands: "
+    "PUSH_INT <int>; PUSH_STR <len> <codepoints...>; PUSH_NONE; "
+    "LOAD_GLOBAL <name_id>; STORE_GLOBAL <name_id>; LOAD_LOCAL <slot>; "
+    "STORE_LOCAL <slot>; LOAD_ARG <index>; "
+    "OP <code> (1 = +, 2 = -, 3 = *, 4 = /, 5 = %, 6 = ==, 7 = <, 8 = >, "
+    "9 = !=, 10 = <=, 11 = >=, 16 = //, 17 = **); STACK <code>; "
+    "CALL <func_id> <nargs>; CALL_METHOD <name_id> <nargs>; DEF <func_id> <nargs>; "
+    "GET_ATTR <name_id>; BUILD_LIST <count>; JMP <target>; JZ <target>; JNZ <target>; "
+    "RET; HALT. Use only these; if a program needs one you are unsure of, say so "
+    "instead of inventing it."
+)
+
 _CHAT_COMMON = (
     "SpaceLang is a small language whose source file is .sp: token values encoded "
     "as runs of spaces and newlines. A Python subset is an optional surface syntax "
     "that lowers to .sp, and assembly is a readable view of the same program, not a "
     "separate language. You cannot run the program, read files, or edit anything, so "
-    "never claim to have done so: answer with explanations, or with instructions and "
-    "code the user can paste. Keep replies short, concrete and in plain prose unless "
-    "code is asked for."
+    "never claim to have done so. Answer with explanations and short examples. When "
+    "you show a SpaceLang program, write it as assembly in a ```spasm block: that is "
+    "the readable form of the language. Keep the listing complete (it ends with HALT "
+    "or RET), because the server compiles it to produce the encoded form. The encoded "
+    ".sp form is generated that way and appears under your listing automatically, so "
+    "never write runs of spaces yourself and never say you cannot produce it: say the "
+    "compiler produced it, and point at it if that helps. Show the "
+    "Python subset only when the user asks for it, or as a short note after the "
+    "assembly. " + _CHAT_INSTRUCTIONS + " Keep replies short and concrete."
 )
 
 CHAT_SYSTEM_PROMPTS = {
@@ -494,6 +513,50 @@ CHAT_SYSTEM_PROMPTS = {
 def chat_system_prompt(page: str) -> str:
     """The prompt for a page, falling back to the home page's."""
     return CHAT_SYSTEM_PROMPTS.get(page, CHAT_SYSTEM_PROMPTS["home"])
+
+
+_CHAT_FENCE = re.compile(r"```([A-Za-z0-9_+.-]*)[ \t]*\r?\n(.*?)\r?\n?```", re.DOTALL)
+_SP_BLOCK = re.compile(r"\n*```sp[ \t]*\r?\n.*?\r?\n?```", re.DOTALL)
+_MNEMONIC = re.compile(r"^[A-Z][A-Z_0-9]*(?:\s|$)")
+
+# A fence the model forgot to label still counts as assembly when its first line
+# starts with a mnemonic; anything else (python, diff, output) is left alone.
+_ASSEMBLY_LABELS = ("", "spasm", "asm")
+
+
+def _compile_listing(listing: str) -> str | None:
+    first_line = next((line for line in listing.splitlines() if line.strip()), "")
+    if not _MNEMONIC.match(first_line.strip()):
+        return None
+    try:
+        result = convert(listing, "spasm")
+    except Exception:  # noqa: BLE001 - a bad listing must not lose the answer
+        return None
+    if not result.get("ok"):
+        return None
+    return (result.get("texts") or {}).get("sp")
+
+
+def with_compiled_sp(content: str) -> str:
+    """Replace any hand-written ``.sp`` block with one the compiler produced.
+
+    The encoded form is deterministic; a model writing runs of spaces can only
+    guess. Its assembly blocks are compiled here instead, and a ``.sp`` block it
+    wrote itself is dropped, because a wrong block is worse than none.
+    """
+    content = _SP_BLOCK.sub("", content)
+    pieces: list[str] = []
+    cursor = 0
+    for match in _CHAT_FENCE.finditer(content):
+        pieces.append(content[cursor:match.end()])
+        cursor = match.end()
+        if match.group(1).strip().lower() not in _ASSEMBLY_LABELS:
+            continue
+        encoded = _compile_listing(match.group(2))
+        if encoded:
+            pieces.append("\n\n```sp\n" + encoded.strip("\n") + "\n```")
+    pieces.append(content[cursor:])
+    return "".join(pieces)
 
 
 def normalise_chat_history(messages: Any) -> list[dict[str, str]]:
@@ -571,7 +634,10 @@ def chat_reply(
     return {
         "ok": True,
         "page": page,
-        "reply": {"role": "assistant", "content": answer["content"].strip()},
+        "reply": {
+            "role": "assistant",
+            "content": with_compiled_sp(answer["content"].strip()),
+        },
         "truncated": bool(answer.get("truncated")),
         "model": answer["model"],
         "usage": answer["usage"],

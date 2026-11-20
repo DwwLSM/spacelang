@@ -860,6 +860,12 @@ conversation.
 The system prompt is chosen by the server from the page name (`home`, `editor`,
 `studio`, `visualize`, `docs`, `tutorial`) and never comes from the browser, so
 the assistant answers as that page's helper rather than as a generic chatbot.
+It is asked to answer in assembly (`spasm`), because that is the readable form
+of the language; the encoded `.sp` block under each listing is produced by
+compiling that listing on the server, never written by the model, and a guessed
+`.sp` block is dropped. The panel draws those runs of spaces as `·` so the
+encoded form is visible at all.
+
 Requests share the mirror sync's key, token bucket and single-flight gate, and
 switch the model's hidden reasoning off; an answer cut off by the token limit is
 still shown, with a note next to the input. Like the other model endpoints it is

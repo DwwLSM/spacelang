@@ -17,7 +17,8 @@ const SEND_HISTORY = 12;
 // The model writes light Markdown whatever the prompt says. Rendering it is a
 // kindness to the reader, so a tiny renderer covers fenced code, inline code and
 // bold; everything else stays text, and nothing here builds HTML from a string.
-const FENCE = /```[^\n]*\n?([\s\S]*?)```/g;
+const FENCE = /```([^\n]*)\n?([\s\S]*?)```/g;
+const BLANK = /^[ \t\r\n]*$/;
 const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*)/g;
 
 function appendProse(target, text) {
@@ -40,11 +41,28 @@ function renderRich(target, text) {
   let cursor = 0;
   for (const match of text.matchAll(FENCE)) {
     appendProse(target, text.slice(cursor, match.index));
+    const info = (match[1] || "").trim();
+    let body = match[2].replace(/\n$/, "");
+    // The encoded .sp form is nothing but spaces: drawing it verbatim shows an
+    // empty box, so the runs are made visible.
+    const encoded = info === "sp" || BLANK.test(body);
     const pre = document.createElement("pre");
     const code = document.createElement("code");
-    code.textContent = match[1].replace(/\n$/, "");
+    if (encoded) {
+      pre.className = "chat-whitespace";
+      code.textContent = body.replace(/ /g, "\u00b7");
+    } else {
+      if (info) pre.dataset.language = info;
+      code.textContent = body;
+    }
     pre.append(code);
     target.append(pre);
+    if (encoded) {
+      const note = document.createElement("p");
+      note.className = "chat-note";
+      note.textContent = "Encoded .sp · each space drawn as ·, line breaks kept.";
+      target.append(note);
+    }
     cursor = match.index + match[0].length;
   }
   appendProse(target, text.slice(cursor));
