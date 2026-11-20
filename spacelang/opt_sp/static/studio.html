@@ -19,6 +19,7 @@
           <span id="py-badge" class="pane-badge" data-state="synced">synced</span>
           <span class="pane-actions">
             <button id="py-sync-button" type="button" hidden>Sync with AI</button>
+            <button id="py-run-button" type="button" class="pane-run">Run</button>
           </span>
         </h2>
         <textarea id="py-editor" class="pane-editor" spellcheck="false" wrap="off" aria-label="Python surface syntax"></textarea>
@@ -30,6 +31,7 @@
           <span id="spasm-badge" class="pane-badge" data-state="synced">synced</span>
           <span class="pane-actions">
             <button id="spasm-annotations-toggle" type="button" aria-pressed="true">annotations</button>
+            <button id="spasm-run-button" type="button" class="pane-run">Run</button>
           </span>
         </h2>
         <textarea id="spasm-editor" class="pane-editor" spellcheck="false" wrap="off" aria-label="Assembly source"></textarea>
@@ -42,6 +44,7 @@
           <span class="pane-actions">
             <button id="show-spaces-toggle" type="button" aria-pressed="false">show spaces</button>
             <button id="copy-sp-button" type="button">Copy raw</button>
+            <button id="sp-run-button" type="button" class="pane-run">Run</button>
           </span>
         </h2>
         <textarea id="sp-editor" class="pane-editor pane-editor-sp" spellcheck="false" wrap="off" aria-label="Encoded SpaceLang source"></textarea>
@@ -51,6 +54,7 @@
     <div class="studio-column-splitter" role="separator" aria-orientation="vertical" aria-label="Resize editors and trace panels" tabindex="0"></div>
     <section class="trace-column" aria-label="Trace">
       <pre id="trace-code" class="code-view"></pre>
+      <div class="trace-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize trace code and state panels" tabindex="0"></div>
       <!-- #include partials/state-panels.html -->
     </section>
     <!-- #include partials/step-controls.html -->

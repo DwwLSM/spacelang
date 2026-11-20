@@ -345,6 +345,20 @@ Failure to parse or a stale timestamp silently yields an empty workspace.
 - The trace code view stays hidden until a trace exists; the empty reserved area
   was confusing and is not part of the empty state.
 
+### 8.5 Tracing the selected pane
+
+Each pane header carries its own `Run` button, so the user chooses which
+representation is traced; the pane that produced the current trace keeps an
+accent border. The trace renders into `#trace-code` plus the shared state panels,
+driven by the extracted `TracePanel` (see §9). The boundary between the trace
+code view and the state panels is a third draggable separator, persisted with the
+rest of the layout.
+
+The settings menu also offers `Visualizer (new tab)`: it traces the selected
+pane and opens the classic `visualize.html` with that trace. Because a new tab
+opened with `noopener` does not inherit `sessionStorage`, the payload travels
+through `localStorage["opt-sp-visualize-trace"]` and is consumed on arrival.
+
 ## 9. Conversion graph
 
 ```

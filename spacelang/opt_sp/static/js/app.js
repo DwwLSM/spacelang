@@ -6,6 +6,7 @@ import { checkAssets } from "./health.js";
 import { takeHandout, writeHandout } from "./handout.js";
 import { SyncEngine } from "./sync-engine.js";
 import { initStudioLayout } from "./studio-layout.js";
+import { TracePanel } from "./trace-panel.js";
 
 const page = document.body.dataset.page;
 
@@ -418,7 +419,12 @@ if (page === "editor") {
   });
 } else if (page === "visualize") {
   const root = document.querySelector("#viz-root");
-  const raw = sessionStorage.getItem("opt-sp-trace");
+  let raw = sessionStorage.getItem("opt-sp-trace");
+  if (!raw) {
+    // Handed over by the studio, whose new tab cannot inherit sessionStorage.
+    raw = localStorage.getItem("opt-sp-visualize-trace");
+    if (raw) localStorage.removeItem("opt-sp-visualize-trace");
+  }
   if (!raw) {
     location.href = "./";
   } else {
@@ -574,6 +580,86 @@ if (page === "editor") {
 
   const optSpLink = document.querySelector("#opt-sp-link");
   if (optSpLink) optSpLink.hidden = false;
+
+  const MODES = { py: "python", spasm: "asm", sp: "sp" };
+  const panel = new TracePanel({
+    root: document.querySelector(".studio-layout"),
+    codeRoot: document.querySelector("#trace-code"),
+    trace: [],
+    sourceText: "",
+  });
+  let controlsBound = false;
+  let tracedPane = "py";
+
+  const markTracedPane = (name) => {
+    for (const element of document.querySelectorAll(".editor-pane")) {
+      element.classList.toggle("traced", element.dataset.pane === name);
+    }
+  };
+
+  const tracePane = async (name) => {
+    tracedPane = name;
+    const source = panes[name].value;
+    const traceCode = document.querySelector("#trace-code");
+    if (!source) {
+      traceCode.textContent = "Nothing to run: this pane is empty.";
+      return null;
+    }
+    traceCode.textContent = "Running…";
+    let result;
+    try {
+      const { kernel } = await import("./spacelang-kernel.js");
+      result = await kernel.trace(source, MODES[name]);
+    } catch (error) {
+      result = { ok: false, trace: [], error: error?.message || String(error) };
+    }
+    if (!result.ok || !result.trace?.length) {
+      traceCode.textContent = result.error || "No execution trace was produced.";
+      return null;
+    }
+    markTracedPane(name);
+    panel.setTrace(result.trace, source);
+    panel.render(0);
+    if (!controlsBound) {
+      panel.bindControls();
+      controlsBound = true;
+    }
+    return result;
+  };
+
+  document.querySelector("#py-run-button")?.addEventListener("click", () => void tracePane("py"));
+  document.querySelector("#spasm-run-button")?.addEventListener("click", () => void tracePane("spasm"));
+  document.querySelector("#sp-run-button")?.addEventListener("click", () => void tracePane("sp"));
+
+  const visualizeLink = document.querySelector("#visualize-link");
+  if (visualizeLink) {
+    visualizeLink.hidden = false;
+    visualizeLink.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const source = panes[tracedPane].value;
+      const mode = MODES[tracedPane];
+      let result;
+      try {
+        const { kernel } = await import("./spacelang-kernel.js");
+        result = await kernel.trace(source, mode);
+      } catch (error) {
+        result = { ok: false, trace: [], error: error?.message || String(error) };
+      }
+      // A new tab opened with noopener does not inherit sessionStorage, so the
+      // payload travels through localStorage and is consumed on arrival.
+      localStorage.setItem("opt-sp-visualize-trace", JSON.stringify({
+        trace: result.trace ?? [],
+        error: result.ok ? null : result.error,
+        code: source,
+        mode,
+        filename: tracedPane,
+        projectFilePath: null,
+        localFileHandleId: null,
+        localFileName: null,
+      }));
+      window.open("visualize.html", "_blank", "noopener");
+    });
+  }
 
   copyButton?.addEventListener("click", async () => {
     try {

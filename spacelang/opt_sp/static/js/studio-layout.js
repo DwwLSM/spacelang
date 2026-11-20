@@ -10,8 +10,15 @@ const KEY = "opt-sp-studio-layout";
 const MIN_PANE_PX = 80;
 const MIN_LHS_PX = 300;
 const MIN_RHS_PX = 320;
+const MIN_TRACE_PX = 90;
+const MIN_PANELS_PX = 160;
 const VARS = ["--pane-a", "--pane-b", "--pane-c"];
-const DEFAULTS = { orientation: "vertical", sizes: [1, 1, 1], columns: [0.58, 0.42] };
+const DEFAULTS = {
+  orientation: "vertical",
+  sizes: [1, 1, 1],
+  columns: [0.58, 0.42],
+  trace: [1, 2.2],
+};
 
 function normalise(values, fallback) {
   const source = Array.isArray(values) && values.length === fallback.length ? values : fallback;
@@ -28,6 +35,7 @@ function load() {
         orientation: DEFAULTS.orientation,
         sizes: [...DEFAULTS.sizes],
         columns: [...DEFAULTS.columns],
+        trace: [...DEFAULTS.trace],
       };
     }
     const value = JSON.parse(raw);
@@ -35,12 +43,14 @@ function load() {
       orientation: value?.orientation === "horizontal" ? "horizontal" : "vertical",
       sizes: normalise(value?.sizes, DEFAULTS.sizes),
       columns: normalise(value?.columns, DEFAULTS.columns),
+      trace: normalise(value?.trace, DEFAULTS.trace),
     };
   } catch {
     return {
       orientation: DEFAULTS.orientation,
       sizes: [...DEFAULTS.sizes],
       columns: [...DEFAULTS.columns],
+      trace: [...DEFAULTS.trace],
     };
   }
 }
@@ -52,6 +62,9 @@ export function initStudioLayout({ layout, container, toggleButton }) {
   const columnSplitter = layout?.querySelector(".studio-column-splitter");
   const editorsColumn = layout?.querySelector(".studio-editors");
   const traceColumn = layout?.querySelector(".trace-column");
+  const traceSplitter = layout?.querySelector(".trace-splitter");
+  const traceCode = layout?.querySelector("#trace-code");
+  const tracePanels = layout?.querySelector(".state-panels");
   const state = load();
 
   const apply = () => {
@@ -62,6 +75,8 @@ export function initStudioLayout({ layout, container, toggleButton }) {
     if (layout) {
       layout.style.setProperty("--lhs", `${state.columns[0].toFixed(4)}fr`);
       layout.style.setProperty("--rhs", `${state.columns[1].toFixed(4)}fr`);
+      layout.style.setProperty("--trace-a", `${state.trace[0].toFixed(4)}fr`);
+      layout.style.setProperty("--trace-b", `${state.trace[1].toFixed(4)}fr`);
     }
     for (const splitter of splitters) {
       splitter.setAttribute(
@@ -163,6 +178,39 @@ export function initStudioLayout({ layout, container, toggleButton }) {
     columnSplitter.addEventListener("pointermove", onMove);
     columnSplitter.addEventListener("pointerup", onEnd);
     columnSplitter.addEventListener("pointercancel", onEnd);
+  });
+
+  traceSplitter?.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    if (!traceCode || !tracePanels) return;
+    event.preventDefault();
+    const top = traceCode.getBoundingClientRect().height;
+    const bottom = tracePanels.getBoundingClientRect().height;
+    const pair = top + bottom;
+    if (pair <= MIN_TRACE_PX + MIN_PANELS_PX) return;
+    const start = event.clientY;
+    traceSplitter.classList.add("active");
+    traceSplitter.setPointerCapture(event.pointerId);
+
+    const onMove = (moveEvent) => {
+      const delta = moveEvent.clientY - start;
+      const first = Math.min(
+        Math.max(MIN_TRACE_PX, top + delta),
+        pair - MIN_PANELS_PX,
+      );
+      state.trace = [first / pair, (pair - first) / pair];
+      apply();
+    };
+    const onEnd = () => {
+      traceSplitter.classList.remove("active");
+      traceSplitter.removeEventListener("pointermove", onMove);
+      traceSplitter.removeEventListener("pointerup", onEnd);
+      traceSplitter.removeEventListener("pointercancel", onEnd);
+      persist();
+    };
+    traceSplitter.addEventListener("pointermove", onMove);
+    traceSplitter.addEventListener("pointerup", onEnd);
+    traceSplitter.addEventListener("pointercancel", onEnd);
   });
 
   apply();

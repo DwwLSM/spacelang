@@ -43,6 +43,7 @@ def _check() -> int:
         STATIC / "js" / "spacelang-kernel.js",
         STATIC / "js" / "studio-layout.js",
         STATIC / "js" / "sync-engine.js",
+        STATIC / "js" / "trace-panel.js",
         STATIC / "partials" / "app-header.html",
         STATIC / "partials" / "settings-menu.html",
         STATIC / "partials" / "state-panels.html",
