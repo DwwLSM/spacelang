@@ -10,6 +10,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 from socketserver import TCPServer
 import stat
@@ -37,6 +38,19 @@ _IGNORED_DIRECTORIES = {
     "venv",
 }
 _MAX_SOURCE_FILE_SIZE = 1024 * 1024
+_PAGES = {
+    "/": "index.html",
+    "/index.html": "index.html",
+    "/visualize.html": "visualize.html",
+    "/studio": "studio.html",
+}
+_INCLUDE_RE = re.compile(
+    r"[ \t]*<!-- #include (partials/[A-Za-z0-9_\-/]+\.html) -->[ \t]*\r?\n?"
+)
+_PARTIAL_RE = re.compile(r"partials/[A-Za-z0-9_\-/]+\.html")
+_MAX_INCLUDE_PASSES = 2
+_BACK_LINK = '<a class="back-link" href="./">\u2190 Back to editor</a>'
+_NO_BACK_LINK = frozenset({"index.html"})
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -63,13 +77,8 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             self._send_status()
         elif request.path == "/__opt_sp/health":
             self._send_health()
-        elif request.path in {"/", "/index.html", "/visualize.html"}:
-            page = (
-                "index.html"
-                if request.path in {"/", "/index.html"}
-                else "visualize.html"
-            )
-            self._send_controlled_page(page)
+        elif request.path in _PAGES:
+            self._send_controlled_page(_PAGES[request.path])
         elif request.path == "/api/files":
             self._send_project_files()
         elif request.path == "/api/file":
@@ -78,15 +87,46 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
     def _send_controlled_page(self, filename: str) -> None:
-        page = (Path(static_dir()) / filename).read_bytes()
-        token = (self.stop_token or "").encode("ascii")
-        body = page.replace(b"__OPT_SP_CONTROL_TOKEN__", token)
+        try:
+            body = self._render_page(filename)
+        except OSError:
+            self.send_error(404)
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def _render_page(self, filename: str) -> bytes:
+        """Expand partial includes, then substitute per-page placeholders."""
+        root = Path(static_dir())
+        text = (root / filename).read_text(encoding="utf-8")
+        # Includes first: {{back_link}} lives inside partials/app-header.html.
+        for _ in range(_MAX_INCLUDE_PASSES):
+            text, replaced = _INCLUDE_RE.subn(
+                lambda match: self._read_partial(root, match.group(1)),
+                text,
+            )
+            if not replaced:
+                break
+        back_link = "" if filename in _NO_BACK_LINK else _BACK_LINK
+        text = text.replace("{{back_link}}", back_link)
+        text = text.replace("__OPT_SP_CONTROL_TOKEN__", self.stop_token or "")
+        return text.encode("utf-8")
+
+    @staticmethod
+    def _read_partial(root: Path, relative: str) -> str:
+        if not _PARTIAL_RE.fullmatch(relative):
+            return ""
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            return ""
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
 
     def do_POST(self) -> None:
         request_path = urlsplit(self.path).path

@@ -3,6 +3,7 @@ import { bindAutoCompletion, bindDragMove, bindUndoRedo } from "./editor.js";
 import { downloadSource } from "./download.js";
 import { getFileHandle, storeFileHandle } from "./file-handles.js";
 import { checkAssets } from "./health.js";
+import { takeHandout, writeHandout } from "./handout.js";
 
 const page = document.body.dataset.page;
 
@@ -409,6 +410,10 @@ if (page === "editor") {
       runButton.classList.remove("loading");
     }
   });
+
+  document.querySelector("#studio-link")?.addEventListener("click", () => {
+    writeHandout(sourceModeSelect.value, editor.value);
+  });
 } else if (page === "visualize") {
   const root = document.querySelector("#viz-root");
   const raw = sessionStorage.getItem("opt-sp-trace");
@@ -497,6 +502,12 @@ if (page === "editor") {
       visualizer.bindControls();
       visualizer.liveToggle.addEventListener("click", updateOverwriteButton);
       updateOverwriteButton();
+      document.querySelector("#studio-link")?.addEventListener("click", () => {
+        const source = visualizer.liveMode
+          ? visualizer.liveEditor.value
+          : visualizer.sourceText;
+        writeHandout(visualizer.mode, source);
+      });
       window.addEventListener("keydown", (event) => {
         if (event.target instanceof HTMLElement &&
           event.target.closest("input, textarea, select, [contenteditable='true']")) return;
@@ -504,6 +515,18 @@ if (page === "editor") {
         if (event.key === "ArrowRight") visualizer.render(visualizer.stepIndex + 1);
       });
     }
+  }
+} else if (page === "studio") {
+  const paneByMode = { python: "py", asm: "spasm", sp: "sp" };
+  const panes = {
+    py: document.querySelector("#py-editor"),
+    spasm: document.querySelector("#spasm-editor"),
+    sp: document.querySelector("#sp-editor"),
+  };
+  const handoff = takeHandout();
+  if (handoff) {
+    const pane = panes[paneByMode[handoff.mode]];
+    if (pane) pane.value = handoff.source;
   }
 }
 

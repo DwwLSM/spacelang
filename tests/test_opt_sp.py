@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import time
+import importlib.util
 from importlib import import_module
 from pathlib import Path
 from urllib.error import HTTPError
@@ -99,6 +100,56 @@ def test_health_marks_missing_asset(monkeypatch):
     assert report["ok"] is False
     assert report["checks"]["pyodide_js"] is False
     assert "build_static" in (report["hint"] or "")
+
+
+def test_studio_route_serves_page():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/studio") as response:
+            assert response.status == 200
+            page = response.read().decode("utf-8")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert "studio-layout" in page
+    assert 'id="sp-editor"' in page
+    assert "__OPT_SP_CONTROL_TOKEN__" not in page
+
+
+def test_pages_have_no_unresolved_includes():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        for path in ("/", "/visualize.html", "/studio"):
+            with urlopen(f"{url}{path}") as response:
+                page = response.read().decode("utf-8")
+            assert "<!-- #include" not in page, path
+            assert "{{back_link}}" not in page, path
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_back_link_only_on_secondary_pages():
+    httpd, url = server(open_browser=False, blocking=False, port=0)
+    try:
+        with urlopen(f"{url}/") as response:
+            assert "back-link" not in response.read().decode("utf-8")
+        for path in ("/visualize.html", "/studio"):
+            with urlopen(f"{url}{path}") as response:
+                assert "back-link" in response.read().decode("utf-8"), path
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_static_check_passes():
+    tools = Path(__file__).resolve().parents[1] / "tools"
+    spec = importlib.util.spec_from_file_location(
+        "_opt_sp_build_static", tools / "build_static.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._check() == 0
 
 
 def test_server_assets_use_paths_relative_to_app():

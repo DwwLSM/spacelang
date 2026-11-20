@@ -9,25 +9,7 @@
   <script type="module" src="js/app.js?v=8"></script>
 </head>
 <body data-page="visualize">
-  <header class="app-header">
-    <h1>OPT_SP — SpaceLang Visual Debugger</h1>
-    <div class="server-controls">
-      <span id="server-status" role="status" aria-live="polite"></span>
-      <a class="back-link" href="./">← Back to editor</a>
-      <div class="settings-menu-wrapper">
-        <button id="settings-button" class="settings-button" type="button" aria-label="Open settings menu" aria-haspopup="menu" aria-expanded="false" title="Settings">
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
-            <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94L14.38 2.8a.49.49 0 0 0-.49-.42h-3.84a.49.49 0 0 0-.49.42l-.36 2.52c-.58.24-1.12.56-1.62.94l-2.39-.96a.49.49 0 0 0-.61.22L2.66 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.05.31-.08.65-.08.94s.03.63.08.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.31.61.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.52c.04.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.52c.58-.24 1.12-.56 1.62-.94l2.39.96c.24.09.49 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.02-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z" fill="currentColor"/>
-          </svg>
-        </button>
-        <div id="settings-menu" class="settings-menu" role="menu" aria-label="OPT_SP settings" hidden>
-          <div class="settings-menu-heading">Settings</div>
-          <button id="reload-page-button" class="settings-menu-item" type="button" role="menuitem">Reload page</button>
-          <button id="stop-server-button" class="settings-menu-item settings-menu-danger" type="button" role="menuitem" title="Stop OPT_SP (Ctrl+Alt+Q; Cmd+Option+Q on macOS)">Stop server</button>
-        </div>
-      </div>
-    </div>
-  </header>
+  <!-- #include partials/app-header.html -->
   <main id="viz-root" class="viz-layout">
     <section class="code-panel panel">
       <h2 class="code-panel-header">
@@ -43,41 +25,8 @@
       <div id="live-status" class="live-status" role="status" aria-live="polite" hidden></div>
     </section>
     <div class="column-resizer" role="separator" aria-orientation="vertical" aria-label="Resize Program and state panels" aria-valuemin="240" tabindex="0"></div>
-    <section class="state-panels">
-      <details id="call-stack" class="panel" open>
-        <summary>Call Stack</summary>
-        <div class="panel-content"></div>
-      </details>
-      <div class="panel-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize Call Stack and Operand Stack panels" tabindex="0"></div>
-      <details id="operand-stack" class="panel" open>
-        <summary>Operand Stack</summary>
-        <div class="panel-content"></div>
-      </details>
-      <div class="panel-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize Operand Stack and Heap panels" tabindex="0"></div>
-      <details id="heap" class="panel" open>
-        <summary>Heap / Objects</summary>
-        <div class="panel-content"></div>
-      </details>
-      <div class="panel-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize Heap and Printed Output panels" tabindex="0"></div>
-      <details id="output" class="panel" open>
-        <summary>Printed Output</summary>
-        <div class="panel-content"></div>
-      </details>
-    </section>
-    <nav class="step-controls" aria-label="Trace controls">
-      <button type="button" data-step="first" aria-label="First step">⏮</button>
-      <button type="button" data-step="back" aria-label="Previous step">⏪</button>
-      <button type="button" data-step="forward" aria-label="Next step">⏩</button>
-      <button id="autoplay-button" type="button" aria-label="Autoplay" aria-pressed="false">▶</button>
-      <label class="autoplay-speed-control" for="autoplay-speed">
-        <span>Speed</span>
-        <input id="autoplay-speed" type="range" min="50" max="1500" step="50" value="1000" aria-label="Autoplay interval">
-        <output id="autoplay-speed-label" for="autoplay-speed">1 s / step</output>
-      </label>
-      <button type="button" data-step="last" aria-label="Last step">⏭</button>
-      <input id="step-slider" type="range" min="0" max="0" value="0" aria-label="Trace step">
-      <output id="step-label">Step 0 / 0</output>
-    </nav>
+    <!-- #include partials/state-panels.html -->
+    <!-- #include partials/step-controls.html -->
   </main>
 </body>
 </html>
