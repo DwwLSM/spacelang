@@ -8,11 +8,12 @@
  */
 
 export class TracePanel {
-  constructor({ root, codeRoot, trace = [], sourceText = "" }) {
+  constructor({ root, codeRoot, trace = [], sourceText = "", follow = false }) {
     this.root = root;
     this.codeRoot = codeRoot;
     this.trace = trace;
     this.sourceText = sourceText;
+    this.follow = follow;
     this.stepIndex = 0;
     this.autoplayTimer = null;
     this.slider = root.querySelector("#step-slider");
@@ -110,6 +111,27 @@ export class TracePanel {
     }
   }
 
+  setFollow(follow) {
+    this.follow = Boolean(follow);
+  }
+
+  /**
+   * Keep the active line in view without moving the page.
+   *
+   * Uses bounding rects rather than offsetTop so it works no matter which
+   * ancestor happens to be positioned.
+   */
+  _followActiveLine() {
+    if (!this.follow || !this.codeRoot) return;
+    const active = this.codeRoot.querySelector(".code-line.active");
+    if (!active) return;
+    const viewRect = this.codeRoot.getBoundingClientRect();
+    const rect = active.getBoundingClientRect();
+    if (rect.top >= viewRect.top && rect.bottom <= viewRect.bottom) return;
+    const delta = rect.top - viewRect.top - (viewRect.height - rect.height) / 2;
+    this.codeRoot.scrollTop += delta;
+  }
+
   render(stepIndex) {
     if (!this.trace.length) return;
     this.stepIndex = Math.max(0, Math.min(stepIndex, this.trace.length - 1));
@@ -137,6 +159,7 @@ export class TracePanel {
       const banner = this._element("div", "error-banner trace-error", step.error);
       this.root.prepend(banner);
     }
+    this._followActiveLine();
   }
 
   bindControls() {

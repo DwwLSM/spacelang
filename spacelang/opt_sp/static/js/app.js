@@ -591,6 +591,24 @@ if (page === "editor") {
   let controlsBound = false;
   let tracedPane = "py";
 
+  const followToggle = document.querySelector("#trace-follow-toggle");
+  const FOLLOW_KEY = "opt-sp-trace-follow";
+  let follow = localStorage.getItem(FOLLOW_KEY) !== "0";
+  const applyFollow = () => {
+    panel.setFollow(follow);
+    if (!followToggle) return;
+    followToggle.setAttribute("aria-pressed", String(follow));
+    followToggle.title = follow
+      ? "Following the active line: scrolls the code view"
+      : "Not following: the code view stays where you put it";
+  };
+  applyFollow();
+  followToggle?.addEventListener("click", () => {
+    follow = !follow;
+    localStorage.setItem(FOLLOW_KEY, follow ? "1" : "0");
+    applyFollow();
+  });
+
   const markTracedPane = (name) => {
     for (const element of document.querySelectorAll(".editor-pane")) {
       element.classList.toggle("traced", element.dataset.pane === name);

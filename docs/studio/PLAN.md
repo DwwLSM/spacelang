@@ -354,6 +354,11 @@ driven by the extracted `TracePanel` (see §9). The boundary between the trace
 code view and the state panels is a third draggable separator, persisted with the
 rest of the layout.
 
+The trace code view has a header with a `follow` toggle: when pressed, stepping
+keeps the active line centred in view without scrolling the page; when released,
+the view stays where the user put it. The preference is stored in
+`localStorage["opt-sp-trace-follow"]` and applies to the studio only.
+
 The settings menu also offers `Visualizer (new tab)`: it traces the selected
 pane and opens the classic `visualize.html` with that trace. Because a new tab
 opened with `noopener` does not inherit `sessionStorage`, the payload travels
