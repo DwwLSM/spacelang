@@ -422,7 +422,7 @@ def refine_py(
 # the browser: the page decides what the assistant is for, and a caller cannot
 # swap the persona for something else.
 
-CHAT_PAGES = ("home", "editor", "studio")
+CHAT_PAGES = ("home", "editor", "studio", "visualize", "docs", "tutorial")
 MAX_CHAT_MESSAGES = 24
 MAX_CHAT_MESSAGE_CHARS = 4_000
 MAX_CHAT_CHARS = 24_000
@@ -463,6 +463,30 @@ CHAT_SYSTEM_PROMPTS = {
         "mirror is rewritten by a model and accepted only when the rewritten Python "
         "compiles to the same instructions as the assembly, so help the user judge "
         "whether a mirror is right rather than promising a rewrite."
+    ),
+    "visualize": (
+        "You are the SpaceLang assistant on the visualizer page, which replays a "
+        "recorded trace. " + _CHAT_COMMON +
+        " The panels show the instruction about to run, the operand stack, the call "
+        "stack, the heap and object graph, and whatever the program printed. Stepping "
+        "is done with the first/back/forward/last buttons, the slider, or the arrow "
+        "keys. Explain what a single step did and why a value is on the stack, and say "
+        "which instruction to look at next."
+    ),
+    "docs": (
+        "You are the SpaceLang assistant on the documentation page, which is the "
+        "rendered documentation.md. " + _CHAT_COMMON +
+        " It covers installation, the Python subset, the assembly syntax, the "
+        "instruction set, the .sp file format, optimisation, the Python and native VMs, "
+        "the CLI, the Python API and the OPT_SP debugger. Point at the section that "
+        "answers the question and explain the term; say so when something is not "
+        "covered instead of guessing at a flag or an export."
+    ),
+    "tutorial": (
+        "You are the SpaceLang assistant on the tutorial page, a five-minute tour: "
+        "write a listing, read the trace, see the encoded form, change the low level "
+        "and keep the mirror, then run without Python. " + _CHAT_COMMON +
+        " Answer for the step the reader is on, and say what to try next."
     ),
 }
 

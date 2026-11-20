@@ -432,6 +432,33 @@ def test_chat_unknown_page_uses_the_home_prompt(stub_llm):
     assert "home page" in prompt
 
 
+def test_every_page_has_its_own_prompt(stub_llm):
+    httpd, url = server(
+        open_browser=False,
+        blocking=False,
+        port=0,
+        llm=_llm(stub_llm, rate_limit_rpm=1000, rate_limit_burst=10),
+    )
+    prompts = {}
+    try:
+        for page in ("home", "editor", "studio", "visualize", "docs", "tutorial"):
+            status, body = _post_chat(url, {
+                "page": page,
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+            assert status == 200, page
+            assert body["page"] == page
+            prompts[page] = stub_llm.requests[-1]["body"]["messages"][0]["content"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    # Six pages, six different sets of instructions.
+    assert len(set(prompts.values())) == 6
+    assert "documentation" in prompts["docs"].lower()
+    assert "trace" in prompts["visualize"].lower()
+    assert "tutorial" in prompts["tutorial"].lower()
+
+
 def test_chat_keeps_the_transcript_and_its_roles(stub_llm):
     httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
     try:

@@ -50,6 +50,15 @@ function renderRich(target, text) {
   appendProse(target, text.slice(cursor));
 }
 
+const EMPTY_HINTS = {
+  home: "Ask about SpaceLang, the pages, or where to start.",
+  editor: "Ask about the listing, the operator codes, or why it fails.",
+  studio: "Ask about the mirror, or whether it compiles to the same program.",
+  visualize: "Ask what a step did, or why a value is on the stack.",
+  docs: "Ask which section covers something, or to explain a term.",
+  tutorial: "Ask about the step you are on, or what to try next.",
+};
+
 function storageKey(page) {
   return `opt-sp-chat:${page}`;
 }
@@ -129,9 +138,7 @@ export function initChatPanel({ root, page, drawer = false }) {
     if (messages.length === 0) {
       const empty = document.createElement("p");
       empty.className = "chat-empty";
-      empty.textContent = drawer
-        ? "Ask about the program, the trace, or the operator codes."
-        : "Ask about SpaceLang, the pages, or where to start.";
+      empty.textContent = EMPTY_HINTS[page] ?? EMPTY_HINTS.home;
       log.append(empty);
     }
     for (const message of messages) log.append(messageNode(message));
