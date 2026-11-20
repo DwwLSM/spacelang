@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#04050d"/>
+<title>❄ ASCII Christmas — rotating 3D tree</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:#04050d;overflow:hidden}
+  body{font-family:"Cascadia Mono","SF Mono",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace;
+    color:#c9d6ff;user-select:none;-webkit-user-select:none}
+  #bg{position:fixed;inset:0;background:
+    radial-gradient(120% 90% at 50% 18%,#101a3c 0%,#0a1128 42%,#05070f 78%,#020309 100%)}
+  #bg::after{content:"";position:absolute;left:50%;top:74%;width:150vmin;height:64vmin;
+    transform:translate(-50%,-30%);pointer-events:none;
+    background:radial-gradient(50% 50% at 50% 50%,rgba(70,105,205,.17),transparent 70%)}
+  canvas#scene{position:fixed;inset:0;display:block;cursor:grab;touch-action:none}
+  canvas#scene.drag{cursor:grabbing}
+  #vignette{position:fixed;inset:0;pointer-events:none;background:
+    radial-gradient(120% 120% at 50% 46%,transparent 55%,rgba(2,3,10,.55) 88%,rgba(1,2,6,.82) 100%)}
+  #scan{position:fixed;inset:0;pointer-events:none;opacity:.045;mix-blend-mode:overlay;
+    background:repeating-linear-gradient(0deg,#fff 0 1px,transparent 1px 3px)}
+  .hud{position:fixed;z-index:5;pointer-events:none}
+  #title{left:24px;top:20px;line-height:1.35}
+  #title h1{font-size:clamp(12px,1.5vw,18px);font-weight:700;letter-spacing:.42em;color:#e8efff;
+    text-shadow:0 0 18px rgba(140,170,255,.35)}
+  #title h1 .flake{color:#7fd4ff}
+  #title p{margin-top:6px;font-size:clamp(9px,1.02vw,11.5px);letter-spacing:.14em;color:#5f6f9d}
+  #panel{right:16px;top:16px;display:flex;gap:8px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end;max-width:60vw}
+  .btn{font:600 10px/1 inherit;letter-spacing:.18em;color:#8fa2d6;background:rgba(18,26,54,.55);
+    border:1px solid rgba(110,140,220,.28);border-radius:3px;padding:7px 10px;cursor:pointer;
+    text-transform:uppercase;transition:all .15s}
+  .btn:hover{color:#dfe8ff;border-color:rgba(150,180,255,.55)}
+  .btn.on{color:#ffe9b0;border-color:rgba(255,200,90,.45);background:rgba(66,50,18,.4)}
+  #stats{left:24px;bottom:14px;font-size:10px;letter-spacing:.12em;color:#4d5c8a}
+  #hints{right:16px;bottom:14px;font-size:10px;letter-spacing:.12em;color:#4d5c8a;text-align:right}
+  #help{position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;
+    background:rgba(3,5,12,.74);backdrop-filter:blur(3px)}
+  #help[hidden]{display:none}
+  #help .card{background:rgba(13,18,38,.92);border:1px solid rgba(120,150,230,.3);border-radius:6px;
+    padding:26px 34px;max-width:92vw}
+  #help h2{font-size:13px;letter-spacing:.3em;color:#ffe9b0;margin-bottom:14px;text-transform:uppercase}
+  #help ul{list-style:none}
+  #help li{font-size:12px;line-height:2;color:#aebbe6}
+  #help li b{color:#e8efff;display:inline-block;min-width:110px}
+  #help .fine{margin-top:14px;font-size:10px;color:#586a9e;letter-spacing:.06em}
+  @media (max-width:640px){
+    #title{left:14px;top:12px;max-width:52vw}
+    #title h1{font-size:9px;letter-spacing:.16em}
+    #title p,#stats,#hints{display:none}
+    .btn{padding:6px 8px;font-size:9px}
+  }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<canvas id="scene"></canvas>
+<div id="vignette"></div>
+<div id="scan"></div>
+<div class="hud" id="title">
+  <h1><span class="flake">❄</span>&nbsp;A&nbsp;S&nbsp;C&nbsp;I&nbsp;I&nbsp;&nbsp;C&nbsp;H&nbsp;R&nbsp;I&nbsp;S&nbsp;T&nbsp;M&nbsp;A&nbsp;S&nbsp;<span class="flake">❄</span></h1>
+  <p>rotating 3D point-cloud · rasterized to ascii text · drag to orbit · scroll to zoom</p>
+</div>
+<div class="hud" id="panel">
+  <button class="btn on" id="bLights">lights</button>
+  <button class="btn on" id="bSnow">snow</button>
+  <button class="btn on" id="bGlow">glow</button>
+  <button class="btn on" id="bSpin">spin</button>
+  <button class="btn" id="bHelp">?</button>
+</div>
+<div class="hud" id="stats">—</div>
+<div class="hud" id="hints">L lights · S snow · G glow · SPACE spin · H help</div>
+<div id="help" hidden>
+  <div class="card">
+    <h2>controls</h2>
+    <ul>
+      <li><b>drag</b>orbit — yaw &amp; pitch</li>
+      <li><b>wheel / pinch</b>zoom</li>
+      <li><b>L</b>twinkling lights on / off</li>
+      <li><b>S</b>snowfall on / off</li>
+      <li><b>G</b>glow / bloom on / off</li>
+      <li><b>space</b>spin on / off</li>
+      <li><b>H</b>close this help</li>
+    </ul>
+    <p class="fine">pure software 3D — ~11,500 points · perspective projection · z-buffer · Lambert shading ·
+      ray-marched soft shadows · per-character ascii rasterizer · no WebGL</p>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============================================================
+   ASCII CHRISTMAS — a software 3D point-cloud rendered as text
+   ============================================================ */
+const TAU=Math.PI*2;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rnd=mulberry32(1337);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+
+/* ---------- scene dimensions (world units, Y up) ---------- */
+const APEX=34, BASEY=-26, RAD=22.5, GROUND=-31.6;
+function coneR(y){const u=clamp((APEX-y)/(APEX-BASEY),0,1);return Math.max(.5,RAD*Math.pow(u,1.3)+.6)}
+
+/* ---------- kinds ---------- */
+const K_BRANCH=0,K_TRUNK=1,K_ORN=2,K_BULB=3,K_STAR=4,K_PRES=5,K_GROUND=6,K_SNOW=7,K_GAR=8,K_CANE=9;
+
+/* ---------- point store ---------- */
+const PX=[],PY=[],PZ=[],NX=[],NY=[],NZ=[],CR=[],CG=[],CB=[],KIND=[],
+      CHO=[],CHJ=[],PH=[],SP=[],UU=[],CI=[],BIDX=[],LAM=[];
+function add(x,y,z,nx,ny,nz,r,g,b,kind,o){
+  o=o||{};
+  const il=1/Math.hypot(nx,ny,nz);
+  PX.push(x);PY.push(y);PZ.push(z);
+  NX.push(nx*il);NY.push(ny*il);NZ.push(nz*il);
+  CR.push(r);CG.push(g);CB.push(b);
+  KIND.push(kind);
+  CHO.push(o.ch||0);CHJ.push(o.chj===undefined?(rnd()*4-2|0):o.chj);
+  PH.push(o.ph||0);SP.push(o.sp||0);UU.push(o.u||0);CI.push(o.ci||0);BIDX.push(o.bi===undefined?-1:o.bi);
+  LAM.push(0);
+}
+
+/* ---------- palette ---------- */
+const PAL=[[255,214,140],[255,92,102],[255,198,84],[118,255,168],[124,190,255],[255,126,204],[112,240,255],[255,240,178]];
+const ORN=[[226,60,72],[240,186,70],[92,150,238],[235,240,250],[178,104,224],[70,215,150]];
+
+/* ---------- tree : branch tiers ---------- */
+const TIERS=9;
+function needle(x,y,z,u){
+  const nr=Math.hypot(x,z)+1e-4;
+  const jx=rnd()-.5,jy=rnd()-.5,jz=rnd()-.5;
+  const nx=x/nr*.82+jx,ny=.42+jy,nz=z/nr*.82+jz;
+  const gv=rnd();
+  let r=26+gv*30,g=104+gv*52,b=52+gv*34;
+  if(ny>.62&&rnd()<.38){r=150+gv*50;g=178+gv*44;b=214}
+  add(x,y,z,nx,ny,nz,r,g,b,K_BRANCH,{});
+}
+for(let i=0;i<TIERS;i++){
+  const u=.08+.86*i/(TIERS-1);
+  const y=APEX-u*(APEX-BASEY-8);
+  const r0=coneR(y);
+  const nb=Math.round(5+11*u);
+  for(let b2=0;b2<nb;b2++){
+    const ang=(b2+i*.37)/nb*TAU+rnd()*.22;
+    const len=r0*(.90+rnd()*.22);
+    const steps=6+Math.round(4*u);
+    const droop=2.2+3.6*u;
+    const ca=Math.cos(ang),sa=Math.sin(ang);
+    for(let s=0;s<=steps;s++){
+      const tt=s/steps;
+      const bx=ca*len*tt,bz=sa*len*tt;
+      const by=y-tt*tt*droop-s*.10;
+      needle(bx,by,bz,u);
+      const nf=s===0?1:3+Math.round(2*u);
+      for(let f=0;f<nf;f++)
+        needle(bx+(rnd()-.5)*1.55,by+(rnd()-.5)*1.15+.3,bz+(rnd()-.5)*1.55,u);
+    }
+  }
+}
+/* inner body filler */
+for(let i=0;i<2000;i++){
+  const u=.05+Math.pow(rnd(),.85)*.9;
+  const y=APEX-u*(APEX-BASEY-8);
+  const rr=coneR(y)*(.25+.62*rnd());
+  const a=rnd()*TAU;
+  const gv=rnd();
+  add(Math.cos(a)*rr,y+(-1+2*rnd()),Math.sin(a)*rr,
+      Math.cos(a),.25,Math.sin(a),
+      24+gv*26,80+gv*40,42+gv*26,K_BRANCH,{});
+}
+/* trunk */
+for(let i=0;i<150;i++){
+  const y=GROUND+1+rnd()*9.5, a=rnd()*TAU, rr=2.3*(0.9+rnd()*.1);
+  add(Math.cos(a)*rr,y,Math.sin(a)*rr,Math.cos(a),.06,Math.sin(a),88,56,33,K_TRUNK,{});
+}
+/* garlands */
+for(let s=0;s<3;s++){
+  const turns=4.6+s*.5,n=230;
+  for(let j=0;j<=n;j++){
+    const tt=j/n;
+    const y=(APEX-4)-tt*((APEX-4)-(BASEY+4));
+    const r=coneR(y)+1.15+Math.sin(tt*40+s)*.28;
+    const a=tt*turns*TAU+s*2.094+Math.sin(tt*20)*.12;
+    const v=.7+.3*rnd();
+    const nr=Math.hypot(Math.cos(a),Math.sin(a));
+    add(Math.cos(a)*r,y+Math.sin(tt*57)*.5,Math.sin(a)*r,
+        Math.cos(a)/nr,.1,Math.sin(a)/nr,
+        255*v,196*v,110*v,K_GAR,{});
+  }
+}
+/* ornaments */
+for(let i=0;i<36;i++){
+  const u=.14+.80*rnd();
+  const y=APEX-u*(APEX-BASEY-8);
+  const r=coneR(y)+.8;
+  const a=rnd()*TAU;
+  const cx=Math.cos(a)*r,cy=y+.4,cz=Math.sin(a)*r;
+  const rad=1.5+rnd()*.9;
+  const c=ORN[rnd()*ORN.length|0];
+  for(let f=0;f<30;f++){
+    const z2=1-2*(f+.5)/26, rr2=Math.sqrt(1-z2*z2), a2=f*2.39996;
+    add(cx+Math.cos(a2)*rr2*rad,cy+z2*rad,cz+Math.sin(a2)*rr2*rad,
+        Math.cos(a2)*rr2,z2,Math.sin(a2)*rr2,c[0],c[1],c[2],K_ORN,{});
+  }
+}
+/* twinkling bulbs (tree-local lights) */
+const bulbs=[];
+for(let i=0;i<96;i++){
+  const u=.06+.86*rnd();
+  const y=APEX-u*(APEX-BASEY-8);
+  const r=coneR(y)+1.3;
+  const a=rnd()*TAU;
+  const ci=rnd()<.3?0:1+(rnd()*6|0);
+  const steady=rnd()<.12;
+  bulbs.push({x:Math.cos(a)*r,y:y+.3,z:Math.sin(a)*r,ci,u,
+    ph:rnd()*TAU,sp:steady?.4:1.5+rnd()*2.5});
+  add(bulbs[i].x,bulbs[i].y,bulbs[i].z,Math.cos(a),.3,Math.sin(a),
+      PAL[ci][0],PAL[ci][1],PAL[ci][2],K_BULB,{ci,bi:i});
+  add(bulbs[i].x+(rnd()-.5)*.5,bulbs[i].y+(rnd()-.5)*.5,bulbs[i].z+(rnd()-.5)*.5,
+      Math.cos(a),.3,Math.sin(a),PAL[ci][0],PAL[ci][1],PAL[ci][2],K_BULB,{ci,bi:i});
+}
+/* star — 5-point, extruded, outline-traced so the shape reads in ascii */
+{
+  const scx=0,scy=APEX+3.4,scz=0,RO=7.5,RI=3.2,TH=1.4;
+  const poly=[];
+  for(let i=0;i<10;i++){const a=Math.PI/2+i*TAU/10,r=i%2?RI:RO;
+    poly.push([Math.cos(a)*r,Math.sin(a)*r])}
+  for(let i=0;i<10;i++){
+    const A=poly[i],B=poly[(i+1)%10];
+    const len=Math.hypot(B[0]-A[0],B[1]-A[1]);
+    const n=Math.max(2,Math.round(len*2.6));
+    for(let j=0;j<=n;j++){
+      const tt=j/n;
+      const x=A[0]+(B[0]-A[0])*tt,y=A[1]+(B[1]-A[1])*tt;
+      const z=(rnd()-.5)*TH;
+      const dx=x,dy=y,dz=z,il=1/Math.hypot(dx,dy,dz);
+      add(scx+x,scy+y,scz+z,dx*il,dy*il,dz*il,255,236,168,K_STAR,{chj:0});
+    }
+  }
+  let placed=0,guard=0;
+  while(placed<42&&guard++<2000){
+    const x=(rnd()*2-1)*RO,y=(rnd()*2-1)*RO;
+    let inside=false;
+    for(let i=0,j=9;i<10;j=i++){
+      if((poly[i][1]>y)!==(poly[j][1]>y)&&
+         x<(poly[j][0]-poly[i][0])*(y-poly[i][1])/(poly[j][1]-poly[i][1])+poly[i][0])inside=!inside;
+    }
+    if(!inside)continue;
+    placed++;
+    const z=(rnd()-.5)*TH;
+    const dx=x,dy=y,dz=z,il=1/Math.hypot(dx,dy,dz);
+    add(scx+x,scy+y,scz+z,dx*il,dy*il,dz*il,196,172,116,K_STAR,{chj:0});
+  }
+}
+/* ---------- presents ---------- */
+const RIBG=[250,200,100],RIBI=[210,235,255];
+function present(cx,cz,w,h,d,yaw,face,rib,y0){
+  y0=y0===undefined?GROUND:y0;
+  const ca=Math.cos(yaw),sa=Math.sin(yaw);
+  const hw=w/2,hd=d/2,y1=y0+h;
+  function rot(x,z){return[cx+x*ca-z*sa,cz+x*sa+z*ca]}
+  function rotN(x,z){return[x*ca-z*sa,x*sa+z*ca]}
+  function put(x,y,z,nx,ny,nz,alr,alg,alb,ao){
+    const p=rot(x,z),n=rotN(nx,nz);
+    add(p[0],y,p[1],n[0],ny,n[1],alr*ao,alg*ao,alb*ao,K_PRES,{});
+  }
+  const step=1.0;
+  const snowTop=Math.random()<.4;
+  /* four side faces */
+  const sides=[[hd,0,0,1],[ -hd,0,0,-1]];  /* z faces */
+  for(let s=0;s<2;s++){
+    const zf=(s? -hd:hd),nz=(s? -1:1);
+    for(let xx=-hw;xx<=hw;xx+=step)for(let yy=y0;yy<=y1;yy+=step)
+      put(xx,yy,zf,0,0,nz,face[0],face[1],face[2],.85+.15*(yy-y0)/h);
+  }
+  for(let s=0;s<2;s++){
+    const xf=(s? -hw:hw),nx=(s? -1:1);
+    for(let zz=-hd;zz<=hd;zz+=step)for(let yy=y0;yy<=y1;yy+=step)
+      put(xf,yy,zz,nx,0,0,face[0],face[1],face[2],.85+.15*(yy-y0)/h);
+  }
+  /* top */
+  for(let xx=-hw;xx<=hw;xx+=step)for(let zz=-hd;zz<=hd;zz+=step){
+    const p=rot(xx,zz);
+    const snowy=snowTop&&rnd()<.5;
+    const c=snowy?[225,233,252]:face;
+    add(p[0],y1+.02,p[1],0,1,0,c[0],c[1],c[2],K_PRES,{});
+  }
+  /* ribbon — two crossing strips on top + down the sides */
+  const rc=rib?RIBG:RIBI;
+  const rw=.62;
+  for(let zz=-hd;zz<=hd;zz+=step*.8)for(let xx=-rw;xx<=rw;xx+=step*.8)
+    put(xx,y1+.10,zz,0,1,0,rc[0],rc[1],rc[2],1);
+  for(let xx=-hw;xx<=hw;xx+=step*.8)for(let zz=-rw;zz<=rw;zz+=step*.8){
+    const p=rot(xx,zz);
+    add(p[0],y1+.08,p[1],0,1,0,rc[0],rc[1],rc[2],K_PRES,{});
+  }
+  for(let yy=y0;yy<=y1;yy+=step*.9)for(let s=0;s<2;s++){
+    const zf=s?-hd:hd;put(0,yy,zf,0,0,1,rc[0],rc[1],rc[2],.9);
+    const xf=s?-hw:hw;put(xf,yy,0,1,0,0,rc[0],rc[1],rc[2],.9);
+  }
+  /* bow — two loops + knot + tails */
+  for(let e=0;e<2;e++)for(let j=0;j<14;j++){
+    const a=j/14*TAU,lx=Math.cos(a)*1.9,ly=Math.sin(a)*1.15;
+    const bx=e?lx:0,bz=e?0:lx,by=ly*.9+.4;
+    const p=rot(bx,bz);
+    add(p[0],y1+.45+by,p[1],0,1,0,Math.min(255,rc[0]*1.25),Math.min(255,rc[1]*1.25),Math.min(255,rc[2]*1.25),K_PRES,{});
+  }
+  for(let j=0;j<4;j++){
+    const p=rot((rnd()-.5)*.7,(rnd()-.5)*.7);
+    add(p[0],y1+.5,p[1],0,1,0,rc[0],rc[1],rc[2],K_PRES,{});
+  }
+}
+const PDEF=[
+  [15,20,8.5,6,7,.5,0,1],[-60,22,7,5,7,.9,1,0],[105,21,9,7,8,.2,3,1],
+  [150,22,6.5,5,6.5,.7,5,1],[195,20,8,6.5,7,.15,2,0],[240,23,10,7.5,9,1.05,0,0],
+  [285,21,6,4.5,6,.4,4,1],[325,22,7.5,6,7.5,.8,5,1]
+];
+const pTops=[];
+for(const pd of PDEF){
+  const a=pd[0]*Math.PI/180,dist=pd[1];
+  present(Math.cos(a)*dist,Math.sin(a)*dist,pd[2],pd[3],pd[4],pd[5],ORN[pd[6]],pd[7]);
+  pTops.push([Math.cos(a)*dist,Math.sin(a)*dist,pd[3]]);
+}
+/* two small stacked boxes */
+present(pTops[0][0]+1.2,pTops[0][1]-0.8,4.2,3.2,4.2,.3,ORN[2],0,GROUND+pTops[0][2]);
+present(pTops[2][0]-1.0,pTops[2][1]+1.1,4.6,3.6,4.6,.9,ORN[4],1,GROUND+pTops[2][2]);
+
+/* ---------- candy canes ---------- */
+function cane(bx,bz,dirX,dirZ){
+  const n=Math.hypot(dirX,dirZ);dirX/=n;dirZ/=n;
+  let arc=0,la=0;
+  for(let j=0;j<=26;j++){
+    let x,y,z;
+    const tt=j/26;
+    if(tt<.62){const h=(tt/.62)*5.0;y=h;x=bx;z=bz;arc=h;}
+    else{const a=(tt-.62)/.38*Math.PI;
+      const cx2=bx+dirX*1.9,cz2=bz+dirZ*1.9;
+      x=cx2-dirX*1.9*Math.cos(a);z=cz2-dirZ*1.9*Math.cos(a);y=5.0+1.9*Math.sin(a);
+      arc=5.0+1.9*a;}
+    const red=(arc%1.6)<.8;
+    const c=red?[235,62,74]:[238,242,252];
+    const nr=Math.hypot(x-(bx+dirX*Math.max(0,arc-5)*.5),z-(bz+dirZ*Math.max(0,arc-5)*.5))+1e-4;
+    const ox=(rnd()-.5)*.55,oy=(rnd()-.5)*.55;
+    add(x+ox,y+oy,z+(rnd()-.5)*.55,(x-bx)/nr,.2,(z-bz)/nr,c[0],c[1],c[2],K_CANE,{});
+  }
+}
+cane(Math.cos(15*Math.PI/180)*20+3.2,Math.sin(15*Math.PI/180)*20+1.4,1,-.3);
+cane(Math.cos(240*Math.PI/180)*23-2.6,Math.sin(240*Math.PI/180)*23+2.2,-.8,.6);
+
+/* ---------- snowy ground ---------- */
+for(let i=0;i<1900;i++){
+  const rr=58*Math.pow(rnd(),.72),a=rnd()*TAU;
+  const x=Math.cos(a)*rr,z=Math.sin(a)*rr;
+  const y=GROUND+(rnd()-.5)*.8+Math.sin(x*.35)*Math.cos(z*.3)*.5;
+  const spark=rnd()<.09;
+  const v=.62+.2*rnd();
+  const fade=clamp(1.18-rr/52,0,1);
+  const c=spark?[190*fade,204*fade,236*fade]:[132*v*fade,146*v*fade,180*v*fade];
+  add(x,y,z,0,1,0,c[0],c[1],c[2],K_GROUND,{ph:spark?rnd():0,ci:0});
+}
+
+/* ---------- falling snow particles ---------- */
+const snowIdx=[];
+for(let i=0;i<360;i++){
+  snowIdx.push(PX.length);
+  const ci=rnd()<.7?1:(rnd()<.5?4:8); /* '.' ':' '*' */
+  add((rnd()*2-1)*48,-30+rnd()*74,(rnd()*2-1)*48,
+      0,1,0,140,150,178,K_SNOW,{ch:ci,ph:rnd()*TAU});
+}
+
+/* ---------- finalize typed arrays ---------- */
+const N=PX.length;
+const px=Float32Array.from(PX),py=Float32Array.from(PY),pz=Float32Array.from(PZ),
+      nx=Float32Array.from(NX),ny=Float32Array.from(NY),nz=Float32Array.from(NZ),
+      cr=Float32Array.from(CR),cg=Float32Array.from(CG),cb=Float32Array.from(CB),
+      kind=Uint8Array.from(KIND),cho=Uint8Array.from(CHO),chj=Float32Array.from(CHJ),
+      ph=Float32Array.from(PH),sp=Float32Array.from(SP),uu=Float32Array.from(UU),
+      ci=Uint8Array.from(CI),bidx=Int16Array.from(BIDX),lam0=Float32Array.from(LAM);
+/* precompute Lambert for static-world kinds (presents, ground, canes) */
+const Lw={x:-.45,y:.75,z:.5};
+{const il=1/Math.hypot(Lw.x,Lw.y,Lw.z);Lw.x*=il;Lw.y*=il;Lw.z*=il;}
+for(let i=0;i<N;i++){
+  const k=kind[i];
+  if(k===K_PRES||k===K_GROUND||k===K_CANE){
+    let d=nx[i]*Lw.x+ny[i]*Lw.y+nz[i]*Lw.z;if(d<0)d=0;lam0[i]=d;
+  }
+}
+/* warm light pool under the tree, cached per ground point */
+const poolR=new Float32Array(N),poolG=new Float32Array(N),poolB=new Float32Array(N);
+for(let i=0;i<N;i++){
+  if(kind[i]===K_GROUND){
+    const d=Math.hypot(px[i],pz[i]);
+    const w=Math.exp(-(d*d)/(15*15));
+    poolR[i]=255*w*.42;poolG[i]=150*w*.32;poolB[i]=60*w*.22;
+  }
+}
+
+/* ---------- light sources (tree-local): 96 bulbs + the star ---------- */
+const lights=[];
+for(const b of bulbs)
+  lights.push({x:b.x,y:b.y,z:b.z,r:PAL[b.ci][0]/255,g:PAL[b.ci][1]/255,b:PAL[b.ci][2]/255,rad:13,gain:.38});
+lights.push({x:0,y:APEX+2.6,z:0,r:1,g:.93,b:.66,rad:16,gain:.6});
+const LN=lights.length;
+const LWX=new Float32Array(LN),LWY=new Float32Array(LN),LWZ=new Float32Array(LN),TB=new Float32Array(LN);
+const lci=new Uint8Array(LN);
+for(let i=0;i<LN;i++)lci[i]=i<LN-1?bulbs[i].ci:7;
+
+/* ---------- cached bulb-glow per tree point ---------- */
+const gr=new Float32Array(N),gg=new Float32Array(N),gb=new Float32Array(N),dom=new Int16Array(N);
+for(let i=0;i<N;i++){
+  const k=kind[i];
+  if(k===K_PRES||k===K_GROUND||k===K_CANE||k===K_SNOW||k===K_BULB){dom[i]=-1;continue}
+  let sr=0,sg=0,sb=0,best=0,bi=-1;
+  const ox=px[i],oy=py[i],oz=pz[i];
+  for(let l=0;l<LN;l++){
+    const L2=lights[l];
+    const dx=L2.x-ox,dy=L2.y-oy,dz=L2.z-oz;
+    const d2=dx*dx+dy*dy+dz*dz;
+    if(d2>L2.rad*L2.rad)continue;
+    const d=Math.sqrt(d2);
+    const w=(1-d/L2.rad);const w2=w*w;
+    const dl=d>1e-4?1/d:0;
+    let f=(nx[i]*dx+ny[i]*dy+nz[i]*dz)*dl*.55+.45;
+    if(f<0)f=0;
+    const q=w2*f*L2.gain;
+    sr+=L2.r*q*255;sg+=L2.g*q*255;sb+=L2.b*q*255;
+    if(w2>best){best=w2;bi=l}
+  }
+  gr[i]=sr;gg[i]=sg;gb[i]=sb;dom[i]=bi;
+}
+/* ============================================================
+   RENDERER — ascii raster grid, sprites, shadow marcher
+   ============================================================ */
+const cv=document.getElementById('scene');
+const ctx=cv.getContext('2d');
+const FONTFAM='"Cascadia Mono","SF Mono",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace';
+const RAMP=" .':;~=+*xz%#@$&";
+const CHARS=RAMP.split('').concat(['o','O','0']);
+/* cached fill styles (4-bit/channel quantization) + repeated-char strings */
+const FS_CACHE=new Array(4096);
+function fsOf(key){let s=FS_CACHE[key];
+  if(!s){s='rgb('+((key>>8)<<4)+','+(((key>>4)&15)<<4)+','+((key&15)<<4)+')';FS_CACHE[key]=s}
+  return s}
+const REP={};
+function repStr(ch,n){let a=REP[ch];if(!a)a=REP[ch]=[];return a[n]||(a[n]=ch.repeat(n))}
+const PERSP=100;
+let cssW=0,cssH=0,dpr=1,FONT='',cellW=8,cellH=10,cols=1,rows=1,CX=0,CY=0,UNIT=10,glowScale=1;
+let depth,cellR,cellG,cellB,cellCh,litB,sprB,bgC;
+
+/* glow sprites */
+const sprImg=[];
+for(let i=0;i<PAL.length;i++){
+  const c=document.createElement('canvas');c.width=c.height=128;
+  const g2=c.getContext('2d');
+  const gr2=g2.createRadialGradient(64,64,2,64,64,62);
+  const p=PAL[i];
+  gr2.addColorStop(0,'rgba(255,255,255,.95)');
+  gr2.addColorStop(.22,`rgba(${p[0]},${p[1]},${p[2]},.62)`);
+  gr2.addColorStop(.55,`rgba(${p[0]},${p[1]},${p[2]},.18)`);
+  gr2.addColorStop(1,'rgba(0,0,0,0)');
+  g2.fillStyle=gr2;g2.fillRect(0,0,128,128);
+  sprImg.push(c);
+}
+/* star sprite — brighter core */
+{
+  const c=document.createElement('canvas');c.width=c.height=128;
+  const g2=c.getContext('2d');
+  const gr2=g2.createRadialGradient(64,64,2,64,64,62);
+  gr2.addColorStop(0,'rgba(255,255,240,1)');
+  gr2.addColorStop(.3,'rgba(255,238,170,.7)');
+  gr2.addColorStop(.65,'rgba(255,210,110,.16)');
+  gr2.addColorStop(1,'rgba(0,0,0,0)');
+  g2.fillStyle=gr2;g2.fillRect(0,0,128,128);
+  sprImg.push(c);
+}
+
+/* static opaque backdrop: gradient + horizon glow + starfield
+   (blitted once per frame, so no clearRect is needed) */
+function buildBg(){
+  bgC=document.createElement('canvas');
+  bgC.width=cssW*dpr;bgC.height=cssH*dpr;
+  const g2=bgC.getContext('2d');g2.scale(dpr,dpr);
+  const gr2=g2.createRadialGradient(cssW*.5,cssH*.18,0,cssW*.5,cssH*.18,cssH*1.15);
+  gr2.addColorStop(0,'#101a3c');gr2.addColorStop(.42,'#0a1128');
+  gr2.addColorStop(.78,'#05070f');gr2.addColorStop(1,'#020309');
+  g2.fillStyle=gr2;g2.fillRect(0,0,cssW,cssH);
+  const hg=g2.createRadialGradient(cssW*.5,cssH*.74,0,cssW*.5,cssH*.74,cssW*.55);
+  hg.addColorStop(0,'rgba(70,105,205,.17)');
+  hg.addColorStop(.7,'rgba(70,105,205,0)');
+  g2.fillStyle=hg;g2.fillRect(0,0,cssW,cssH);
+  const sc=['.',"'",'"','+','*'];
+  for(let i=0;i<150;i++){
+    const x=rnd()*cssW,y=rnd()*cssH*.78;
+    const ch=sc[rnd()*5|0];
+    const a=.12+rnd()*.45;
+    const fs=6+rnd()*7;
+    g2.font='bold '+fs+'px '+FONTFAM;
+    g2.fillStyle=`rgba(${170+rnd()*60|0},${185+rnd()*55|0},255,${a})`;
+    g2.fillText(ch,x,y);
+  }
+}
+
+function resize(){
+  cssW=innerWidth;cssH=innerHeight;
+  dpr=Math.min(2,window.devicePixelRatio||1);
+  cv.width=Math.round(cssW*dpr);cv.height=Math.round(cssH*dpr);
+  cv.style.width=cssW+'px';cv.style.height=cssH+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  /* vertical resolution locked at a constant 116 rows (max density);
+     the font size now scales with viewport height instead of width */
+  let F=cssH/116/1.05;
+  if(F<5)F=5; /* readability floor below ~600px-tall windows */
+  FONT='bold '+F+'px '+FONTFAM;
+  ctx.font=FONT;
+  cellW=Math.max(3,ctx.measureText('M').width);
+  cellH=F*1.05;
+  cols=Math.max(2,Math.floor(cssW/cellW));
+  rows=Math.max(2,Math.round(cssH/cellH));
+  CX=cols*cellW/2;CY=rows*cellH*.555;
+  /* fit by height on wide screens, by width on narrow/portrait ones */
+  UNIT=Math.min(rows*cellH*.0147,cssW*.0208);
+  glowScale=clamp(cssH/820,.65,1.25);
+  const n=cols*rows;
+  depth=new Float32Array(n);cellR=new Float32Array(n);cellG=new Float32Array(n);
+  cellB=new Float32Array(n);cellCh=new Uint8Array(n);litB=new Float32Array(n);
+  sprB=new Uint8Array(n);
+  buildBg();
+}
+
+/* ray-marched tree silhouette shadow — model space, static pattern
+   (the tree rotates, so its dappled shadow sweeps the snow automatically) */
+function march(ox,oy,oz,dx,dy,dz,tmin){
+  if(oy>APEX+1.5)return 1;
+  if(dy<=.05)return 1;
+  const maxT=Math.min(80,(APEX+2-oy)/dy);
+  for(let tt=tmin;tt<maxT;tt+=6){
+    const qx=ox+dx*tt,qy=oy+dy*tt,qz=oz+dz*tt;
+    if(qy<BASEY)continue;
+    const rr=qx*qx+qz*qz;
+    if(rr>1600)return 1;
+    const c2=coneR(qy);
+    const rr2=c2*c2;
+    if(rr<rr2*.64)return 0;
+    if(rr>rr2*1.44)continue;
+    const a=Math.atan2(qz,qx);
+    const rs=c2*(1+.15*Math.sin(3*a+qy*.22));
+    if(rr<rs*rs)return 0;
+  }
+  return 1;
+}
+/* ============================================================
+   FRAME LOOP
+   ============================================================ */
+const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let yaw=0.6,pitch=.17,pitchT=.17,camDist=118,camDistT=118,yawVel=0;
+const rotSpd=reduceMotion?.12:.30;
+let t=0,lastT=0,spin=true,lightsOn=true,snowOn=true,glowOn=true;
+let fps=0,fpsN=0,fpsT=0,sprFrame=true;
+let stX=0,stY=0,starSeen=false;
+/* shooting star */
+let ssT=4,ssDur=.85,ssActive=0,ssX0=0,ssY0=0,ssDX=0,ssDY=0;
+
+const statsEl=document.getElementById('stats');
+const FOGR=10,FOGG=13,FOGB=30;
+
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt=Math.min(.05,(now-lastT)/1000||.016);lastT=now;t+=dt;
+  fpsN++;if(now-fpsT>500){fps=Math.round(fpsN*1000/(now-fpsT));fpsT=now;fpsN=0;
+    statsEl.textContent=fps+' fps · '+N.toLocaleString()+' pts · '+cols+'×'+rows+' cells';}
+
+  if(spin)yaw+=rotSpd*dt;
+  yaw+=yawVel*dt;yawVel*=Math.exp(-3.2*dt);
+  pitch+=(pitchT-pitch)*Math.min(1,dt*7);
+  camDist+=(camDistT-camDist)*Math.min(1,dt*6);
+  const pC=Math.cos(pitch+Math.sin(t*.21)*.012),pS=Math.sin(pitch+Math.sin(t*.21)*.012);
+  const cY=Math.cos(yaw),sY=Math.sin(yaw);
+
+  /* model-space light dirs (key + two jittered for soft shadows) */
+  const Lmx=Lw.x*cY+Lw.z*sY,Lmy=Lw.y,Lmz=-Lw.x*sY+Lw.z*cY;
+  const cj=Math.cos(.07),sj=Math.sin(.07);
+  const L1x=Lmx*cj-Lmz*sj,L1z=Lmx*sj+Lmz*cj;
+  const L2x=Lmx*cj+Lmz*sj,L2z=-Lmx*sj+Lmz*cj;
+
+  /* twinkle + world-space bulb positions */
+  for(let i=0;i<LN;i++){
+    const L2=lights[i];
+    LWX[i]=L2.x*cY+L2.z*sY;LWY[i]=L2.y;LWZ[i]=-L2.x*sY+L2.z*cY;
+    if(!lightsOn){TB[i]=.08;continue}
+    const u=i<LN-1?bulbs[i].u:1,s=i<LN-1?bulbs[i].sp:2.3,p=i<LN-1?bulbs[i].ph:0;
+    TB[i]=clamp(.55+.5*Math.sin(t*s+p)*(.72+.4*Math.sin(t*1.2-u*6.5)),.12,1.5);
+  }
+
+  /* falling snow */
+  if(snowOn)for(let q=0;q<snowIdx.length;q++){
+    const si=snowIdx[q];
+    py[si]+=-(2.0+ph[si]*2.6)*dt;
+    px[si]+=Math.sin(t*.9+ph[si]*7)*dt*1.6;
+    if(py[si]<GROUND-1){py[si]=42;px[si]=(rnd()*2-1)*48;pz[si]=(rnd()*2-1)*48}
+  }
+
+  depth.fill(1e9);litB.fill(0);cellCh.fill(0);
+  const cam=camDist,unit=UNIT,cxp=CX,cyp=CY;
+  for(let i=0;i<N;i++){
+    const k=kind[i];
+    if(k===K_SNOW&&!snowOn)continue;
+    const x=px[i],y=py[i],z=pz[i];
+    let xw,yw=y,zw;
+    if(k===K_PRES||k===K_GROUND||k===K_CANE){xw=x;zw=z}
+    else{xw=x*cY-z*sY;zw=x*sY+z*cY}
+    const yp=yw*pC+zw*pS,zp=zw*pC-yw*pS;
+    const dep=zp+cam;
+    if(dep<24)continue;
+    const pr=PERSP/dep*unit;
+    const sx=cxp+xw*pr,sy=cyp-yp*pr;
+    const col=sx/cellW|0,row=sy/cellH|0;
+    if(col<0||col>=cols||row<0||row>=rows)continue;
+    const di=row*cols+col;
+    if(dep>=depth[di])continue;
+    depth[di]=dep;
+
+    /* ---- shading ---- */
+    let fr=0,fg=0,fb=0,chi=0,lit=0,spr=255;
+    let fogF=clamp((dep-95)/140,0,1)*.42;
+    if(k===K_BULB){
+      const bi=bidx[i],tb=TB[bi];
+      fr=cr[i]*(.30+1.35*tb);fg=cg[i]*(.30+1.35*tb);fb=cb[i]*(.30+1.35*tb);
+      chi=tb>1.02?18:tb>.78?17:tb>.5?16:7;
+      lit=Math.min(1.5,.2+tb*.8);spr=lci[bi];fogF*=.3;
+    }else if(k===K_STAR){
+      const p=.72+.38*Math.sin(t*2.3)+.12*Math.sin(t*5.7);
+      const b2=.42+.75*p;
+      fr=255*b2;fg=238*b2;fb=170*b2;
+      chi=p>.92?13:14;lit=.14+.10*p;spr=7;fogF=0;
+      stX=sx;stY=sy;starSeen=true;
+    }else if(k===K_SNOW){
+      fr=138;fg=148;fb=180;chi=cho[i];fogF=.5;
+    }else if(k===K_GROUND||k===K_PRES||k===K_CANE){
+      const ox=x*cY+z*sY,oz=-x*sY+z*cY;
+      const sh=(march(ox,y,oz,L1x,Lmy,L1z,2)+march(ox,y,oz,L2x,Lmy,L2z,2))*.5;
+      const kf=k===K_GROUND?.36:.50;
+      const key=lam0[i]*(kf+.62*sh);
+      fr=cr[i]*(.30+.95*key)+poolR[i]*(.85+.15*Math.sin(t*1.3+ph[i]*20));
+      fg=cg[i]*(.34+.95*key)+poolG[i];
+      fb=cb[i]*(.50+.90*key)+poolB[i];
+      if(k===K_GROUND&&ph[i]>0){
+        const s3=.75+.45*Math.sin(t*2.1+ph[i]*TAU);fr*=s3;fg*=s3;fb*=s3;
+      }
+      /* dynamic colored light from the twinkling bulbs */
+      for(let l=0;l<LN;l+=4){
+        const dx=LWX[l]-x;if(dx>15||dx<-15)continue;
+        const dz=LWZ[l]-z;if(dz>15||dz<-15)continue;
+        const dy=LWY[l]-y;
+        const d2=dx*dx+dy*dy+dz*dz;
+        if(d2>225)continue;
+        const d=Math.sqrt(d2),w=1-d/15,w2=w*w,dot=dy>0?dy/d:0;
+        const f=w2*dot*.9*TB[l];
+        fr+=lights[l].r*f*255;fg+=lights[l].g*f*255;fb+=lights[l].b*f*255;
+      }
+    }else{ /* tree assembly: branches, trunk, garlands, ornaments */
+      let lam=nx[i]*Lmx+ny[i]*Lmy+nz[i]*Lmz;if(lam<0)lam=0;
+      let fil=nx[i]*sY+ny[i]*.15+nz[i]*cY;if(fil<0)fil=0;
+      const sh=march(x,y,z,Lmx,Lmy,Lmz,2.5);
+      const ao=.55+.45*Math.min(1,Math.hypot(x,z)/(coneR(y)+.001));
+      const key=1.25*lam*sh*ao+.40*fil*ao;
+      const twk=dom[i]>=0?(.30+.45*TB[dom[i]]):.5;
+      fr=cr[i]*(.38+key)+Math.min(gr[i],170)*twk;
+      fg=cg[i]*(.44+key*.97)+Math.min(gg[i],170)*twk;
+      fb=cb[i]*(.60+key*.88)+Math.min(gb[i],170)*twk;
+    }
+    /* fog */
+    fr+=(FOGR-fr)*fogF;fg+=(FOGG-fg)*fogF;fb+=(FOGB-fb)*fogF;
+    if(fr>255)fr=255;if(fg>255)fg=255;if(fb>255)fb=255;
+
+    /* char by luminance unless overridden */
+    if(!chi){
+      const lum=(.2126*fr+.7152*fg+.0722*fb)/255;
+      let idx=Math.pow(lum<0?0:lum>1?1:lum,.72)*15.999+chj[i];
+      idx|=0;if(idx<1)idx=1;if(idx>15)idx=15;
+      chi=idx;
+    }
+    cellR[di]=fr;cellG[di]=fg;cellB[di]=fb;
+    cellCh[di]=chi;litB[di]=lit;sprB[di]=spr;
+  }
+
+  /* ---- draw ---- */
+  ctx.drawImage(bgC,0,0,cssW,cssH); /* opaque backdrop replaces clearRect */
+  ctx.font=FONT;ctx.textAlign='center';ctx.textBaseline='middle';
+  /* shooting star */
+  ssT-=dt;
+  if(ssT<0&&ssActive<=0){
+    ssActive=ssDur;ssX0=cssW*(.15+rnd()*.6);ssY0=cssH*(.05+rnd()*.22);
+    ssDX=-(300+rnd()*260);ssDY=110+rnd()*110;
+  }
+  if(ssActive>0){
+    ssActive-=dt;
+    const pr=1-ssActive/ssDur;
+    for(let kk=0;kk<7;kk++){
+      const q=pr-kk*.014;if(q<0)break;
+      const a=(1-kk/7)*(ssActive/ssDur)*.85;
+      ctx.fillStyle=`rgba(205,225,255,${a})`;
+      ctx.fillText(kk?'-':'*',ssX0+ssDX*q,ssY0+ssDY*q);
+    }
+    if(ssActive<=0)ssT=7+rnd()*8;
+  }
+  /* characters — adjacent same-char/same-color cells merged into one call */
+  for(let row=0;row<rows;row++){
+    const yo=row*cellH+cellH*.54;
+    const base=row*cols;
+    let runCh=0,runKey=-1,runLen=0,runCol=0;
+    for(let col=0;col<=cols;col++){
+      let ch=0,key=-1;
+      if(col<cols){
+        const di=base+col;ch=cellCh[di];
+        if(ch){
+          const r=cellR[di],g=cellG[di],b=cellB[di];
+          if(ch===1&&r+g+b<85)ch=0;      /* cull near-invisible dim dots */
+          else key=((r>>4)<<8)|((g>>4)<<4)|(b>>4);
+        }
+      }
+      if(ch&&ch===runCh&&key===runKey){runLen++;continue}
+      if(runCh){
+        ctx.fillStyle=fsOf(runKey);
+        ctx.fillText(repStr(CHARS[runCh],runLen),(runCol+runLen*.5)*cellW,yo);
+      }
+      runCh=ch;runKey=key;runLen=1;runCol=col;
+    }
+  }
+  /* glow sprites — bulb halos alternate frames (they pulse slowly), star flare every frame */
+  if(glowOn){
+    ctx.globalCompositeOperation='lighter';
+    sprFrame=!sprFrame;
+    if(sprFrame){
+      for(let di=0;di<litB.length;di++){
+        const pw=litB[di];if(pw<=0)continue;
+        const d=Math.min(64,10+pw*46*glowScale);
+        ctx.globalAlpha=Math.min(.6,.10+.38*pw);
+        ctx.drawImage(sprImg[sprB[di]],(di%cols)*cellW+cellW*.5-d/2,(di/cols|0)*cellH+cellH*.5-d/2,d,d);
+      }
+    }
+    if(starSeen&&glowOn){
+      ctx.globalAlpha=.10;
+      ctx.drawImage(sprImg[7],stX-45*glowScale,stY-45*glowScale,90*glowScale,90*glowScale);
+      ctx.globalAlpha=.10;
+      ctx.drawImage(sprImg[7],stX-130*glowScale,stY-5,260*glowScale,10);
+      ctx.globalAlpha=.05;
+      ctx.drawImage(sprImg[7],stX-5,stY-60*glowScale,10,120*glowScale);
+    }
+    ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  }
+}
+/* ============================================================
+   INPUT + UI
+   ============================================================ */
+function setBtn(id,on){document.getElementById(id).classList.toggle('on',on)}
+function toggle(which){
+  if(which==='lights'){lightsOn=!lightsOn;setBtn('bLights',lightsOn)}
+  else if(which==='snow'){snowOn=!snowOn;setBtn('bSnow',snowOn)}
+  else if(which==='glow'){glowOn=!glowOn;setBtn('bGlow',glowOn)}
+  else if(which==='spin'){spin=!spin;setBtn('bSpin',spin)}
+  else if(which==='help'){document.getElementById('help').hidden=!document.getElementById('help').hidden}
+}
+document.getElementById('bLights').onclick=()=>toggle('lights');
+document.getElementById('bSnow').onclick=()=>toggle('snow');
+document.getElementById('bGlow').onclick=()=>toggle('glow');
+document.getElementById('bSpin').onclick=()=>toggle('spin');
+document.getElementById('bHelp').onclick=()=>toggle('help');
+document.getElementById('help').onclick=()=>toggle('help');
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='l')toggle('lights');
+  else if(k==='s')toggle('snow');
+  else if(k==='g')toggle('glow');
+  else if(k===' '){e.preventDefault();toggle('spin')}
+  else if(k==='h')toggle('help');
+  else if(k==='escape'&&!document.getElementById('help').hidden)toggle('help');
+});
+/* orbit + zoom */
+let dragging=false,lastX=0,lastY=0;
+cv.addEventListener('pointerdown',e=>{
+  dragging=true;cv.setPointerCapture(e.pointerId);cv.classList.add('drag');
+  lastX=e.clientX;lastY=e.clientY;yawVel=0;
+});
+cv.addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-lastX,dy=e.clientY-lastY;
+  lastX=e.clientX;lastY=e.clientY;
+  yaw+=dx*.005;yawVel=dx*.3;
+  pitchT=clamp(pitchT+dy*.004,-.06,.55);
+});
+const endDrag=e=>{dragging=false;cv.classList.remove('drag')};
+cv.addEventListener('pointerup',endDrag);
+cv.addEventListener('pointercancel',endDrag);
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  camDistT=clamp(camDistT*(1+e.deltaY*.0012),75,220);
+},{passive:false});
+
+/* boot */
+addEventListener('resize',resize);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(resize);
+resize();
+requestAnimationFrame(now=>{lastT=now;requestAnimationFrame(frame)});
+</script>
+</body>
+</html>
