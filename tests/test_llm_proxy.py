@@ -595,6 +595,42 @@ def test_chat_end_to_end_adds_the_encoded_program(stub_llm):
     assert "```sp\n" in reply
 
 
+def test_chat_prompt_carries_the_project_documents(stub_llm):
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, _ = _post_chat(url, {
+            "page": "editor",
+            "messages": [{"role": "user", "content": "how do I write 1 + 1?"}],
+        })
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 200
+    system = stub_llm.requests[0]["body"]["messages"][0]["content"]
+    # The reference the assistant was missing is in the request, not a link to it.
+    assert "### documentation.md" in system
+    assert "STORE_GLOBAL" in system
+    assert "authoritative" in system
+
+
+def test_chat_still_works_without_the_documents(monkeypatch, stub_llm):
+    monkeypatch.setattr(
+        "spacelang.opt_sp.llm_proxy.project_documents",
+        lambda: "",
+    )
+    httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
+    try:
+        status, body = _post_chat(url, {"messages": [{"role": "user", "content": "hi"}]})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert status == 200
+    assert body["ok"] is True
+    system = stub_llm.requests[0]["body"]["messages"][0]["content"]
+    assert "### documentation.md" not in system
+    assert "SpaceLang" in system
+
+
 def test_llm_status_hides_the_key(stub_llm):
     httpd, url = server(open_browser=False, blocking=False, port=0, llm=_llm(stub_llm))
     try:

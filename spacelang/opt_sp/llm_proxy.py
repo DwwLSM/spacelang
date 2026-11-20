@@ -444,16 +444,18 @@ _CHAT_COMMON = (
     "SpaceLang is a small language whose source file is .sp: token values encoded "
     "as runs of spaces and newlines. A Python subset is an optional surface syntax "
     "that lowers to .sp, and assembly is a readable view of the same program, not a "
-    "separate language. You cannot run the program, read files, or edit anything, so "
-    "never claim to have done so. Answer with explanations and short examples. When "
-    "you show a SpaceLang program, write it as assembly in a ```spasm block: that is "
-    "the readable form of the language. Keep the listing complete (it ends with HALT "
-    "or RET), because the server compiles it to produce the encoded form. The encoded "
-    ".sp form is generated that way and appears under your listing automatically, so "
-    "never write runs of spaces yourself and never say you cannot produce it: say the "
-    "compiler produced it, and point at it if that helps. Show the "
-    "Python subset only when the user asks for it, or as a short note after the "
-    "assembly. " + _CHAT_INSTRUCTIONS + " Keep replies short and concrete."
+    "separate language. The project's own README and documentation are appended to "
+    "this prompt; treat them as authoritative, quote them when they answer the "
+    "question, and say so when they do not cover it. You cannot run the program, read "
+    "files, or edit anything, so never claim to have done so. Answer with explanations "
+    "and short examples. When you show a SpaceLang program, write it as assembly in a "
+    "```spasm block: that is the readable form of the language. Keep the listing "
+    "complete (it ends with HALT or RET), because the server compiles it to produce "
+    "the encoded form. The encoded .sp form is generated that way and appears under "
+    "your listing automatically, so never write runs of spaces yourself and never say "
+    "you cannot produce it: the compiler produced it. Show the Python subset only when "
+    "the user asks for it, or as a short note "
+    "after the assembly. " + _CHAT_INSTRUCTIONS + " Keep replies short and concrete."
 )
 
 CHAT_SYSTEM_PROMPTS = {
@@ -513,6 +515,66 @@ CHAT_SYSTEM_PROMPTS = {
 def chat_system_prompt(page: str) -> str:
     """The prompt for a page, falling back to the home page's."""
     return CHAT_SYSTEM_PROMPTS.get(page, CHAT_SYSTEM_PROMPTS["home"])
+
+
+# The assistant is only as good as the material it is given: asked for `1 + 1` in
+# assembly it invented `push`/`add`, and asked about the encoded form it guessed
+# at the token table. Both are in the project's own Markdown, so the conversation
+# carries it. Read once per file change, capped so a huge document cannot grow
+# every request without bound.
+PROJECT_DOCUMENTS = ("README.md", "readme.md", "documentation.md")
+MAX_PROJECT_DOC_CHARS = 80_000
+_project_docs_cache: tuple[tuple[tuple[str, int, int], ...], str] | None = None
+
+
+def project_documents() -> str:
+    """README and documentation, or "" when this installation has neither."""
+    global _project_docs_cache
+
+    here = Path(__file__).resolve()
+    roots = (here.parents[2], here.parent, here.parent / "static")
+    found: list[Path] = []
+    seen: set[str] = set()
+    for name in PROJECT_DOCUMENTS:
+        for root in roots:
+            path = root / name
+            if not path.is_file() or str(path) in seen:
+                continue
+            seen.add(str(path))
+            found.append(path)
+            break
+    if not found:
+        return ""
+    try:
+        key = tuple((str(path), path.stat().st_mtime_ns, path.stat().st_size) for path in found)
+    except OSError:
+        return ""
+    if _project_docs_cache is not None and _project_docs_cache[0] == key:
+        return _project_docs_cache[1]
+
+    parts: list[str] = []
+    for path in found:
+        try:
+            parts.append(f"### {path.name}\n\n{path.read_text(encoding='utf-8')}")
+        except (OSError, UnicodeError):
+            continue
+    text = "\n\n".join(parts)
+    if len(text) > MAX_PROJECT_DOC_CHARS:
+        text = text[:MAX_PROJECT_DOC_CHARS] + "\n\n[documentation truncated]"
+    _project_docs_cache = (key, text)
+    return text
+
+
+def chat_prompt_with_documents(page: str) -> str:
+    prompt = chat_system_prompt(page)
+    documents = project_documents()
+    if not documents:
+        return prompt
+    return (
+        prompt
+        + "\n\n## Project README and documentation (authoritative)\n\n"
+        + documents
+    )
 
 
 _CHAT_FENCE = re.compile(r"```([A-Za-z0-9_+.-]*)[ \t]*\r?\n(.*?)\r?\n?```", re.DOTALL)
@@ -623,7 +685,7 @@ def chat_reply(
             config.base_url,
             config.api_key,
             config.model,
-            [{"role": "system", "content": chat_system_prompt(page)}, *history],
+            [{"role": "system", "content": chat_prompt_with_documents(page)}, *history],
             max_tokens=config.max_output_tokens,
             temperature=config.temperature,
             timeout=config.timeout,
