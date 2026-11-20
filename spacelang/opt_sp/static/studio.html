@@ -67,6 +67,22 @@
     <!-- #include partials/step-controls.html -->
   </main>
 
+  <dialog id="carry-dialog" class="app-dialog" aria-labelledby="carry-title">
+    <h2 id="carry-title">Carry to the editor</h2>
+    <p class="app-dialog-hint">
+      The editor will open this as an unsaved buffer. Pick the representation to
+      carry; the pane you were editing is selected by default.
+    </p>
+    <div class="new-file-actions">
+      <button type="button" data-pane="py">Python <span>.py</span></button>
+      <button type="button" data-pane="spasm">Assembly <span>.spasm</span></button>
+      <button type="button" data-pane="sp">Encoded <span>.sp</span></button>
+    </div>
+    <div class="app-dialog-actions">
+      <button id="carry-cancel" type="button">Cancel</button>
+    </div>
+  </dialog>
+
   <dialog id="llm-settings" class="app-dialog" aria-labelledby="llm-settings-title">
     <h2 id="llm-settings-title">LLM settings</h2>
     <label class="llm-field">

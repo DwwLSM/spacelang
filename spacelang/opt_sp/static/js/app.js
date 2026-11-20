@@ -14,6 +14,26 @@ import { createWorkspaceSaver, loadWorkspace } from "./workspace.js";
 
 const page = document.body.dataset.page;
 
+/**
+ * Read a JSON reply, but name the real problem when the body is not JSON.
+ *
+ * A server build that predates an endpoint answers with its HTML error page;
+ * `response.json()` then throws a JSON syntax error that points at the page
+ * prologue instead of at the missing endpoint.
+ */
+async function readJsonResponse(response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      response.status === 404 || response.status === 405
+        ? "The running server does not serve this endpoint. Restart the OPT_SP server."
+        : `The server answered ${response.status} with a page instead of JSON.`,
+    );
+  }
+}
+
 const stopServerButton = document.querySelector("#stop-server-button");
 if (stopServerButton) {
   const controlToken = document.querySelector(
@@ -397,7 +417,7 @@ if (page === "editor") {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: projectFilePath, code: editor.value }),
         });
-        const result = await response.json();
+        const result = await readJsonResponse(response);
         if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
         projectFileStatus.classList.remove("error");
         projectFileStatus.textContent = `Overwrote ${result.path}.`;
@@ -498,7 +518,8 @@ if (page === "editor") {
       : "";
   }
 
-  function startNewFile(mode) {
+  /** Blank buffer: it belongs to no file, so saving it is the New file action. */
+  function startBlankBuffer(mode) {
     sourceModeSelect.value = mode in SAMPLES ? mode : "asm";
     editor.value = SAMPLES[sourceModeSelect.value] ?? "";
     suggestedFilename = "program";
@@ -524,7 +545,7 @@ if (page === "editor") {
   }
 
   for (const button of newFileDialog?.querySelectorAll("button[data-mode]") ?? []) {
-    button.addEventListener("click", () => startNewFile(button.dataset.mode));
+    button.addEventListener("click", () => startBlankBuffer(button.dataset.mode));
   }
   newFileDialog?.querySelector("#new-file-open")?.addEventListener("click", () => {
     newFileDialog.close();
@@ -576,7 +597,7 @@ if (page === "editor") {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: name, code: editor.value }),
       });
-      const result = await response.json();
+      const result = await readJsonResponse(response);
       if (!response.ok) {
         throw new Error(result.message || result.error || `Request failed (${response.status}).`);
       }
@@ -934,18 +955,38 @@ if (page === "editor") {
     toggleButton: document.querySelector("#pane-layout-toggle"),
   });
 
-  // "Back to editor" carries the pane that was being edited, so the editor can
-  // offer to save it as a new file instead of showing an unrelated buffer. An
-  // empty studio carries nothing: the editor keeps its own workspace.
+  // "Back to editor" asks which representation to carry. The pane being edited
+  // is preselected, because that is usually the one the user means; the other
+  // two stay one click away. An empty studio has nothing to carry, so the link
+  // simply navigates and the editor keeps its own workspace.
   const modeByPane = { py: "python", spasm: "asm", sp: "sp" };
+  const carryDialog = document.querySelector("#carry-dialog");
+
+  const paneText = (pane) =>
+    pane === "spasm" ? stripAnnotations(panes[pane].value) : panes[pane].value;
+
+  function carryToEditor(pane) {
+    const text = paneText(pane);
+    if (text.trim()) writeHandout(modeByPane[pane], text, "editor");
+    location.href = "/editor";
+  }
+
   for (const link of document.querySelectorAll(".back-link")) {
-    link.addEventListener("click", () => {
-      const pane = engine.authoritative ?? "py";
-      const text = pane === "spasm" ? stripAnnotations(panes[pane].value) : panes[pane].value;
-      if (!text.trim()) return;
-      writeHandout(modeByPane[pane], text, "editor");
+    link.addEventListener("click", (event) => {
+      const active = engine.authoritative ?? "py";
+      if (!carryDialog || !paneText(active).trim()) return;
+      event.preventDefault();
+      if (typeof carryDialog.showModal === "function") carryDialog.showModal();
+      else carryDialog.setAttribute("open", "");
+      carryDialog.querySelector(`button[data-pane="${active}"]`)?.focus();
     });
   }
+  for (const button of carryDialog?.querySelectorAll("button[data-pane]") ?? []) {
+    button.addEventListener("click", () => carryToEditor(button.dataset.pane));
+  }
+  carryDialog?.querySelector("#carry-cancel")?.addEventListener("click", () => {
+    carryDialog.close();
+  });
 
   // --- AI mirror sync -----------------------------------------------------
   const llmButton = document.querySelector("#llm-settings-button");
@@ -1046,6 +1087,8 @@ if (page === "editor") {
   // Already inside the studio: the header shortcut would open a second one.
   const headerStudioLink = document.querySelector("#studio-link");
   if (headerStudioLink) headerStudioLink.hidden = true;
+  const studioMenuLink = document.querySelector("#studio-menu-link");
+  if (studioMenuLink) studioMenuLink.hidden = true;
 
   const MODES = { py: "python", spasm: "asm", sp: "sp" };
   const panel = new TracePanel({

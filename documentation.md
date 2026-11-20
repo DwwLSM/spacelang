@@ -795,10 +795,11 @@ project folder, and refuses to replace an existing path; the editor then treats
 the result as the loaded file. The server endpoint behind it is
 `POST /api/file/new`, loopback only like the overwrite endpoint.
 
-**Back to editor** in the Studio header carries the pane that was being edited
-back to the editor, so the text moves with you instead of being left behind.
-It arrives as an unsaved buffer: same representation, no file path, and the
-**New file** action to save it.
+**Back to editor** in the Studio header asks which representation to carry — the
+pane that was being edited is preselected — and opens it in the editor, so the
+text moves with you instead of being left behind. It arrives as an unsaved
+buffer: same representation, no file path, and the **New file** action to save
+it. An empty Studio carries nothing and the editor keeps its own workspace.
 
 ### Pages
 

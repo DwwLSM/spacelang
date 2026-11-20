@@ -14,6 +14,11 @@
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute maps to `display: none` in the browser stylesheet, but
+   any author `display` rule beats it: menu items that only belong to one page
+   (.settings-menu-item is display:flex) were showing on every page. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: ui-monospace, "JetBrains Mono", monospace;

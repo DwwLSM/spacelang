@@ -122,6 +122,18 @@ def test_studio_route_serves_page():
     assert "studio-layout" in page
     assert 'id="sp-editor"' in page
     assert "__OPT_SP_CONTROL_TOKEN__" not in page
+    # "Back to editor" asks which representation to carry, instead of guessing.
+    assert 'id="carry-dialog"' in page
+    for pane in ("py", "spasm", "sp"):
+        assert f'data-pane="{pane}"' in page, pane
+    # The menu item belongs to the editor page only; it ships hidden, and the
+    # stylesheet reset makes `hidden` beat `display: flex` on the menu items.
+    assert 'id="new-file-button"' in page
+    assert not [
+        line
+        for line in page.splitlines()
+        if 'id="new-file-button"' in line and "hidden" not in line
+    ]
 
 
 def test_pages_have_no_unresolved_includes():
