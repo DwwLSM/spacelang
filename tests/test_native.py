@@ -137,9 +137,26 @@ def test_compiler_compiles_and_runs_python_source(name: str, tmp_path: Path) -> 
 
 
 @pytest.mark.skipif(not COMPILER.is_file(), reason="compiler.exe is not built")
+def test_compiler_compiles_functions(tmp_path: Path) -> None:
+    """The input language includes functions (needed to compile spc.py)."""
+    local = tmp_path / "add.py"
+    local.write_text("def add(a, b):\n    return a + b\n\nprint(add(2, 3))\n", encoding="utf-8")
+    result = subprocess.run(
+        [str(COMPILER), str(local)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    assert result.stdout.strip() == "5"
+    assert (tmp_path / "add.sp").is_file()
+
+
+@pytest.mark.skipif(not COMPILER.is_file(), reason="compiler.exe is not built")
 def test_compiler_rejects_unsupported_syntax(tmp_path: Path) -> None:
     local = tmp_path / "bad.py"
-    local.write_text("def f():\n    return 1\n", encoding="utf-8")
+    local.write_text("class Fancy:\n    pass\n", encoding="utf-8")
     result = subprocess.run(
         [str(COMPILER), str(local)],
         capture_output=True,
