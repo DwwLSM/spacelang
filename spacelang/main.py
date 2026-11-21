@@ -43,6 +43,36 @@ def _write_program(program: Program, path: Path) -> None:
     path.write_bytes(encoded)
 
 
+_warned_missing_native = False
+
+
+def _warn_missing_native() -> None:
+    global _warned_missing_native
+    if _warned_missing_native:
+        return
+    _warned_missing_native = True
+    print(
+        "spacelang: the native C++ engine is not built; using the Python engine",
+        file=sys.stderr,
+    )
+
+
+def _select_vm(engine: str) -> type:
+    """Return the VM class for ``engine``; ``auto`` prefers the native engine."""
+    if engine == "py":
+        return VM
+    if engine == "cpp":
+        from .vm_cpp import VM as NativeVM
+
+        return NativeVM
+    try:
+        from .vm_cpp import VM as NativeVM
+    except ImportError:
+        _warn_missing_native()
+        return VM
+    return NativeVM
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spacelang")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -63,7 +93,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run_command = commands.add_parser("run", help="run a .sp or .spz program")
     run_command.add_argument("src", type=Path)
-    run_command.add_argument("--engine", choices=("py", "cpp"), default="py")
+    run_command.add_argument(
+        "args",
+        nargs="*",
+        help="extra arguments exposed to the program as the __argv__ global",
+    )
+    run_command.add_argument(
+        "--engine",
+        choices=("auto", "py", "cpp"),
+        default="auto",
+        help="auto uses the native engine when it is built (default)",
+    )
 
     pack_command = commands.add_parser("pack", help="compress a .sp file into .spz")
     pack_command.add_argument("src", type=Path)
@@ -100,12 +140,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "run":
-        if args.engine == "cpp":
-            from .vm_cpp import VM as SelectedVM
-        else:
-            SelectedVM = VM
-        vm = SelectedVM(_load_program(args.src))
+        vm = _select_vm(args.engine)(_load_program(args.src))
         vm.globals_["__file__"] = str(args.src)
+        vm.globals_["__argv__"] = [str(args.src), *args.args]
         vm.run()
         return 0
 

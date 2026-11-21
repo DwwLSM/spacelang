@@ -1,5 +1,17 @@
 # SpaceLang Project Documentation
 
+SpaceLang is a language implementation centered on `.sp` source. `.py` support is
+an optional frontend that lowers `.py` syntax to `.sp`. The toolchain provides:
+
+- A compiler that reads `.sp` source and produces `.sp` or executable artifacts.
+- A bounded optional `.py` frontend.
+- A human-readable assembly syntax.
+- VM/runtime implementations that execute `.sp` artifacts.
+- A peephole optimizer and tools to inspect, encode, compress, and run programs.
+
+`.sp` is the SpaceLang source language. `.py` is an optional surface syntax lowered to `.sp`.
+Supporting `.py` input does not make SpaceLang Python.
+
 > **Audience:** students, instructors, contributors, and anyone evaluating the
 > package. This guide describes the checked-in implementation and current
 > behavior; it is not a promise of full Python compatibility.
@@ -12,7 +24,7 @@
 4. [Compiler and execution pipeline](#compiler-and-execution-pipeline)
 5. [Python-subset reference](#python-subset-reference)
 6. [Assembly language](#assembly-language)
-7. [Intermediate representation](#intermediate-representation)
+7. [Internal compiler representation](#internal-compiler-representation)
 8. [Instruction set reference](#instruction-set-reference)
 9. [SpaceLang file format](#spacelang-file-format)
 10. [Optimization](#optimization)
@@ -34,17 +46,16 @@ SpaceLang is a Python package and experimental language implementation created
 to explore programming-language construction. It provides:
 
 - A compiler for a deliberately limited subset of Python.
-- A compact intermediate representation (IR) and stack-based instruction set.
-- A human-readable assembly syntax.
-- A whitespace-only encoded program format (`.sp`) and gzip container (`.spz`).
-- A Python virtual machine used as a readable reference implementation.
+- A compact instruction model and stack-based instruction set.
+- A `.sp` source representation with whitespace-token serialization; `.spz` is a gzip container.
+- A Python reference VM used to execute `.sp` artifacts.
 - An experimental native C++17 virtual machine exposed through pybind11.
 - A peephole optimizer and tooling to inspect, encode, compress, run, and
   self-copy programs.
 - An optional browser visualizer, benchmark, and introduction animation.
 
 The package metadata names the distribution `spacelanguage`, currently at
-version `0.1.9`, and the import package `spacelang`. The project requires Python
+version `0.2.3`, and the import package `spacelang`. The project requires Python
 3.10 or later. PyPI provides prebuilt wheels for CPython 3.10–3.14 on x64
 Windows, x86-64 and ARM64 Linux, and universal2 macOS (Intel and Apple Silicon).
 Installing one of these wheels does not require a local compiler. Building the
@@ -76,8 +87,7 @@ multiple layers that are often taught separately:
 
 - **A Python reference engine comes first.** The Python VM makes semantics and
   instruction behavior easier to inspect while the C++ implementation evolves.
-- **The bytecode has a readable assembly view.** This makes it possible to
-  discuss compiler output without reading whitespace runs.
+- **The `.sp` representation has a readable assembly view.** Assembly makes instruction structure easier to inspect; it is not a replacement or alternative definition of `.sp` source.
 - **The encoded file uses only spaces and newlines as token delimiters.** It
   demonstrates a custom serialization scheme, not an attempt to execute
   whitespace one character at a time.
@@ -86,6 +96,10 @@ multiple layers that are often taught separately:
 - **The browser debugger uses Pyodide.** The local Python server supplies its
   static page and assets; program tracing is performed by Python running in the
   browser.
+- **`.sp` is source.** The whitespace token format is one representation of `.sp`, not the definition of the language.
+- **The `.py` frontend is optional sugar.** It lowers supported syntax to `.sp` and does not define the language identity.
+- **The Python VM is a readable reference implementation.** It is not the compiler or the language core.
+- **Assembly is a human-readable view.** It is not the `.sp` source language.
 
 ## Quick start
 
@@ -137,8 +151,9 @@ Hello, world!
 ```
 
 `compile-py` optimizes by default and embeds the program name table in the
-output. `disasm` shows the decoded instructions. `run` uses the Python
-reference VM unless `--engine cpp` is specified.
+output. `disasm` shows the decoded instructions. `run` prefers the native
+engine when it is built and falls back to the Python reference VM otherwise;
+`--engine py` and `--engine cpp` force one engine.
 
 ### Compile and execute in Python
 
@@ -196,64 +211,19 @@ demonstrations and experiments.
 
 ## Compiler and execution pipeline
 
-The main data path for Python-subset source is:
-
-```text
-Python source
-    │
-    ▼
-Python ast.parse
-    │
-    ▼
-pyfront.compile_py ─────► Program (IR)
-                               │
-                    optional optimizer
-                               │
-                               ▼
-                     encoder.encode
-                               │
-                               ▼
-                 whitespace-only .sp file
-                               │
-                      lexer.tokenize
-                               │
-                       parser.parse
-                               │
-                     ┌─────────┴──────────┐
-                     ▼                    ▼
-               Python VM             C++ VM
-               (reference)         (experimental)
+```
+                         ┌─────────────────────────────┐
+   .sp source  ─────────►│                             │
+   (language proper)     │        compiler.exe         │────► .sp / executable artifacts
+                         │  native .sp frontend        │
+   .py source  ─lower───►│  optional .py frontend      │
+   (optional sugar)      └─────────────────────────────┘
+                                      │
+                                      ▼
+                            VM / runtime executes .sp
 ```
 
-The assembler offers an alternate input path: assembly text becomes the same
-`Program` representation. The disassembler moves in the reverse direction from
-`Program` to readable instruction text. The `.spz` container wraps encoded
-`.sp` bytes in gzip; it does not change the instruction set.
-
-### Principal source modules
-
-| Module | Responsibility |
-| --- | --- |
-| `spacelang/pyfront.py` | Converts supported Python AST nodes into SpaceLang IR. |
-| `spacelang/ir.py` | Defines the `OP` enumeration, `Instr`, and `Program`. |
-| `spacelang/peephole.py` | Performs constant folding, unreachable-code removal, constant pooling, and optional integer source compression. |
-| `spacelang/asm.py` | Parses assembly mnemonics, operands, labels, and name directives. |
-| `spacelang/disasm.py` | Formats instructions as assembly text. |
-| `spacelang/encoder.py` | Encodes instructions as whitespace-delimited integer tokens. |
-| `spacelang/lexer.py` | Counts spaces before each newline to produce tokens. |
-| `spacelang/parser.py` | Reconstructs instructions and embedded name tables from tokens. |
-| `spacelang/decoder.py` | Convenience wrapper that decodes whitespace source to a `Program`. |
-| `spacelang/vm_py.py` | Reference VM, call frames, runtime values, and execution semantics. |
-| `spacelang/vm_cpp.py` | Python wrapper around the compiled `_spacelang_cpp` module. |
-| `csrc/` | C++ VM, value conversion, IR handling, and pybind11 binding. |
-| `spacelang/vm_trace.py` | Captures per-instruction snapshots for visualization. |
-| `spacelang/web_bridge.py` | Selects assembly, Python-subset, or encoded input and returns trace results. |
-| `spacelang/opt_sp/` | Static browser UI and local HTTP server for OPT_SP. |
-| `spacelang/quine.py` | Generates self-copying Python or SpaceLang files. |
-| `spacelang/compress.py` | Packs and unpacks byte streams and files using gzip. |
-| `spacelang/modules.py`, `builtins_py.py` | Builtins and the fixed module import table. |
-| `spacelang/names.py` | Name-to-ID and ID-to-name table. |
-| `spacelang/errors.py` | Project exception hierarchy with source line and instruction context. |
+`compiler.exe` is a compiler, not a VM or interpreter. `spvm.exe` and `sp_vm` are the VM/runtime implementations that execute `.sp`.
 
 ## Python-subset reference
 
@@ -351,7 +321,7 @@ refer to the program name table. The precise accepted forms and argument
 validation are implemented by `spacelang/asm.py`; use `assemble()` or the CLI
 instead of assuming that Python syntax can be pasted into assembly.
 
-## Intermediate representation
+## Internal compiler representation
 
 The IR is intentionally small:
 
@@ -388,7 +358,7 @@ name and label concepts are resolved before serialization.
 This table describes the instruction IDs in `spacelang/ir.py`. Stack effects
 are described from the perspective of the Python VM. `name_id` refers to an
 entry in the `Program` name table; `target` is an instruction index. For exact
-runtime behavior, particularly for hand-written bytecode, the VM source remains
+runtime behavior, particularly for hand-written `.sp`, the VM source remains
 authoritative.
 
 | ID | Mnemonic | Arguments | Summary |
@@ -631,11 +601,16 @@ The native engine is implemented in `csrc/vm.cpp` and exposed as
 through `CMakeLists.txt` and scikit-build-core. GCC and Clang builds use
 computed-goto dispatch; other compilers use a portable switch dispatcher.
 
-Use the native engine explicitly:
+The native engine is the default when it is built:
 
 ```bash
+spacelang run program.sp          # native engine when available
+spacelang run program.sp --engine py
 spacelang run program.sp --engine cpp
 ```
+
+If the extension is missing, `--engine auto` (the default) prints one warning
+and runs on the Python engine; `--engine cpp` fails instead of falling back.
 
 It is experimental. The Python VM is the reference behavior for cases that
 have not been checked for parity. The differential tests and benchmark compare
@@ -681,8 +656,8 @@ and `log`; `random` includes `random` and `randint`; `os` includes `system`;
 
 **This is not a sandbox.** Programs can call `open`, `input`, `os.system`,
 `sys.exit`, and functions or methods available on Python objects. The native
-VM also interoperates with Python objects. Do not execute untrusted source or
-bytecode. OPT_SP's browser-side execution is for visualization and should not
+VM also interoperates with Python objects. Do not execute untrusted `.sp` source or
+`.py` frontend input. OPT_SP's browser-side execution is for visualization and should not
 be relied on as a security boundary.
 
 ## Command-line reference
@@ -696,7 +671,7 @@ the live argument parser.
 | `spacelang compile-py SRC DST` | Compile supported Python source to `.sp` or `.spz`. |
 | `spacelang asm SRC DST` | Assemble mnemonic source into encoded program output. |
 | `spacelang disasm SRC [-o OUTPUT]` | Disassemble a `.sp` or `.spz` file to stdout or a file. |
-| `spacelang run SRC [--engine py\|cpp]` | Execute a `.sp` or `.spz` program; Python engine is default. |
+| `spacelang run SRC [--engine auto\|py\|cpp]` | Execute a `.sp` or `.spz` program; uses the native engine when built, otherwise the Python engine. |
 | `spacelang pack SRC [DST]` | Gzip a `.sp` file into `.spz`; default destination uses `.spz`. |
 | `spacelang unpack SRC [DST]` | Decompress `.spz`; default destination uses `.sp`. |
 
@@ -711,6 +686,7 @@ Examples:
 spacelang compile-py source.py output.sp
 spacelang compile-py source.py output.sp --no-optimize
 spacelang compile-py source.py output.sp --compress-source
+spacelang run output.sp
 spacelang run output.sp --engine py
 spacelang run output.sp --engine cpp
 spacelang pack output.sp
@@ -803,9 +779,11 @@ on macOS); redo with `Ctrl+Shift+Z` / `Cmd+Shift+Z` or `Ctrl+Y`. Undo and redo
 also work in Live edit.
 
 The editor lists `.py`, `.sp`, and `.spasm` files under the directory where
-the OPT_SP server was started, including files in subfolders. The first file
-in the list is loaded automatically. Hidden files and common environment or
-dependency folders, including generated Pyodide module copies, are excluded.
+the OPT_SP server was started, including files in subfolders. Nothing is
+opened automatically: the page starts empty and asks for a new or existing
+file, so a visit never silently replaces the work you left behind. Hidden
+files and common environment or dependency folders, including generated
+Pyodide module copies, are excluded.
 Project-file access is limited to UTF-8 `.py`, `.sp`, and `.spasm` files up to
 1 MiB beneath that directory. **Download** saves the current editor contents
 to your browser's downloads. **Overwrite** replaces the currently loaded
@@ -815,6 +793,105 @@ API; otherwise, use Download to save an edited copy. In Live edit, Overwrite is
 available while editing a loaded file and writes the live editor contents to
 that source after confirmation. The overwrite action is unavailable for
 examples.
+
+A buffer that belongs to no file — a fresh "Start a file" choice, an example,
+or text carried back from the Studio — has nothing to overwrite, so the button
+reads **New file** and the file picker reads *New Python file*, *New Assembly
+file* or *New Encoded file*. New file asks for a name, writes it under the
+project folder, and refuses to replace an existing path; the editor then treats
+the result as the loaded file. The server endpoint behind it is
+`POST /api/file/new`, loopback only like the overwrite endpoint.
+
+**Back to editor** in the Studio header asks which representation to carry — the
+pane that was being edited is preselected — and opens it in the editor, so the
+text moves with you instead of being left behind. It arrives as an unsaved
+buffer: same representation, no file path, and the **New file** action to save
+it. An empty Studio carries nothing and the editor keeps its own workspace.
+
+### Pages
+
+The server serves one page per task; the home page links all of them.
+
+| Route | Page |
+|---|---|
+| `/` | home page |
+| `/editor` | source editor and visualizer (`/index.html` is an alias) |
+| `/visualize` | trace-only view (`/visualize.html` is an alias) |
+| `/studio` | three-pane workspace |
+| `/docs` | this document, rendered in the browser |
+| `/tutorial` | five-minute walkthrough |
+
+`/docs` is rendered on the server from `documentation.md` at request time:
+headings, lists, fenced code blocks, tables and links become HTML, and the
+table of contents is built from the same pass. Anchors follow GitHub's slug
+rules, so the links written inside the document keep working on both sites,
+and raw HTML in the document is escaped rather than inserted. Editing
+`documentation.md` changes the page on the next request; there is no build
+step. The copy that an installed wheel renders is produced by
+`tools/build_static.py`, described under *Prepare browser assets*.
+
+The header's **Settings** menu is on every page: **Home** (left out on the home
+page itself), **Studio (new tab)**, **LLM settings**, **Reload page** and
+**Stop server**, plus the entries that only make sense where they apply —
+**New file…** in the editor, the pane layout switch and the editor/visualizer
+shortcuts in the studio. The LLM settings dialog is the same one the studio
+uses for the mirror sync, so the endpoint, model and key can be set before any
+editor tab is open; they live in `localStorage` and travel as request headers.
+
+### Home scene
+
+The home page's art column runs an animated ASCII scene instead of a static
+drawing. Two styles are registered: `christmas-tree`, which is the software 3D
+point cloud from `design/ascii-christmas-tree.html` ported to a component, and
+`token-rain`, in which SpaceLang tokens fall onto a skyline of landed
+instructions. The switcher in the corner of the panel remembers the choice in
+`localStorage`.
+
+The factory is `static/js/ascii-scene.js`. It sizes the canvas to its container,
+follows layout changes with a `ResizeObserver`, stops the render loop while the
+tab is hidden or the panel is scrolled out of view, and releases observers,
+listeners and buffers on `destroy()`. A style only projects and shades into the
+shared character grid, which is what keeps the two so different scenes on one
+lifecycle. The home page imports the scene with a dynamic `import()`, so the
+editor and studio pages never download it, and the static tree in `home.html`
+stays in the DOM as the no-script fallback.
+
+### Assistant
+
+Every page carries the assistant: the home page in its right column, the others
+in a drawer that **Assistant** in the header folds open and shut. The
+transcript is per page and lives in `localStorage`: forty messages are kept, the
+last twelve travel with the next request, and **Clear** forgets the
+conversation.
+
+The system prompt is chosen by the server from the page name (`home`, `editor`,
+`studio`, `visualize`, `docs`, `tutorial`) and never comes from the browser, so
+the assistant answers as that page's helper rather than as a generic chatbot.
+`README.md` and `documentation.md` are appended to it — re-read only when they
+change, capped at 80 000 characters — because the answers live there: the
+instruction table, the operator codes and the `.sp` format. That is why a turn
+carries roughly 19 000 prompt tokens even before the conversation. A short
+reminder closes the prompt, after the documents, so a conversation that started
+with a refusal ("I have no instruction table") does not stay anchored to it.
+It is asked to answer in assembly (`spasm`), because that is the readable form
+of the language; the encoded `.sp` block under each listing is produced by
+compiling that listing on the server, never written by the model, and a guessed
+`.sp` block is dropped. The panel draws those runs of spaces as `·` so the
+encoded form is visible at all.
+
+The reverse direction is checked rather than trusted. When the question contains
+an assembly listing and the answer offers Python, the server compiles both and
+appends the verdict: either the two compile to the same instructions, or the
+answer is called a sketch with the reason. Suggested mirrors are often wrong —
+`result = 2 + 3` adds `STORE_GLOBAL`, and a bare `2 + 3` adds `STACK 3` — so a
+listing with no value-consuming instruction has no Python source at all, and the
+Studio's sync would reject every candidate.
+
+Requests share the mirror sync's key, token bucket and single-flight gate, and
+switch the model's hidden reasoning off; an answer cut off by the token limit is
+still shown, with a note next to the input. Like the other model endpoints it is
+loopback only, and the page never sends the encoded `.sp` program because it
+never has it: the transcript is whatever the user typed.
 
 ### Start the server
 
@@ -870,6 +947,68 @@ network.
 Published PyPI wheels include the prepared browser assets, so no asset build
 step is needed after a wheel installation.
 
+### Studio, the multi-pane workspace
+
+`http://127.0.0.1:8000/studio` (or the **Studio (new tab)** item in the settings
+menu) shows one program in three representations at once:
+
+| Pane | Content | Produced by |
+|---|---|---|
+| `py` | Python surface syntax | a person, or the model |
+| `spasm` | assembly text | `disassemble(program)` |
+| `sp` | encoded token stream | `encode(program)` |
+
+Editing a pane re-derives the others after a 250 ms pause. The forward
+direction is deterministic (`py` compiles to a program, which disassembles and
+encodes); there is no rule that turns a program back into Python, so editing
+`spasm` or `sp` marks `py` as `stale` and leaves its text untouched. The
+`annotations` button on the assembly pane hides or restores the
+`; line=N spaces=...` comments; the `follow` button keeps the active line of a
+trace in view; every divider is draggable and remembered, and the settings menu
+switches the panes between stacked and side by side.
+
+Each pane carries its own **Run** button. Tracing happens in the browser and
+fills the shared Call Stack, Operand Stack, Heap and Printed Output panels, so
+the same page works for a `.py` source, an assembly listing and an encoded
+artifact.
+
+#### Rewriting the Python mirror
+
+The `stale` mirror can be rewritten by a model, once you point the studio at an
+OpenAI-compatible endpoint. Configuration is layered, highest first: the **LLM
+settings** dialog (stored in `localStorage`), the command line, the environment
+or a `.env.local` file in the working directory, then built-in defaults.
+
+```bash
+spacelang-opt-sp --port 8000 \
+  --llm-base-url https://host/litellm/v1 \
+  --llm-model ModelName \
+  --llm-api-key-file ~/.config/spacelang/llm-key
+```
+
+The equivalent environment variables are `LITELLM_BASE_URL`, `LITELLM_MODEL` and
+`LITELLM_API_KEY`; `.env.local` is read in the same order and never overrides a
+real environment variable. There is deliberately no `--llm-api-key` flag: keys on
+a command line end up in process listings and shell history.
+
+Three modes are offered: `manual` (a **Sync with AI** button appears while the
+mirror is stale, and nothing runs until it is clicked), `auto` (sync about 1.5 s
+after an edit stops, with a cooldown) and `off`. Requests are capped by a shared
+token bucket, 40 per minute by default, and `busy`/`rate_limited` answers carry a
+`retry_after`.
+
+Every answer is verified locally before it is shown: `compile_py(answer)` must
+produce the same instruction stream as `assemble(spasm)`, ignoring line numbers
+and symbol tables. A mismatch is reported as `not_equivalent` with the first
+differing instruction, and the editor keeps its text. There is no way to accept
+an unverified answer.
+
+The encoded `.sp` program is never sent to the model: the request carries the
+Python mirror and the assembly only, and the server derives the previous
+assembly by compiling the stale mirror itself. The endpoint is loopback-only;
+binding the server to a non-loopback host disables both `/api/refine-py` and
+`/api/llm-status`.
+
 ### Prepare browser assets
 
 Generated Pyodide and SpaceLang module assets are excluded from Git. Contributors
@@ -881,8 +1020,11 @@ python tools/build_static.py --check
 ```
 
 The build helper pins Pyodide 0.26.2, downloads a subset of its distribution,
-copies the pure-Python SpaceLang modules, and generates a module manifest.
-`--check` verifies expected files and a non-empty module manifest. The smoke
+copies the pure-Python SpaceLang modules, generates a module manifest, and
+copies `documentation.md` so an installed wheel can render `/docs` without the
+repository root. `--check` verifies expected files, a non-empty module
+manifest, and that the copied document still matches its source; edit the
+Markdown at the root and rerun the helper rather than the copy. The smoke
 workflow prepares and checks these files before running `tests/test_opt_sp.py`.
 Generated assets are sizeable and are not necessary for the core compiler or
 VM tests.
@@ -927,6 +1069,14 @@ manim -ql scene.py SpacelangIntroEnglishWithSubtitle
 
 The output is written under Manim's `media/` directory, which is ignored by
 Git. Refer to the official Manim installation guide for system dependencies.
+
+The separate `remotion/` project provides a 60-second English introduction
+with burned-in subtitles and an SRT sidecar, while preserving the Manim scenes.
+Its visual beats move from source and compiler to one stack execution, an exact
+`.sp` token walkthrough, the OPT_SP trace, and a one-pass comparison of both
+VMs. From that directory, run `npm ci` and `npm run dev` to preview, or
+`npm run render` to render an MP4 under `remotion/out/`. See
+`remotion/README.md` for Node.js requirements and details.
 
 ### Suggested course-project walkthrough
 
@@ -1052,9 +1202,10 @@ native VM where relevant.
 | Term | Meaning in this project |
 | --- | --- |
 | **AST** | Python abstract syntax tree parsed from source by the standard library. |
-| **Bytecode** | SpaceLang instruction sequence executed by a VM. |
+| **Instruction sequence** | Stack-machine instructions executed by a VM. |
 | **Closure** | Function value that retains references to captured local cells. |
-| **IR** | Intermediate representation: `Program` plus its instructions and metadata. |
+| **IR** | Internal compiler representation: `Program` plus instructions and metadata. |
+| **SpaceLang source** | `.sp` source / the language's source representation. |
 | **Instruction pointer (`ip`)** | Index of the instruction currently being executed. |
 | **Name table** | Mapping between source identifiers and numeric operands. |
 | **Operand stack** | Runtime stack holding intermediate values and call operands. |

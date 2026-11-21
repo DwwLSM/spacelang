@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "generated_at": "2026-11-20T15:29:52+00:00",
+  "commit": "e15e54f835283e3ca32077e9bb062290b91d9186",
+  "dirty": false,
+  "platform": {
+    "system": "Windows",
+    "release": "11",
+    "machine": "AMD64",
+    "python": "3.13.3",
+    "implementation": "CPython"
+  },
+  "harness": {
+    "repeat": 9,
+    "warmup": 2,
+    "programs": [
+      "arithmetic",
+      "calls",
+      "strings",
+      "lists",
+      "modules",
+      "closure",
+      "higher-order"
+    ]
+  },
+  "results": [
+    {
+      "program": "arithmetic",
+      "instructions": 180007,
+      "python_seconds": 0.14509189999080263,
+      "cpp_seconds": 0.0029217999981483445,
+      "python_ns_per_instruction": 806.0347652635878,
+      "cpp_ns_per_instruction": 16.231590983397005,
+      "speedup": 49.658395537939924,
+      "opcodes": {
+        "STORE_GLOBAL": 40001,
+        "LOAD_GLOBAL": 40000,
+        "OP": 40000,
+        "PUSH_INT": 20002,
+        "FOR_ITER": 20001,
+        "JMP": 20000,
+        "CALL": 1,
+        "GET_ITER": 1,
+        "HALT": 1
+      }
+    },
+    {
+      "program": "calls",
+      "instructions": 62005,
+      "python_seconds": 0.06074770000122953,
+      "cpp_seconds": 0.0007233999931486323,
+      "python_ns_per_instruction": 979.7226030357153,
+      "cpp_ns_per_instruction": 11.666800953933269,
+      "speedup": 83.97525653383313,
+      "opcodes": {
+        "LOAD_LOCAL": 18083,
+        "OP": 12916,
+        "PUSH_INT": 10334,
+        "CALL": 5167,
+        "JZ": 5167,
+        "RET": 5167,
+        "STORE_LOCAL": 5166,
+        "STORE_GLOBAL": 2,
+        "DEF": 1,
+        "LOAD_GLOBAL": 1,
+        "HALT": 1
+      }
+    },
+    {
+      "program": "strings",
+      "instructions": 21009,
+      "python_seconds": 0.020929899998009205,
+      "cpp_seconds": 0.0006241999944904819,
+      "python_ns_per_instruction": 996.234946832748,
+      "cpp_ns_per_instruction": 29.711075943190153,
+      "speedup": 33.530759664766954,
+      "opcodes": {
+        "STORE_GLOBAL": 6002,
+        "PUSH_STR": 3001,
+        "FOR_ITER": 3001,
+        "LOAD_GLOBAL": 3001,
+        "OP": 3000,
+        "JMP": 3000,
+        "PUSH_INT": 1,
+        "CALL": 1,
+        "GET_ITER": 1,
+        "HALT": 1
+      }
+    },
+    {
+      "program": "lists",
+      "instructions": 21010,
+      "python_seconds": 0.020521699989330955,
+      "cpp_seconds": 0.0009244999964721501,
+      "python_ns_per_instruction": 976.7586858320302,
+      "cpp_ns_per_instruction": 44.0028556150476,
+      "speedup": 22.197620408481157,
+      "opcodes": {
+        "LOAD_GLOBAL": 6001,
+        "STORE_GLOBAL": 3002,
+        "FOR_ITER": 3001,
+        "CALL_METHOD": 3000,
+        "STACK": 3000,
+        "JMP": 3000,
+        "CALL": 2,
+        "BUILD_LIST": 1,
+        "PUSH_INT": 1,
+        "GET_ITER": 1,
+        "HALT": 1
+      }
+    },
+    {
+      "program": "modules",
+      "instructions": 18011,
+      "python_seconds": 0.016288300001178868,
+      "cpp_seconds": 0.0007378000009339303,
+      "python_ns_per_instruction": 904.3528955182315,
+      "cpp_ns_per_instruction": 40.96385547354007,
+      "speedup": 22.07685006852891,
+      "opcodes": {
+        "LOAD_GLOBAL": 6001,
+        "STORE_GLOBAL": 4003,
+        "FOR_ITER": 2001,
+        "CALL_METHOD": 2000,
+        "OP": 2000,
+        "JMP": 2000,
+        "PUSH_INT": 2,
+        "IMPORT": 1,
+        "CALL": 1,
+        "GET_ITER": 1,
+        "HALT": 1
+      }
+    },
+    {
+      "program": "closure",
+      "instructions": 32020,
+      "python_seconds": 0.034270899996045046,
+      "cpp_seconds": 0.0010830000101123005,
+      "python_ns_per_instruction": 1070.2966894455042,
+      "cpp_ns_per_instruction": 33.82261118401938,
+      "speedup": 31.64441336661794,
+      "opcodes": {
+        "STORE_GLOBAL": 4003,
+        "STORE_LOCAL": 4002,
+        "LOAD_LOCAL": 4001,
+        "LOAD_GLOBAL": 4001,
+        "OP": 4000,
+        "PUSH_INT": 2003,
+        "RET": 2001,
+        "FOR_ITER": 2001,
+        "CALL_OBJ": 2000,
+        "LOAD_DEREF": 2000,
+        "JMP": 2000,
+        "CALL": 2,
+        "DEF": 1,
+        "CELLIFY": 1,
+        "LOAD_CELL_REF": 1,
+        "MAKE_CLOSURE_SIG": 1,
+        "GET_ITER": 1,
+        "HALT": 1
+      }
+    },
+    {
+      "program": "higher-order",
+      "instructions": 30022,
+      "python_seconds": 0.030061499986913987,
+      "cpp_seconds": 0.001170899995486252,
+      "python_ns_per_instruction": 1001.3157013827855,
+      "cpp_ns_per_instruction": 39.00139882373766,
+      "speedup": 25.673840723203718,
+      "opcodes": {
+        "LOAD_GLOBAL": 6002,
+        "STORE_GLOBAL": 4004,
+        "LOAD_LOCAL": 4001,
+        "OP": 4000,
+        "STORE_LOCAL": 2001,
+        "RET": 2001,
+        "FOR_ITER": 2001,
+        "CALL_OBJ": 2000,
+        "LOAD_DEREF": 2000,
+        "JMP": 2000,
+        "PUSH_INT": 4,
+        "CALL": 2,
+        "DEF": 1,
+        "CELLIFY": 1,
+        "LOAD_CELL_REF": 1,
+        "MAKE_CLOSURE_SIG": 1,
+        "GET_ITER": 1,
+        "HALT": 1
+      }
+    }
+  ]
+}

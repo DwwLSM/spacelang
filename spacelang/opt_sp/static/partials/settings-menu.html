@@ -1,0 +1,19 @@
+<div class="settings-menu-wrapper">
+  <button id="settings-button" class="settings-button" type="button" aria-label="Settings menu" aria-haspopup="menu" aria-expanded="false" title="Settings">
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+      <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94L14.38 2.8a.49.49 0 0 0-.49-.42h-3.84a.49.49 0 0 0-.49.42l-.36 2.52c-.58.24-1.12.56-1.62.94l-2.39-.96a.49.49 0 0 0-.61.22L2.66 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.05.31-.08.65-.08.94s.03.63.08.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.31.61.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.52c.04.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.52c.58-.24 1.12-.56 1.62-.94l2.39.96c.24.09.49 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.02-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z" fill="currentColor"/>
+    </svg>
+    <span>Settings</span>
+  </button>
+  <div id="settings-menu" class="settings-menu" role="menu" aria-label="OPT_SP settings" hidden>
+    <a id="home-menu-link" class="settings-menu-item" role="menuitem" href="/">Home</a>
+    <button id="new-file-button" class="settings-menu-item" type="button" role="menuitem" hidden>New file…</button>
+    <a id="studio-menu-link" class="settings-menu-item studio-entry" role="menuitem" href="/studio" target="_blank" rel="noopener">Studio (new tab)</a>
+    <a id="opt-sp-link" class="settings-menu-item" role="menuitem" href="/" target="_blank" rel="noopener" hidden>OPT_SP editor (new tab)</a>
+    <a id="visualize-link" class="settings-menu-item" role="menuitem" href="visualize.html" target="_blank" rel="noopener" hidden>Visualizer (new tab)</a>
+    <button id="llm-settings-button" class="settings-menu-item" type="button" role="menuitem" hidden>LLM settings</button>
+    <button id="pane-layout-toggle" class="settings-menu-item" type="button" role="menuitem" hidden>Panes: stacked</button>
+    <button id="reload-page-button" class="settings-menu-item" type="button" role="menuitem">Reload page</button>
+    <button id="stop-server-button" class="settings-menu-item settings-menu-danger" type="button" role="menuitem" title="Stop OPT_SP (Ctrl+Alt+Q; Cmd+Option+Q on macOS)">Stop server</button>
+  </div>
+</div>

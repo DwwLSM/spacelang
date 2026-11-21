@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="opt-sp-control-token" content="__OPT_SP_CONTROL_TOKEN__">
+  <title>OPT_SP Studio — SpaceLang</title>
+  <link rel="stylesheet" href="css/opt-sp.css?v=10">
+  <link rel="stylesheet" href="css/studio.css?v=10">
+  <script type="module" src="js/app.js?v=10"></script>
+</head>
+<body data-page="studio">
+  <!-- #include partials/app-header.html -->
+  <main class="studio-layout">
+    <section class="studio-editors" data-orientation="vertical" aria-label="Program representations">
+      <section class="editor-pane" data-pane="py">
+        <h2 class="pane-header">
+          <span>py</span>
+          <span id="py-badge" class="pane-badge" data-state="synced">synced</span>
+          <span class="pane-actions">
+            <button id="py-sync-button" type="button" hidden>Sync with AI</button>
+            <button id="py-run-button" type="button" class="pane-run">Run</button>
+          </span>
+        </h2>
+        <textarea id="py-editor" class="pane-editor" spellcheck="false" wrap="off" aria-label="Python surface syntax"></textarea>
+        <div id="py-sync-status" class="pane-status" role="status" aria-live="polite" hidden></div>
+      </section>
+      <div class="pane-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize py and spasm panes" tabindex="0" data-split="0"></div>
+      <section class="editor-pane" data-pane="spasm">
+        <h2 class="pane-header">
+          <span>spasm</span>
+          <span id="spasm-badge" class="pane-badge" data-state="synced">synced</span>
+          <span class="pane-actions">
+            <button id="spasm-annotations-toggle" type="button" aria-pressed="true">annotations</button>
+            <button id="spasm-run-button" type="button" class="pane-run">Run</button>
+          </span>
+        </h2>
+        <textarea id="spasm-editor" class="pane-editor" spellcheck="false" wrap="off" aria-label="Assembly source"></textarea>
+      </section>
+      <div class="pane-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize spasm and sp panes" tabindex="0" data-split="1"></div>
+      <section class="editor-pane" data-pane="sp">
+        <h2 class="pane-header">
+          <span>sp</span>
+          <span id="sp-badge" class="pane-badge" data-state="synced">synced</span>
+          <span class="pane-actions">
+            <button id="show-spaces-toggle" type="button" aria-pressed="false">show spaces</button>
+            <button id="copy-sp-button" type="button">Copy raw</button>
+            <button id="sp-run-button" type="button" class="pane-run">Run</button>
+          </span>
+        </h2>
+        <textarea id="sp-editor" class="pane-editor pane-editor-sp" spellcheck="false" wrap="off" aria-label="Encoded SpaceLang source"></textarea>
+        <pre id="sp-preview" class="pane-preview" aria-hidden="true" hidden></pre>
+      </section>
+    </section>
+    <div class="studio-column-splitter" role="separator" aria-orientation="vertical" aria-label="Resize editors and trace panels" tabindex="0"></div>
+    <section class="trace-column" aria-label="Trace">
+      <section class="trace-code-panel">
+        <h2 class="trace-code-header">
+          <span>Trace</span>
+          <button id="trace-follow-toggle" type="button" aria-pressed="true" title="Scroll the code view to follow the active line">follow</button>
+        </h2>
+        <pre id="trace-code" class="code-view"></pre>
+      </section>
+      <div class="trace-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize trace code and state panels" tabindex="0"></div>
+      <!-- #include partials/state-panels.html -->
+    </section>
+    <!-- #include partials/step-controls.html -->
+  </main>
+
+  <!-- #include partials/chat-panel.html -->
+
+  <dialog id="carry-dialog" class="app-dialog" aria-labelledby="carry-title">
+    <h2 id="carry-title">Carry to the editor</h2>
+    <p class="app-dialog-hint">
+      The editor will open this as an unsaved buffer. Pick the representation to
+      carry; the pane you were editing is selected by default.
+    </p>
+    <div class="new-file-actions">
+      <button type="button" data-pane="py">Python <span>.py</span></button>
+      <button type="button" data-pane="spasm">Assembly <span>.spasm</span></button>
+      <button type="button" data-pane="sp">Encoded <span>.sp</span></button>
+    </div>
+    <div class="app-dialog-actions">
+      <button id="carry-cancel" type="button">Cancel</button>
+    </div>
+  </dialog>
+
+  <!-- #include partials/llm-settings.html -->
+</body>
+</html>

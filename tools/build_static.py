@@ -27,16 +27,44 @@ PYODIDE_FILES = (
 
 def _check() -> int:
     required = [
-        STATIC / "index.html",
+        STATIC / "home.html",
+        STATIC / "editor.html",
         STATIC / "visualize.html",
+        STATIC / "studio.html",
+        STATIC / "docs.html",
+        STATIC / "tutorial.html",
         STATIC / "css" / "opt-sp.css",
+        STATIC / "css" / "studio.css",
+        STATIC / "css" / "home.css",
+        STATIC / "css" / "doc.css",
         STATIC / "js" / "app.js",
+        STATIC / "js" / "ascii-scene.js",
+        STATIC / "js" / "chat-panel.js",
+        STATIC / "js" / "docs.js",
         STATIC / "js" / "download.js",
         STATIC / "js" / "editor.js",
         STATIC / "js" / "file-handles.js",
+        STATIC / "js" / "handout.js",
+        STATIC / "js" / "health.js",
+        STATIC / "js" / "home.js",
+        STATIC / "js" / "llm-bridge.js",
+        STATIC / "js" / "llm-settings.js",
         STATIC / "js" / "pyodide-loader.js",
+        STATIC / "js" / "scene-christmas-tree.js",
+        STATIC / "js" / "scene-token-rain.js",
         STATIC / "js" / "visualizer.js",
         STATIC / "js" / "spacelang-kernel.js",
+        STATIC / "js" / "studio-layout.js",
+        STATIC / "js" / "sync-engine.js",
+        STATIC / "js" / "trace-panel.js",
+        STATIC / "js" / "workspace.js",
+        STATIC / "partials" / "app-header.html",
+        STATIC / "partials" / "chat-panel.html",
+        STATIC / "partials" / "llm-settings.html",
+        STATIC / "partials" / "settings-menu.html",
+        STATIC / "partials" / "state-panels.html",
+        STATIC / "partials" / "step-controls.html",
+        STATIC / "documentation.md",
         STATIC / "spacelang_pkg" / "manifest.json",
         *(STATIC / "pyodide" / name for name in PYODIDE_FILES),
     ]
@@ -44,6 +72,14 @@ def _check() -> int:
     if missing:
         for path in missing:
             print(f"Missing or empty: {path.relative_to(ROOT)}")
+        return 1
+    source_document = ROOT / "documentation.md"
+    copied_document = STATIC / "documentation.md"
+    if source_document.is_file() and copied_document.read_bytes() != source_document.read_bytes():
+        print(
+            "Stale: spacelang/opt_sp/static/documentation.md no longer matches "
+            "documentation.md; rerun tools/build_static.py."
+        )
         return 1
     manifest = json.loads((STATIC / "spacelang_pkg" / "manifest.json").read_text())
     if not manifest:
@@ -102,7 +138,7 @@ def _copy_spacelang_modules() -> None:
     manifest = []
     for source in sorted(PACKAGE.glob("*.py")):
         if source.name == "__init__.py":
-            contents = "__version__ = '0.1.9'\n"
+            contents = "__version__ = '0.2.3'\n"
         else:
             contents = source.read_text(encoding="utf-8")
         target = destination / source.name
@@ -116,15 +152,35 @@ def _copy_spacelang_modules() -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
+def _copy_documentation() -> None:
+    """Ship the Markdown that /docs renders inside the package tree.
+
+    A wheel contains only ``spacelang/``, so the document kept at the
+    repository root must also exist under ``spacelang/opt_sp/static/``.
+    """
+    source = ROOT / "documentation.md"
+    if not source.is_file():
+        raise FileNotFoundError(f"Missing documentation source: {source}")
+    STATIC.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, STATIC / "documentation.md")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="only verify built static assets")
+    parser.add_argument(
+        "--no-pyodide",
+        action="store_true",
+        help="skip re-downloading the Pyodide distribution",
+    )
     args = parser.parse_args()
     if args.check:
         return _check()
 
-    _copy_pyodide_distribution()
+    if not args.no_pyodide:
+        _copy_pyodide_distribution()
     _copy_spacelang_modules()
+    _copy_documentation()
     total_size = sum(path.stat().st_size for path in STATIC.rglob("*") if path.is_file())
     file_count = sum(1 for path in STATIC.rglob("*") if path.is_file())
     print(f"Prepared {file_count} files ({total_size / (1024 * 1024):.1f} MiB).")

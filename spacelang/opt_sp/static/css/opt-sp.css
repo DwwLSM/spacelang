@@ -4,6 +4,7 @@
   --surface: #161b22;
   --surface-raised: #1d242d;
   --border: #303943;
+  --border-strong: #1d1f22;
   --text: #e6edf3;
   --muted: #9daab7;
   --accent: #58a6ff;
@@ -12,6 +13,11 @@
 }
 
 * { box-sizing: border-box; }
+
+/* The `hidden` attribute maps to `display: none` in the browser stylesheet, but
+   any author `display` rule beats it: menu items that only belong to one page
+   (.settings-menu-item is display:flex) were showing on every page. */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -790,6 +796,185 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
 }
 .loading { cursor: progress; }
 
+#settings-button {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  width: auto;
+  height: auto;
+  min-height: 31px;
+  padding: .35rem .7rem;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  font-size: .75rem;
+  white-space: nowrap;
+}
+#settings-button svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+.settings-menu-wrapper {
+  height: 31px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.settings-menu {
+  position: absolute;
+  top: calc(100% + .55rem);
+  right: 0;
+  z-index: 100;
+  width: 224px;
+  padding: .45rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px #0008, inset 0 1px 0 #ffffff08;
+}
+.settings-menu[hidden] { display: none; }
+.settings-menu-heading {
+  padding: .35rem .45rem .15rem;
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.settings-menu-item {
+  width: 100%;
+  padding: .5rem .65rem;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  justify-content: flex-start;
+  text-align: left;
+  text-decoration: none;
+  font-size: .78rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, #ffffff08, transparent 62%),
+    linear-gradient(180deg, #252e39, var(--surface-raised));
+  box-shadow: inset 0 1px 0 #ffffff08;
+}
+.settings-menu-item:hover,
+.settings-menu-item:focus-visible {
+  border-color: var(--accent-border);
+  background:
+    linear-gradient(135deg, #58a6ff22, transparent 62%),
+    linear-gradient(180deg, #2a3644, var(--surface-raised));
+}
+.settings-menu-danger {
+  color: #ffb3b3;
+  border-color: #75434a;
+  background:
+    linear-gradient(135deg, #f8514914, transparent 62%),
+    linear-gradient(180deg, #512a30, #3d2228);
+}
+.settings-menu-danger:hover,
+.settings-menu-danger:focus-visible {
+  color: #ffd0d0;
+  background:
+    linear-gradient(135deg, #f8514930, transparent 62%),
+    linear-gradient(180deg, #5c3037, #432529);
+  border-color: #8f5158;
+}
+.asset-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  margin: 0;
+  padding: .55rem .9rem;
+  font-size: .8rem;
+  color: #1b1206;
+  background: var(--highlight);
+  border-bottom: 1px solid #b9791a;
+}
+
+.header-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 31px;
+  padding: .35rem .7rem;
+  color: var(--text);
+  font-size: .75rem;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, #ffffff08, transparent 62%),
+    linear-gradient(180deg, #252e39, var(--surface-raised));
+  white-space: nowrap;
+}
+.header-link:hover,
+.header-link:focus-visible {
+  color: #fff;
+  border-color: var(--accent-border);
+}
+.header-link[hidden] { display: none; }
+
+.app-dialog {
+  width: min(460px, 92vw);
+  padding: 1rem 1.1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px #000a;
+}
+.app-dialog::backdrop { background: #0009; }
+.app-dialog h2 { margin: 0 0 .8rem; font-size: .95rem; }
+.app-dialog-hint {
+  margin: 0 0 .9rem;
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.5;
+}
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: .9rem;
+}
+
+.app-dialog-field {
+  display: grid;
+  gap: .35rem;
+}
+.app-dialog-field label {
+  color: var(--muted);
+  font-size: .72rem;
+}
+.app-dialog-field input { width: 100%; }
+.app-dialog-error {
+  margin: .55rem 0 0;
+  color: #ff9d9d;
+  font-size: .74rem;
+  line-height: 1.45;
+}
+.app-dialog-error[hidden] { display: none; }
+
+.new-file-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .5rem;
+}
+.new-file-actions button {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  padding: .7rem .4rem;
+  font-size: .82rem;
+}
+.new-file-actions button span {
+  color: var(--muted);
+  font-size: .68rem;
+}
+
 @media (max-width: 900px) and (min-width: 761px) {
   .editor-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
   .project-file-picker { grid-column: 1 / -1; }
@@ -812,4 +997,134 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
   .column-resizer { display: none; }
   .state-panels .panel { height: 200px; }
   .step-controls { flex-wrap: wrap; }
+}
+
+/* ---- assistant panel ---------------------------------------------------- */
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+  min-height: 0;
+}
+.chat-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.chat-panel-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: .68rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.chat-panel-tools { display: flex; gap: .35rem; }
+.chat-panel-tools button {
+  padding: .2rem .45rem;
+  font-size: .66rem;
+  border-radius: 4px;
+}
+.chat-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: .55rem;
+  min-height: 0;
+}
+.chat-panel.is-collapsed .chat-body { display: none; }
+.chat-log {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: .5rem;
+  min-height: 0;
+  overflow: auto;
+  padding-right: .15rem;
+}
+.chat-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.55;
+}
+.chat-message {
+  padding: .5rem .6rem;
+  font-size: .75rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #121a24;
+}
+.chat-message--user { background: #1b2330; border-color: #2c3a4d; }
+.chat-message--error { color: #ffc9c9; background: #2a1414; border-color: #7a3030; }
+.chat-form { display: flex; flex-direction: column; gap: .4rem; }
+.chat-form textarea {
+  min-height: 2.6rem;
+  max-height: 9rem;
+  resize: vertical;
+  font-size: .76rem;
+  line-height: 1.5;
+}
+.chat-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.chat-status { color: var(--muted); font-size: .68rem; }
+.chat-status[data-kind="warn"] { color: var(--highlight); }
+.chat-panel.is-busy .chat-log { opacity: .7; }
+
+/* Drawer shape: the page keeps its width until the assistant is asked for. */
+.chat-panel[data-drawer="true"] {
+  position: fixed;
+  top: 59px;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  width: min(390px, 92vw);
+  padding: .9rem 1rem;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -18px 0 40px #0007;
+  transform: translateX(102%);
+  transition: transform .2s ease;
+}
+.chat-panel[data-drawer="true"].is-open { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-panel[data-drawer="true"] { transition: none; }
+}
+@media (max-width: 760px) {
+  .chat-panel[data-drawer="true"] { width: 100vw; }
+}
+.chat-message pre {
+  margin: .4rem 0;
+  padding: .45rem .55rem;
+  overflow: auto;
+  background: #0b1119;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.chat-message code {
+  padding: 0 .2rem;
+  font-size: .94em;
+  background: #0d1420;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.chat-message pre code { padding: 0; background: transparent; border: 0; }
+.chat-whitespace code {
+  white-space: pre;
+  color: #8fb6d8;
+  letter-spacing: .05em;
+}
+.chat-note {
+  margin: -.25rem 0 .35rem;
+  color: var(--muted);
+  font-size: .68rem;
 }

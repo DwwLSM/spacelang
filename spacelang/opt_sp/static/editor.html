@@ -5,20 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="opt-sp-control-token" content="__OPT_SP_CONTROL_TOKEN__">
   <title>OPT_SP — SpaceLang Visual Debugger</title>
-  <link rel="stylesheet" href="css/opt-sp.css?v=6">
-  <script type="module" src="js/app.js?v=6"></script>
+  <link rel="stylesheet" href="css/opt-sp.css?v=10">
+  <script type="module" src="js/app.js?v=10"></script>
 </head>
 <body data-page="editor">
-  <header class="app-header">
-    <h1>OPT_SP — SpaceLang Visual Debugger</h1>
-    <div class="server-controls">
-      <span id="server-status" role="status" aria-live="polite"></span>
-      <button id="stop-server-button" type="button" title="Stop OPT_SP (Ctrl+Alt+Q; Cmd+Option+Q on macOS)">Stop server</button>
-    </div>
-  </header>
+  <!-- #include partials/app-header.html -->
   <main class="editor-page">
     <section class="editor-panel">
-      <textarea id="code-editor" spellcheck="false">PUSH_INT 2
+      <textarea id="code-editor" spellcheck="false" autocomplete="off">PUSH_INT 2
 PUSH_INT 3
 OP 1
       CALL 0 1
@@ -71,5 +65,40 @@ HALT</textarea>
       <span id="project-file-status" role="status" aria-live="polite">Scanning files…</span>
     </section>
   </main>
+
+  <!-- #include partials/chat-panel.html -->
+
+  <dialog id="new-file-dialog" class="app-dialog" aria-labelledby="new-file-title">
+    <h2 id="new-file-title">Start a file</h2>
+    <p class="app-dialog-hint">
+      The editor works in one representation at a time. Pick the one you want to
+      write; the Studio can convert between them later.
+    </p>
+    <div class="new-file-actions">
+      <button type="button" data-mode="python">Python <span>.py</span></button>
+      <button type="button" data-mode="asm">Assembly <span>.spasm</span></button>
+      <button type="button" data-mode="sp">Encoded <span>.sp</span></button>
+    </div>
+    <div class="app-dialog-actions">
+      <button id="new-file-open" type="button">Open a file…</button>
+    </div>
+  </dialog>
+  <dialog id="create-file-dialog" class="app-dialog" aria-labelledby="create-file-title">
+    <h2 id="create-file-title">New file</h2>
+    <p class="app-dialog-hint">
+      These contents are not part of a file yet. The new file is written to the
+      folder the server was started from; an existing file is never replaced.
+    </p>
+    <div class="app-dialog-field">
+      <label for="create-file-name">File name</label>
+      <input id="create-file-name" type="text" spellcheck="false" autocomplete="off" placeholder="program.py">
+    </div>
+    <p id="create-file-error" class="app-dialog-error" role="alert" hidden></p>
+    <div class="app-dialog-actions">
+      <button id="create-file-cancel" type="button">Cancel</button>
+      <button id="create-file-submit" type="button">Create</button>
+    </div>
+  </dialog>
+  <!-- #include partials/llm-settings.html -->
 </body>
 </html>

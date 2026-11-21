@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import hashlib
+import html
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import hmac
@@ -10,6 +11,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 from socketserver import TCPServer
 import stat
@@ -23,7 +25,20 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import ProxyHandler, Request, build_opener, urlopen
 import webbrowser
 
+from . import markdown_doc
 from ._locate import static_dir
+from ..llm_client import LLMError
+from .llm_proxy import (
+    MODES,
+    Gate,
+    LLMConfig,
+    TokenBucket,
+    chat_reply,
+    is_loopback,
+    refine_py,
+    resolve_config,
+    status as llm_status,
+)
 
 _SOURCE_MODES = {".py": "python", ".sp": "sp", ".spasm": "asm"}
 _IGNORED_DIRECTORIES = {
@@ -37,6 +52,101 @@ _IGNORED_DIRECTORIES = {
     "venv",
 }
 _MAX_SOURCE_FILE_SIZE = 1024 * 1024
+_MAX_LLM_REQUEST = 64 * 1024
+_MAX_CHAT_REQUEST = 64 * 1024
+_MAX_DRAIN = 1024 * 1024
+_LLM_STATUS = {
+    "bad_config": 400,
+    "bad_history": 400,
+    "no_key": 400,
+    "input_too_large": 413,
+    "rate_limited": 429,
+    "busy": 429,
+    "not_equivalent": 422,
+    "python_unparsable": 422,
+    "assembly_unparsable": 400,
+    "bad_key": 502,
+    "truncated": 502,
+    "empty_completion": 502,
+    "upstream_error": 502,
+}
+_PAGES = {
+    "/": "home.html",
+    "/home": "home.html",
+    "/editor": "editor.html",
+    "/index.html": "editor.html",
+    "/visualizer": "visualize.html",
+    "/visualize.html": "visualize.html",
+    "/studio": "studio.html",
+    "/docs": "docs.html",
+    "/tutorial": "tutorial.html",
+}
+_INCLUDE_RE = re.compile(
+    r"[ \t]*<!-- #include (partials/[A-Za-z0-9_\-/]+\.html) -->[ \t]*\r?\n?"
+)
+_PARTIAL_RE = re.compile(r"partials/[A-Za-z0-9_\-/]+\.html")
+_MAX_INCLUDE_PASSES = 2
+_BACK_LINK = '<a class="back-link" href="/editor">\u2190 Back to editor</a>'
+_NO_BACK_LINK = frozenset({"editor.html", "home.html"})
+_PAGE_TITLES = {
+    "home.html": "SpaceLang",
+    "docs.html": "SpaceLang \u00b7 Documentation",
+    "tutorial.html": "SpaceLang \u00b7 Tutorial",
+}
+_DEFAULT_PAGE_TITLE = "OPT_SP \u2014 SpaceLang Visual Debugger"
+_DOCUMENTED_PAGES = frozenset({"docs.html"})
+_DOCUMENT = "documentation.md"
+_DOCUMENT_MISSING = (
+    "<h1>Documentation is unavailable</h1>"
+    "<p>This page renders <code>documentation.md</code>, which this installation "
+    "does not ship. From a checkout, run <code>python tools/build_static.py</code> "
+    "to bake a copy into the served static files.</p>"
+)
+_DOCUMENT_CACHE: tuple[tuple[str, int, int], tuple[str, str]] | None = None
+
+
+def _document_path() -> Path | None:
+    """Return the Markdown file behind ``/docs``, if this installation has one.
+
+    A checkout keeps the document at the repository root. An installed wheel
+    cannot ship the root file, so ``tools/build_static.py`` copies it next to
+    the static pages; prefer the checkout copy so an edit never serves a stale
+    build.
+    """
+    candidates = (
+        Path(__file__).resolve().parents[2] / _DOCUMENT,
+        Path(static_dir()) / _DOCUMENT,
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _render_documentation() -> tuple[str, str]:
+    """Render ``documentation.md`` to ``(body, table of contents)``.
+
+    The result is cached against the file's modification time: the page is
+    re-read only when the document changes, so browsing costs one render.
+    """
+    global _DOCUMENT_CACHE
+
+    path = _document_path()
+    if path is None:
+        return _DOCUMENT_MISSING, ""
+    try:
+        stat = path.stat()
+        key = (str(path), stat.st_mtime_ns, stat.st_size)
+        if _DOCUMENT_CACHE is not None and _DOCUMENT_CACHE[0] == key:
+            return _DOCUMENT_CACHE[1]
+        source = path.read_text(encoding="utf-8")
+    except OSError:
+        return _DOCUMENT_MISSING, ""
+
+    body, toc = markdown_doc.render_document(source)
+    rendered = (body, markdown_doc.render_toc(toc))
+    _DOCUMENT_CACHE = (key, rendered)
+    return rendered
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -46,39 +156,54 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         project_root: Path,
         project_files_enabled: bool,
         stop_token: str | None,
+        llm_config: "LLMConfig | dict | None" = None,
+        llm_bucket: TokenBucket | None = None,
+        llm_gate: Gate | None = None,
         **kwargs,
     ):
         self.project_root = project_root
         self.project_files_enabled = project_files_enabled
         self.stop_token = stop_token
+        self.llm_config = llm_config
+        self.llm_bucket = llm_bucket or TokenBucket()
+        self.llm_gate = llm_gate or Gate()
         super().__init__(*args, **kwargs)
 
     def log_message(self, format: str, *args) -> None:
         if os.environ.get("SPACELANG_OPT_SP_VERBOSE") == "1":
             super().log_message(format, *args)
 
+    def end_headers(self) -> None:
+        # ES module imports carry no cache-busting query, so a stale js/ or css/
+        # file would survive a version bump on the page itself. Revalidate them
+        # on every load instead (Last-Modified makes it a cheap 304).
+        if urlsplit(self.path).path.startswith(("/js/", "/css/")):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def do_GET(self) -> None:
         request = urlsplit(self.path)
         if request.path == "/__opt_sp/status":
             self._send_status()
-        elif request.path in {"/", "/index.html", "/visualize.html"}:
-            page = (
-                "index.html"
-                if request.path in {"/", "/index.html"}
-                else "visualize.html"
-            )
-            self._send_controlled_page(page)
+        elif request.path == "/__opt_sp/health":
+            self._send_health()
+        elif request.path in _PAGES:
+            self._send_controlled_page(_PAGES[request.path])
         elif request.path == "/api/files":
             self._send_project_files()
         elif request.path == "/api/file":
             self._send_project_file(parse_qs(request.query).get("path", [""])[0])
+        elif request.path == "/api/llm-status":
+            self._send_llm_status()
         else:
             super().do_GET()
 
     def _send_controlled_page(self, filename: str) -> None:
-        page = (Path(static_dir()) / filename).read_bytes()
-        token = (self.stop_token or "").encode("ascii")
-        body = page.replace(b"__OPT_SP_CONTROL_TOKEN__", token)
+        try:
+            body = self._render_page(filename)
+        except OSError:
+            self.send_error(404)
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -86,10 +211,56 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _render_page(self, filename: str) -> bytes:
+        """Expand partial includes, then substitute per-page placeholders."""
+        root = Path(static_dir())
+        text = (root / filename).read_text(encoding="utf-8")
+        # Includes first: {{back_link}} lives inside partials/app-header.html.
+        for _ in range(_MAX_INCLUDE_PASSES):
+            text, replaced = _INCLUDE_RE.subn(
+                lambda match: self._read_partial(root, match.group(1)),
+                text,
+            )
+            if not replaced:
+                break
+        back_link = "" if filename in _NO_BACK_LINK else _BACK_LINK
+        text = text.replace("{{back_link}}", back_link)
+        text = text.replace(
+            "{{page_title}}",
+            html.escape(_PAGE_TITLES.get(filename, _DEFAULT_PAGE_TITLE)),
+        )
+        text = text.replace("__OPT_SP_CONTROL_TOKEN__", self.stop_token or "")
+        if filename in _DOCUMENTED_PAGES:
+            body, toc = _render_documentation()
+            text = text.replace("{{doc_body}}", body)
+            text = text.replace("{{doc_toc}}", toc)
+        return text.encode("utf-8")
+
+    @staticmethod
+    def _read_partial(root: Path, relative: str) -> str:
+        if not _PARTIAL_RE.fullmatch(relative):
+            return ""
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            return ""
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+
     def do_POST(self) -> None:
         request_path = urlsplit(self.path).path
         if request_path == "/api/file":
             self._overwrite_project_file()
+            return
+        if request_path == "/api/file/new":
+            self._create_project_file()
+            return
+        if request_path == "/api/chat":
+            self._chat()
+            return
+        if request_path == "/api/refine-py":
+            self._refine_py()
             return
         if request_path != "/__opt_sp/stop":
             self.send_error(404)
@@ -125,6 +296,175 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             "pid": os.getpid(),
             "port": self.server.server_address[1],
         })
+
+    def _send_health(self) -> None:
+        try:
+            is_loopback = ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not is_loopback:
+            self._send_json(403, {"error": "Health information is only available locally."})
+            return
+
+        root = Path(static_dir())
+        checks = {
+            "pyodide_js": (root / "pyodide" / "pyodide.js").is_file(),
+            "python_stdlib": (root / "pyodide" / "python_stdlib.zip").is_file(),
+            "spacelang_pkg": (root / "spacelang_pkg" / "manifest.json").is_file(),
+            "studio_page": (root / "studio.html").is_file(),
+        }
+        ok = all(checks.values())
+        self._send_json(200, {
+            "ok": ok,
+            "checks": checks,
+            "hint": None if ok else "Run: python tools/build_static.py",
+        })
+
+    def _local_only(self) -> bool:
+        if is_loopback(self.client_address[0]):
+            return True
+        self._send_json(403, {"error": "This endpoint is only available locally."})
+        return False
+
+    def _send_llm_status(self) -> None:
+        if not self._local_only():
+            return
+        try:
+            config = resolve_config(self.llm_config, self.headers)
+        except LLMError as error:
+            self._send_json(400, {"ok": False, "error": error.code, "message": error.message})
+            return
+        self._send_json(200, llm_status(config, self.llm_config))
+
+    def _refine_py(self) -> None:
+        """Ask the model for a new Python mirror, then verify it locally."""
+        if not self._local_only():
+            return
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self._send_json(400, {"ok": False, "error": "bad_request_size"})
+            return
+        if length < 0 or length > _MAX_LLM_REQUEST:
+            # Drain a modest overshoot so the client reads the 413 instead of a
+            # connection reset, then refuse.
+            if 0 < length <= _MAX_DRAIN:
+                self.rfile.read(length)
+            self._send_json(413, {"ok": False, "error": "input_too_large"})
+            return
+        try:
+            body = self.rfile.read(length)
+        except OSError:
+            return
+        if self.headers.get_content_type() != "application/json":
+            self._send_json(415, {"ok": False, "error": "expected_json"})
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return
+        if "sp" in payload:
+            self._send_json(400, {
+                "ok": False,
+                "error": "sp_not_allowed",
+                "message": "The encoded program is never sent to the model.",
+            })
+            return
+        extra = set(payload) - {"py", "spasm", "src_kind"}
+        if extra:
+            self._send_json(400, {
+                "ok": False,
+                "error": "unknown_field",
+                "message": f"unsupported fields: {', '.join(sorted(extra))}",
+            })
+            return
+        py_src = payload.get("py")
+        spasm_src = payload.get("spasm")
+        if not isinstance(py_src, str) or not isinstance(spasm_src, str):
+            self._send_json(400, {"ok": False, "error": "py_and_spasm_required"})
+            return
+
+        try:
+            config = resolve_config(self.llm_config, self.headers)
+            result = refine_py(
+                config,
+                py_src,
+                spasm_src,
+                bucket=self.llm_bucket,
+                gate=self.llm_gate,
+            )
+        except LLMError as error:
+            body = {"ok": False, "error": error.code}
+            if error.message:
+                body["message"] = error.message
+            if error.retry_after is not None:
+                body["retry_after"] = error.retry_after
+            body.update(error.details)
+            self._send_json(_LLM_STATUS.get(error.code, 502), body)
+            return
+        self._send_json(200, result)
+
+    def _chat(self) -> None:
+        """One assistant turn; the system prompt is chosen from ``page``."""
+        if not self._local_only():
+            return
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self._send_json(400, {"ok": False, "error": "bad_request_size"})
+            return
+        if length < 0 or length > _MAX_CHAT_REQUEST:
+            if 0 < length <= _MAX_DRAIN:
+                self.rfile.read(length)
+            self._send_json(413, {"ok": False, "error": "input_too_large"})
+            return
+        try:
+            body = self.rfile.read(length)
+        except OSError:
+            return
+        if self.headers.get_content_type() != "application/json":
+            self._send_json(415, {"ok": False, "error": "expected_json"})
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return
+        extra = set(payload) - {"messages", "page"}
+        if extra:
+            self._send_json(400, {
+                "ok": False,
+                "error": "unknown_field",
+                "message": f"unsupported fields: {', '.join(sorted(extra))}",
+            })
+            return
+
+        try:
+            config = resolve_config(self.llm_config, self.headers)
+            result = chat_reply(
+                config,
+                payload.get("page"),
+                payload.get("messages"),
+                bucket=self.llm_bucket,
+                gate=self.llm_gate,
+            )
+        except LLMError as error:
+            detail = {"ok": False, "error": error.code}
+            if error.message:
+                detail["message"] = error.message
+            if error.retry_after is not None:
+                detail["retry_after"] = error.retry_after
+            detail.update(error.details)
+            self._send_json(_LLM_STATUS.get(error.code, 502), detail)
+            return
+        self._send_json(200, result)
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")
@@ -213,6 +553,57 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             "code": code,
         })
 
+    def _read_source_payload(self) -> tuple[str, bytes] | None:
+        """Parse and validate a ``{path, code}`` body for the file endpoints.
+
+        Sends the error response itself and returns ``None`` when the request is
+        unusable, so overwriting and creating share one validation path.
+        """
+        if self.headers.get_content_type() != "application/json":
+            self._send_json(415, {"error": "Expected a JSON request."})
+            return None
+        try:
+            content_length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self._send_json(400, {"error": "Invalid request size."})
+            return None
+        if content_length < 0 or content_length > _MAX_SOURCE_FILE_SIZE + 8192:
+            self._send_json(413, {"error": "Request is too large."})
+            return None
+        try:
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            self._send_json(400, {"error": "Invalid JSON request."})
+            return None
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error": "Invalid project file request."})
+            return None
+        relative_path = payload.get("path")
+        code = payload.get("code")
+        if not isinstance(relative_path, str) or not isinstance(code, str):
+            self._send_json(400, {"error": "A project path and source text are required."})
+            return None
+
+        try:
+            encoded = code.encode("utf-8")
+        except UnicodeError:
+            self._send_json(400, {"error": "Source text must be valid UTF-8."})
+            return None
+        if len(encoded) > _MAX_SOURCE_FILE_SIZE:
+            self._send_json(413, {"error": "Edited source is larger than 1 MiB."})
+            return None
+        relative = Path(relative_path)
+        if (
+            not relative_path
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or "\\" in relative_path
+            or "\0" in relative_path
+        ):
+            self._send_json(400, {"error": "Invalid project file path."})
+            return None
+        return relative_path, encoded
+
     def _overwrite_project_file(self) -> None:
         if not self._project_files_allowed():
             return
@@ -223,49 +614,10 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         if not is_loopback:
             self._send_json(403, {"error": "Project files can only be overwritten locally."})
             return
-        if self.headers.get_content_type() != "application/json":
-            self._send_json(415, {"error": "Expected a JSON request."})
+        payload = self._read_source_payload()
+        if payload is None:
             return
-        try:
-            content_length = int(self.headers.get("Content-Length", ""))
-        except ValueError:
-            self._send_json(400, {"error": "Invalid request size."})
-            return
-        if content_length < 0 or content_length > _MAX_SOURCE_FILE_SIZE + 8192:
-            self._send_json(413, {"error": "Request is too large."})
-            return
-        try:
-            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
-        except (UnicodeError, json.JSONDecodeError):
-            self._send_json(400, {"error": "Invalid JSON request."})
-            return
-        if not isinstance(payload, dict):
-            self._send_json(400, {"error": "Invalid project file request."})
-            return
-        relative_path = payload.get("path")
-        code = payload.get("code")
-        if not isinstance(relative_path, str) or not isinstance(code, str):
-            self._send_json(400, {"error": "A project path and source text are required."})
-            return
-
-        try:
-            encoded = code.encode("utf-8")
-        except UnicodeError:
-            self._send_json(400, {"error": "Source text must be valid UTF-8."})
-            return
-        if len(encoded) > _MAX_SOURCE_FILE_SIZE:
-            self._send_json(413, {"error": "Edited source is larger than 1 MiB."})
-            return
-        relative = Path(relative_path)
-        if (
-            not relative_path
-            or relative.is_absolute()
-            or ".." in relative.parts
-            or "\\" in relative_path
-            or "\0" in relative_path
-        ):
-            self._send_json(400, {"error": "Invalid project file path."})
-            return
+        relative_path, encoded = payload
 
         candidate = self.project_root / relative_path
         try:
@@ -309,6 +661,64 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             "message": "Project file overwritten.",
         })
 
+    def _create_project_file(self) -> None:
+        """Create a new source file; never replace an existing path.
+
+        Creating and overwriting are separate endpoints on purpose: a mistyped
+        name has to fail instead of destroying a file.
+        """
+        if not self._project_files_allowed():
+            return
+        try:
+            is_loopback = ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not is_loopback:
+            self._send_json(403, {"error": "Project files can only be created locally."})
+            return
+        payload = self._read_source_payload()
+        if payload is None:
+            return
+        relative_path, encoded = payload
+
+        relative = Path(relative_path)
+        if relative.suffix.lower() not in _SOURCE_MODES:
+            self._send_json(415, {"error": "Unsupported project file type."})
+            return
+        candidate = self.project_root / relative_path
+        try:
+            parent = candidate.parent.resolve(strict=True)
+        except (OSError, ValueError):
+            self._send_json(404, {"error": "Project folder not found."})
+            return
+        if not parent.is_relative_to(self.project_root) or not parent.is_dir():
+            self._send_json(404, {"error": "Project folder not found."})
+            return
+
+        target = parent / candidate.name
+        exists = {"error": "exists", "message": f"{relative_path} already exists."}
+        if target.exists() or target.is_symlink():
+            self._send_json(409, exists)
+            return
+        try:
+            # "x" makes the existence check atomic with the creation itself.
+            with open(target, "xb") as output:
+                output.write(encoded)
+                output.flush()
+                os.fsync(output.fileno())
+        except FileExistsError:
+            self._send_json(409, exists)
+            return
+        except OSError:
+            self._send_json(500, {"error": "Could not create the project file."})
+            return
+
+        self._send_json(201, {
+            "path": target.relative_to(self.project_root).as_posix(),
+            "mode": _SOURCE_MODES[target.suffix.lower()],
+            "message": "Project file created.",
+        })
+
 
 class _OPTSPHTTPServer(ThreadingHTTPServer):
     def server_bind(self) -> None:
@@ -329,6 +739,7 @@ def server(
     allow_project_files: bool | None = None,
     _stop_token: str | None = None,
     _ready_file: Path | None = None,
+    llm: "LLMConfig | dict | None" = None,
 ) -> tuple[ThreadingHTTPServer, str] | None:
     if _stop_token is None:
         _stop_token = secrets.token_urlsafe(32)
@@ -337,12 +748,19 @@ def server(
             allow_project_files = ipaddress.ip_address(host).is_loopback
         except ValueError:
             allow_project_files = host.lower() == "localhost"
+    try:
+        effective_llm = resolve_config(llm)
+    except LLMError:
+        effective_llm = LLMConfig()
     handler = partial(
         _QuietHandler,
         directory=str(static_dir()),
         project_root=Path.cwd().resolve(),
         project_files_enabled=allow_project_files,
         stop_token=_stop_token,
+        llm_config=llm,
+        llm_bucket=TokenBucket(effective_llm.rate_limit_rpm, effective_llm.rate_limit_burst),
+        llm_gate=Gate(),
     )
     httpd = _OPTSPHTTPServer((host, port), handler)
     if _ready_file is not None:
@@ -451,7 +869,7 @@ def _serve_background(
                 state_file.unlink(missing_ok=True)
 
 
-def _start_background(host: str, port: int, open_browser: bool) -> None:
+def _start_background(host: str, port: int, open_browser: bool, llm_flags: list[str] | None = None) -> None:
     if not _is_loopback_host(host):
         raise RuntimeError("Background mode is limited to localhost or IPv4 loopback hosts.")
     if not 0 < port < 65536:
@@ -492,6 +910,7 @@ def _start_background(host: str, port: int, open_browser: bool) -> None:
         str(state_file),
         "--_background-ready-file",
         str(ready_file),
+        *(llm_flags or []),
     ]
     try:
         if os.name == "nt":
@@ -594,7 +1013,32 @@ def _cli() -> None:
     )
     parser.add_argument("--_background-token-file", help=argparse.SUPPRESS)
     parser.add_argument("--_background-ready-file", help=argparse.SUPPRESS)
+    parser.add_argument("--llm-base-url", help="OpenAI-compatible endpoint for the AI mirror sync.")
+    parser.add_argument("--llm-model", help="Model name served by that endpoint.")
+    parser.add_argument(
+        "--llm-api-key-file",
+        help="Read the API key from this file (first non-empty line).",
+    )
+    parser.add_argument("--llm-mode", choices=MODES, help="manual, auto or off.")
     args = parser.parse_args()
+
+    llm_overrides: dict[str, object] = {}
+    if args.llm_base_url:
+        llm_overrides["base_url"] = args.llm_base_url
+    if args.llm_model:
+        llm_overrides["model"] = args.llm_model
+    if args.llm_mode:
+        llm_overrides["mode"] = args.llm_mode
+    if args.llm_api_key_file:
+        try:
+            contents = Path(args.llm_api_key_file).read_text(encoding="utf-8")
+        except OSError as error:
+            parser.error(f"Could not read the API key file: {error}")
+        lines = [line.strip() for line in contents.splitlines() if line.strip()]
+        if not lines:
+            parser.error("The API key file is empty.")
+        llm_overrides["api_key"] = lines[0]
+
     if args._background_token_file:
         if not args._background_ready_file:
             parser.error("Background server readiness file is required.")
@@ -609,13 +1053,23 @@ def _cli() -> None:
         _stop_background(args.host, args.port)
         return
     if args.background:
-        _start_background(args.host, args.port, not args.no_browser)
+        llm_flags: list[str] = []
+        if args.llm_base_url:
+            llm_flags += ["--llm-base-url", args.llm_base_url]
+        if args.llm_model:
+            llm_flags += ["--llm-model", args.llm_model]
+        if args.llm_mode:
+            llm_flags += ["--llm-mode", args.llm_mode]
+        if args.llm_api_key_file:
+            llm_flags += ["--llm-api-key-file", args.llm_api_key_file]
+        _start_background(args.host, args.port, not args.no_browser, llm_flags)
         return
     server(
         port=args.port,
         host=args.host,
         open_browser=not args.no_browser,
         allow_project_files=True if args.allow_project_files else None,
+        llm=llm_overrides or None,
     )
 
 

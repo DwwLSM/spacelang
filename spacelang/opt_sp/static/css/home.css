@@ -1,0 +1,191 @@
+.home-layout {
+  position: relative;
+  height: calc(100vh - 59px);
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.1fr) minmax(260px, 0.9fr);
+  gap: 0;
+}
+
+/* The scene covers the whole main area; columns paint over it. It must clip:
+   a canvas one subpixel wider than its box would toggle a scrollbar, and the
+   resize observer would then see the box shrink and grow forever. */
+.home-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.home-scene .ascii-scene-canvas { cursor: grab; }
+
+.home-art {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 1rem;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background:
+    radial-gradient(120% 90% at 50% 18%, #101a3c 0%, #0a1128 42%, #05070f 78%, #020309 100%);
+}
+
+/* Once the canvas is alive the column is a window onto the scene. */
+.home-scene-live .home-art { background: transparent; }
+.home-scene-live .home-art-code { display: none; }
+
+.ascii-scene-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+.ascii-scene-canvas.is-dragging { cursor: grabbing; }
+
+.home-scene-styles {
+  position: absolute;
+  top: .7rem;
+  left: .7rem;
+  z-index: 2;
+  display: none;
+  gap: .3rem;
+}
+.home-art-live .home-scene-styles,
+.home-scene-live .home-scene-styles { display: flex; }
+.home-scene-styles button {
+  padding: .25rem .5rem;
+  font: 600 .62rem/1.2 inherit;
+  letter-spacing: .12em;
+  color: var(--muted);
+  text-transform: uppercase;
+  background: #0b1220cc;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.home-scene-styles button:hover { color: var(--text); border-color: var(--accent-border); }
+.home-scene-styles button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.home-art-code {
+  margin: 0;
+  color: #9fd0ff;
+  font-size: clamp(9px, 1.05vw, 15px);
+  line-height: 1.15;
+  white-space: pre;
+  text-shadow: 0 0 14px #3d7bd044;
+}
+
+.home-center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+  min-width: 0;
+  padding: 2rem 2.4rem;
+  /* Half transparent: the scene keeps running behind the words. The divider is
+     the art column's border-right, so no second border here. */
+  background: rgba(14, 17, 22, .52);
+}
+
+.home-title {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+  letter-spacing: .24em;
+  text-transform: uppercase;
+}
+
+.home-tagline {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: .9rem;
+  line-height: 1.7;
+}
+.home-tagline code {
+  padding: .1rem .3rem;
+  color: var(--accent);
+  background: #0d1420;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.home-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .6rem;
+  margin-top: .6rem;
+  max-width: 44rem;
+}
+
+.home-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.6rem;
+  padding: .6rem .8rem;
+  color: var(--text);
+  font-size: .82rem;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, #ffffff08, transparent 62%),
+    linear-gradient(180deg, #252e39, var(--surface-raised));
+  box-shadow: inset 0 1px 0 #ffffff08;
+  transition: border-color .15s ease, color .15s ease, transform .15s ease;
+}
+.home-link:hover,
+.home-link:focus-visible {
+  color: #fff;
+  border-color: var(--accent-border);
+  transform: translateY(-1px);
+}
+.home-link-external { color: var(--accent); }
+
+.home-chat {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: .9rem;
+  border-left: 1px solid var(--border);
+  /* Half transparent like the middle column, so the scene runs behind the
+     conversation too; the message bubbles keep their own background. */
+  background: rgba(22, 27, 34, .55);
+  /* A grid item is sized by its content unless it says otherwise: without these
+     two a long transcript pushed the column past the window and the log never
+     scrolled, because `height: 100%` resolved against the grown box. */
+  min-height: 0;
+  overflow: hidden;
+}
+.home-chat .chat-panel {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+@media (max-width: 1100px) {
+  .home-layout {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Stacked layout: a full-bleed canvas would sit behind everything and eat
+     touch gestures, so the static tree stays and the scene is not shown. */
+  .home-scene { display: none; }
+  .home-scene-live .home-art {
+    background:
+      radial-gradient(120% 90% at 50% 18%, #101a3c 0%, #0a1128 42%, #05070f 78%, #020309 100%);
+  }
+  .home-scene-live .home-art-code { display: block; }
+  .home-art { border-right: 0; border-bottom: 1px solid var(--border); padding: 1.4rem; }
+  .home-center { padding: 1.6rem 1.2rem; background: transparent; border-left: 0; }
+  .home-chat { border-left: 0; border-top: 1px solid var(--border); min-height: 6rem; }
+}

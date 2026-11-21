@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="opt-sp-control-token" content="__OPT_SP_CONTROL_TOKEN__">
+  <title>SpaceLang</title>
+  <link rel="stylesheet" href="css/opt-sp.css?v=10">
+  <link rel="stylesheet" href="css/home.css?v=10">
+  <script type="module" src="js/app.js?v=10"></script>
+</head>
+<body data-page="home">
+  <!-- #include partials/app-header.html -->
+  <main class="home-layout">
+    <!-- Full-bleed scene layer: the columns sit on top of it, and the middle
+         column is translucent so the scene shows through. -->
+    <div class="home-scene" id="home-scene" aria-hidden="true"></div>
+    <section class="home-art" aria-label="Animated ASCII scene">
+      <pre class="home-art-code" id="home-art" aria-hidden="true">                 *
+                / \
+               /   \
+              /     \
+             /  *    \
+            /         \
+           /     *     \
+          /             \
+         /   *       *   \
+        /                 \
+       /______     ________\
+              \   /
+               \ /
+                |
+                |
+        ~  ~  ~ | ~  ~  ~
+</pre>
+      <div class="home-scene-styles" id="scene-styles" role="group" aria-label="Scene style">
+        <button type="button" data-style="christmas-tree" aria-pressed="true">tree</button>
+        <button type="button" data-style="token-rain" aria-pressed="false">rain</button>
+      </div>
+    </section>
+    <section class="home-center">
+      <h2 class="home-title">SpaceLang</h2>
+      <p class="home-tagline">
+        The source language is <code>.sp</code>: token values encoded as runs of
+        spaces. Nothing readable survives a glance; the compiler still does.
+      </p>
+      <nav class="home-links" aria-label="Start here">
+        <a class="home-link" href="/editor">OPT_SP Editor</a>
+        <a class="home-link" href="/studio">Studio</a>
+        <a class="home-link" href="/visualizer">Visualizer</a>
+        <a class="home-link" href="/docs">Documentation</a>
+        <a class="home-link" href="/tutorial">Tutorial</a>
+        <a class="home-link home-link-external" href="https://github.com/DwwLSM/spacelang" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </section>
+    <aside class="home-chat" aria-label="SpaceLang assistant">
+      <!-- #include partials/chat-panel.html -->
+    </aside>
+  </main>
+  <!-- #include partials/llm-settings.html -->
+</body>
+</html>
