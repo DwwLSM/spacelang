@@ -55,7 +55,7 @@ to explore programming-language construction. It provides:
 - An optional browser visualizer, benchmark, and introduction animation.
 
 The package metadata names the distribution `spacelanguage`, currently at
-version `0.2.2`, and the import package `spacelang`. The project requires Python
+version `0.2.3`, and the import package `spacelang`. The project requires Python
 3.10 or later. PyPI provides prebuilt wheels for CPython 3.10–3.14 on x64
 Windows, x86-64 and ARM64 Linux, and universal2 macOS (Intel and Apple Silicon).
 Installing one of these wheels does not require a local compiler. Building the
