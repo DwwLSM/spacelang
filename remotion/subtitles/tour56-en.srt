@@ -1,0 +1,51 @@
+1
+00:00:04,000 --> 00:00:06,067
+This is the source code.
+
+2
+00:00:06,067 --> 00:00:07,933
+Every token is a run of spaces.
+
+3
+00:00:08,000 --> 00:00:11,933
+Python → IR → assembly → .sp
+
+4
+00:00:12,000 --> 00:00:15,933
+One program. Three views.
+
+5
+00:00:16,000 --> 00:00:19,933
+It runs in your browser.
+
+6
+00:00:20,000 --> 00:00:23,933
+Python cannot follow by rule.
+
+7
+00:00:24,000 --> 00:00:27,933
+A model rewrites the mirror.
+
+8
+00:00:28,000 --> 00:00:31,933
+The compiler checks it.
+
+9
+00:00:32,000 --> 00:00:35,933
+Four runtimes.
+
+10
+00:00:36,000 --> 00:00:39,933
+Nothing executes on the server.
+
+11
+00:00:40,000 --> 00:00:43,933
+pip install spacelanguage
+
+12
+00:00:44,000 --> 00:00:47,933
+compiler.exe compiles its own source. No Python at runtime.
+
+13
+00:00:48,000 --> 00:00:51,933
+Tested by running every program twice.
