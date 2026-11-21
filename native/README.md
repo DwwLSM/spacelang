@@ -68,24 +68,35 @@ once (`compile-py native/spc.py native/spc.sp`), bakes the resulting `.sp` into
 a C++ header, and links it with the native VM. From then on `compiler.exe`
 needs neither Python nor any `.sp` file.
 
-### Input language (deliberately small)
+### Input language
 
 | Feature | Example |
 | --- | --- |
+| Functions | `def add(a, b): return a + b`, `return`, `global` |
 | Assignment, arithmetic | `x = 2 + 3 * 4`, `//`, `%`, `**` |
 | Output and conversions | `print(a, b)`, `len`, `str`, `int`, `float`, `bool`, `abs` |
-| Conditions | `if` / `elif` / `else`, `== != < > <= >=`, `and`, `or`, `not` |
-| Loops | `while`, `for i in range(n)`, `for i in range(a, b)` |
-| Strings | `"text"`, `+`, escapes `\n \t \\`, `#` comments |
+| Conditions | `if` / `elif` / `else`, `== != < > <= >=`, `in`, `not in`, `is`, `is not`, `and`, `or`, `not` |
+| Loops | `while`, `for x in ITERABLE` (list, dict, string, `range(...)`), `break`, `continue` |
+| Data | list literals `[1, 2]`, dict literals `{"a": 1}`, indexing `a[i]`, slices `s[1:3]`, method calls `xs.append(v)` |
+| Strings | `"text"`, `+`, escapes `\n \t \r \\`, `#` comments |
+| Assignment targets | names, subscripts (including nested `m[i][j] = v`) |
 
 Not in the input language (reported as `spc: ...`, exit 1, no output file):
-`def`, classes, lists, dicts, tuples, imports, `break`/`continue`, f-strings,
-`and`-chain assignment, tabs for indentation.
+classes, imports, tuples, sets, comprehensions, f-strings, lambdas,
+augmented assignment (`+=`), keyword arguments, tabs for indentation.
 
-Because the *input* language is smaller than the language `spc.py` itself is
-written in, `compiler.exe` cannot yet compile `spc.py` (no functions in the
-input subset). That is the next milestone toward the classic three-stage
-bootstrap; the pieces here are the last two stages of it.
+The input language is now large enough to write the compiler itself, so
+`compiler.exe` bootstraps: it compiles `native/spc.py` and reaches a
+byte-identical fixed point (`stage2 == stage3`, see `SELFHOSTING.md` §8.5).
+Reproduce the whole chain with:
+
+```bash
+py -S tools/bootstrap_check.py
+```
+
+`native/build_compiler.ps1` remains the "stage 0 + embed" step: it produces the
+first native compiler. The fixed-point check builds the second and third
+compiler from the artifacts the first one produces.
 
 ## Verified on this checkout
 

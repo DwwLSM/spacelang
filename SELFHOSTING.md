@@ -52,12 +52,17 @@ Three consequences, in increasing order of impressiveness:
 3. **A compiler written in `.sp` lowers optional `.py` frontend input** — `compiler.exe`
    can contain an `.sp` compiler implementation and, where applicable, accept `.py`,
    lower it to `.sp`, and run or emit the result with no Python installed.
+4. **The compiler compiles itself to a fixed point** — `compiler.exe` compiles
+   `native/spc.py`, a second compiler is built from that artifact, and the two
+   self-produced `.sp` files are byte-identical (`stage2 == stage3`).
 
 Important distinction:
 
 * **Runtime self-hosting** = an execution engine is written in `.sp` and executes `.sp`.
 * **Compiler self-hosting** = a compiler written in `.sp` reads `.sp` source and produces
-  `.sp` or executable artifacts. Status: `AUTHOR_CONFIRMATION_REQUIRED`.
+  `.sp` or executable artifacts. Status: **verified** — `compiler.exe` compiles its own
+  `native/spc.py` source and reaches a byte-identical fixed point (`stage2 == stage3`,
+  see [§8.5](#85-the-fixed-point)).
 
 Everything else — the original compiler, VM, tests, CLI — is untouched except
 for six lines in `spacelang/main.py` (see [§15](#15-merging-into-your-repository)).
@@ -134,12 +139,21 @@ A compiler written in language L must itself be compiled by *something*. The
 standard scheme:
 
 ```
-stage 0:  Python toolchain compiles spc.py  →  spc.sp      (needs Python, once)
-stage 1:  spc.sp (in compiler.exe) compiles program.py → program.sp
-stage 2:  (future) spc.sp compiles spc.py → spc.sp'       (fixed point)
+stage 0:  the Python toolchain compiles spc.py  →  spc1.sp      (needs Python, once)
+stage 1:  compiler1.exe (built from spc1.sp) compiles spc.py  →  spc2.sp   (no Python)
+stage 2:  compiler2.exe (built from spc2.sp) compiles spc.py  →  spc3.sp   (no Python)
+fixed point:  bytes(spc2.sp) == bytes(spc3.sp)
 ```
 
-Stage 0 is exactly what `native/build_compiler.ps1` automates.
+Stage 0 is what `native/build_compiler.ps1` automates; it also links
+`compiler1.exe`. `tools/bootstrap_check.py` runs the whole chain, builds
+`compiler2.exe` from `spc2.sp`, and asserts the fixed point.
+
+The stage-1 and stage-2 compilers are not required to be byte-identical to the
+stage-0 artifact — only to each other. A compiler compiled by itself must
+reproduce itself, i.e. it has to be deterministic: function ids are assigned in
+source order, the name table is numbered by first use, and no timestamp, path
+or hash order may reach the output.
 
 ### 3.4 `__argv__`
 
@@ -191,6 +205,9 @@ native\spvm.exe bootstrap\demos\fib.sp
 # 3. Part 3 — build the SpaceLang compiler and compile/run Python source
 powershell -ExecutionPolicy Bypass -File native/build_compiler.ps1
 native\compiler.exe native\examples\tour.py
+
+# 4. The fixed point — compile the compiler with itself, twice (needs g++, ~30 s)
+py -S tools/bootstrap_check.py
 ```
 
 Expected output, step by step:
@@ -227,9 +244,22 @@ big
 and ok
 not ok
 3 1 1024
+
+# 4
+[stage0] python toolchain -> build/spc1.sp
+  build\spc1.sp: 5,313,084 bytes sha256 8d46...
+[stage1] compiler1.exe native/spc.py -> build/spc2.sp
+  build\spc2.sp: 5,059,599 bytes sha256 9a6a...
+[stage2] compiler2.exe native/spc.py -> build/spc3.sp
+  build\spc3.sp: 5,059,599 bytes sha256 9a6a...
+[fixed-point]
+  OK: spc2.sp == spc3.sp (5,059,599 bytes)
+...
+[result] PASS
 ```
 
-Total time for all three: about 15 seconds, of which 4.7 s is step 1.
+Total time for steps 1–3: about 15 seconds, of which 4.7 s is step 1. Step 4
+rebuilds two native compilers and takes about 30 s.
 
 ---
 
@@ -375,9 +405,9 @@ That script performs the stage-0 bootstrap and then links:
 3. g++ -O2 -std=c++17 -static -o native/compiler.exe native/compiler.cpp
 ```
 
-`compiler.exe` is 5.6 MB (2.9 MB of that is the embedded compiler `.sp` artifact).
-`spc.sp` and `spc_blob.h` are build outputs and gitignored; step 0 replaces
-Python entirely after this point.
+`compiler.exe` is about 8.0 MB (5.3 MB of that is the embedded compiler `.sp`
+artifact). `spc.sp` and `spc_blob.h` are build outputs and gitignored; step 0
+replaces Python entirely after this point.
 
 ### 8.2 Use
 
@@ -393,31 +423,34 @@ With one argument `.sp` source is written next to the source
 
 | Construct | Syntax |
 | --- | --- |
-| assignment | `x = expr` |
+| functions | `def add(a, b): return a + b`, `return`, `global name` |
+| assignment | `x = expr`, `m[i][j] = expr` |
 | arithmetic | `+ - * / // % **`, unary `-` |
-| comparison | `== != < > <= >=` |
+| comparison | `== != < > <= >=`, `in`, `not in`, `is`, `is not` |
 | logic | `and or not` |
-| output/conversion | `print(a, b)`, `len`, `str`, `int`, `float`, `bool`, `abs` |
+| output/conversion | `print(a, b)`, `len`, `str`, `int`, `float`, `bool`, `abs`, `open` |
 | branching | `if` / `elif` / `else` with indentation |
-| loops | `while`, `for i in range(n)`, `for i in range(a, b)` |
-| literals | integers (±32767), `"strings"` with `\n \t \\` |
+| loops | `while`, `for x in ITERABLE`, `break`, `continue`; iterables are lists, dicts, strings and `range(...)` |
+| data | `[1, 2]`, `{"a": 1}`, `a[i]`, `s[1:3]`, `xs.append(v)`, `d.get(k)` |
+| literals | integers (±32767), `"strings"` with `\n \t \r \\`, `None`, `True`, `False` |
 | comments | `# …` |
 
 Rejected with `spc: …` on stdout, exit code 1, and **no output file**:
 
-* `def`, classes, imports
-* lists, dicts, tuples, comprehensions
-* `break`, `continue`
+* classes, imports, lambdas
+* tuples, sets, comprehensions
 * f-strings, `%` formatting
+* augmented assignment (`+=`), keyword arguments
 * tabs for indentation, multiple statements per line
 
 ### 8.4 What happens inside
 
 ```
 program.py
-   │  spc.py: tokenize_line → prepare (indentation) → parse_*
+   │  spc.py: tokenize_line → prepare (indentation + line continuations) → parse_*
    ▼
 AST (dicts: {"k": "bin", "op": "+", "l": …, "r": …})
+   │  collect_functions / function_scope: ids, slots, global names
    │  gen_expr / gen_stmt: emit [op, args…] into INSTR, patch labels
    ▼
 instruction list + name table
@@ -426,9 +459,68 @@ instruction list + name table
 program.sp  ──► spvm_exe's embedded VM ──► output
 ```
 
-The compiler itself is 704 lines and uses the same SpaceLang subset it is
-written in (no classes, no exceptions), which is why it can be compiled to
-`.sp` at all.
+The compiler is about 1,200 lines and uses the same subset it accepts (no
+classes, no exceptions), which is why it can compile itself.
+
+### 8.5 The fixed point
+
+The compiler now accepts the language it is written in, so it compiles itself:
+
+| Stage | Command | Needs Python? |
+| --- | --- | --- |
+| 0 | `py -S -m spacelang.main compile-py native/spc.py build/spc1.sp` | yes, once |
+| 1 | `build/compiler1.exe native/spc.py build/spc2.sp` | no |
+| 2 | `build/compiler2.exe native/spc.py build/spc3.sp` | no |
+
+`compiler1.exe` embeds `spc1.sp`; `compiler2.exe` embeds `spc2.sp`. The fixed
+point is `sha256(spc2.sp) == sha256(spc3.sp)`.
+
+Reproduce the whole chain (and its determinism checks) with:
+
+```powershell
+py -S tools/bootstrap_check.py
+```
+
+Current status on this checkout:
+
+| Artifact | Size | sha256 |
+| --- | ---: | --- |
+| `build/spc1.sp` (stage 0, Python toolchain) | 5,313,084 | `8d46406a…656b6e` |
+| `build/spc2.sp` (compiled by `compiler1.exe`) | 5,059,599 | `9a6a23dc…722dafa` |
+| `build/spc3.sp` (compiled by `compiler2.exe`) | 5,059,599 | `9a6a23dc…722dafa` |
+
+* fixed point: **yes** — `spc2.sp` and `spc3.sp` are byte-identical;
+* determinism: four stage-0 runs (two with `PYTHONHASHSEED=0`, two unset) are
+  byte-identical, and re-running stage 1 and stage 2 reproduces `spc2.sp`
+  and `spc3.sp` exactly;
+* behavior: `compiler2.exe` compiles and runs `native/examples/tour.py` and
+  `flow.py` with the same stdout as CPython, and a self-compiled `spc2.sp`
+  compiles `def add(a, b): return a + b` + `print(add(2, 3))` to a program that
+  prints `5`.
+
+Why the fixed point is reachable:
+
+* `native/spc.py` is written in the subset it accepts: tokenizer, continuation
+  aware `prepare`, recursive-descent parser, static scope analysis, code
+  generator and encoder. `tools/bootstrap_audit.py` reports that the "missing
+  constructs" table is empty.
+* Function ids are allocated in source order starting at 10000, the name table
+  is numbered on first use in emission order, and every container iteration in
+  the compiler follows insertion order. No timestamp, path, random value or
+  hash order reaches the output.
+* The compiler does not have to reproduce the stage-0 (Python) lowering: the
+  stage-1 and stage-2 compilers both use `spc.py`'s own lowering, so once each
+  of them compiles the source correctly the two artifacts coincide.
+
+Caveats:
+
+* `.sp` encodes integers unary, so the self-compiled compiler is about 5 MB and
+  a self-compile takes about 0.8 s in `compiler.exe`; the artifact size is not
+  a bug (see [§10](#10-performance)).
+* `tests/test_bootstrap.py` guards both milestones (self-hosting and the fixed
+  point). `tools/bootstrap_audit.py` is the regression detector for "did the
+  source grow syntax the compiler does not accept?" — keep its missing table
+  empty.
 
 ---
 
@@ -521,6 +613,8 @@ Measured on this machine (Windows 11, CPython 3.13, MinGW g++ 8.1):
 | 20,000-iteration arithmetic loop | Python VM | 375 ms |
 | same | `spvm.exe` | 11 ms |
 | `_t1.py` compile+run | `compiler.exe` | ~0.39 s |
+| `native/spc.py` self-compile (5.06 MB artifact) | `compiler.exe` | ~0.8 s |
+| same | `compiler2.exe` | ~0.75 s |
 
 Why:
 
@@ -531,7 +625,9 @@ Why:
   interpreter: each level costs ~100×.
 
 The 2.8 MB artifact size is not a bug: every user-function call site encodes a
-5-digit function id as that many spaces.
+5-digit function id as that many spaces. The same effect makes the self-compiled
+compiler ~5 MB, and because `.sp` tokenizes by counting spaces, a self-compile
+spends most of its time appending unary-encoded function ids.
 
 ---
 
@@ -543,7 +639,8 @@ The 2.8 MB artifact size is not a bug: every user-function call site encodes a
 | `import spacelang` resolves to another directory | a stale editable install of a different clone shadows the checkout | run subprocesses with `-S` and `PYTHONPATH=<repo root>` (the driver already does); or `pip uninstall` the stale editable install |
 | `EncodingError: token exceeds MAX_LINE (65535)` | integer literal > 32767, **including values produced by constant folding** (`256*256`) | compile with `--compress-source`, or compute the value at run time (`int("65535")`) |
 | `spvm: unsupported opcode 4` | the native runner met `IMPORT` — e.g. you gave it `sp_vm.sp` | run `sp_vm.sp` on the Python VM instead, or extend `spvm.cpp` |
-| `spc: unknown function: foo` | `compiler.exe` only knows the builtin list; user-defined functions are not in its input language | rewrite without `def` for now |
+| `spc: unknown function: foo` | `compiler.exe` resolves calls to builtins and to module-level `def`s in the same file; nested functions and callable values are unsupported | define the function at module level in the same source file |
+| fixed point fails: `spc2.sp != spc3.sp` | the name table or function ids became non-deterministic (hash order, dict iteration, temp naming) | keep ids/names in traversal order; run `py -S tools/bootstrap_check.py` to see the first 20 differing lines |
 | `spc: expected an indented block` | body not indented, or tabs used | indent with 4 spaces |
 | `compiler: … was not written` | the frontend rejected the source; the real message is the `spc:` line above it | fix the source |
 | depth-3 chain never finishes | ~100× per interpreter level | stay at depth 2 |
@@ -557,20 +654,25 @@ The 2.8 MB artifact size is not a bug: every user-function call site encodes a
 
 ### What works today
 
-Repository evidence for runtime and native behavior is listed in the test and native sections. Completion status for new `.sp → .sp` compiler milestones must not be inferred.
+Repository evidence for runtime, native and compiler behavior is listed in the
+test and native sections. The three-stage bootstrap below is verified by
+`tools/bootstrap_check.py` and `tests/test_bootstrap.py`.
 
-- [ ] `.sp → .sp` compiler fixed point
-  - Input language: `.sp`
-  - Produced artifact: equivalent compiler artifact
-  - Status: `AUTHOR_CONFIRMATION_REQUIRED`
-  - Evidence/command: TODO(author)
+- [x] `.sp → .sp` compiler fixed point
+  - Input language: `.py` subset accepted by `native/spc.py` itself
+  - Produced artifact: `build/spc2.sp` / `build/spc3.sp` (byte-identical)
+  - Status: done — self-hosting verified and fixed point reached
+  - Evidence/command: `py -S tools/bootstrap_check.py`; `py -m pytest tests/test_bootstrap.py -q`
 
 ### Optional `.py` frontend roadmap
 
-- [ ] Complete optional `def`, list, and dict frontend syntax where needed.
+- [x] Complete optional `def`, list, and dict frontend syntax where needed.
   - Input language: `.py`
   - Produced artifact: lowered `.sp`
-  - Status: `AUTHOR_CONFIRMATION_REQUIRED`
-  - Evidence/command: TODO(author)
+  - Status: done — `native/spc.py` accepts every construct it is written in
+  - Evidence/command: `py -S tools/bootstrap_audit.py` (section 2, missing
+    constructs, is empty)
 
-This is optional sugar completeness work. It does not block the `.sp → .sp` self-hosting path.
+This was optional sugar completeness work, but it is also what unblocked the
+`.sp → .sp` self-hosting path: without `def`, lists, dicts, subscripts and
+method calls the compiler cannot read its own source.
