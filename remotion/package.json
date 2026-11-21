@@ -26,6 +26,7 @@
     "dev": "remotion studio",
     "build": "remotion bundle",
     "render": "remotion render src/index.ts SpaceLangIntro out/spacelang-intro-en.mp4",
+    "render:self-hosting": "remotion render src/index.ts SpaceLangSelfHosting out/spacelang-self-hosting.mp4",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc"
   },

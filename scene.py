@@ -992,21 +992,30 @@ class TribonacciVivid(Scene):
             "        a, b, c = b, c, a + b + c",
             "    return c",
         )
-        code = VGroup(
-            *[
-                Text(
-                    line or " ",
-                    font="DejaVu Sans Mono",
-                    font_size=19,
-                    color=TEXT,
+        code_items = []
+        for line in code_lines:
+            if not line:
+                code_items.append(
+                    Rectangle(
+                        width=0.01,
+                        height=0.21,
+                        stroke_width=0,
+                        fill_opacity=0,
+                    )
                 )
-                for line in code_lines
-            ]
-        ).arrange(DOWN, aligned_edge=LEFT, buff=0.17)
+                continue
+            text = Text(
+                line,
+                font="DejaVu Sans Mono",
+                font_size=17,
+                color=TEXT,
+            )
+            code_items.append(text)
+        code = VGroup(*code_items).arrange(DOWN, aligned_edge=LEFT, buff=0.24)
         code_panel = RoundedRectangle(
             corner_radius=0.09,
             width=6.1,
-            height=5.7,
+            height=6.05,
             fill_color=PANEL,
             fill_opacity=1,
             stroke_color=PANEL_EDGE,
@@ -1122,7 +1131,7 @@ class TribonacciVivid(Scene):
                 font="DejaVu Sans Mono",
                 font_size=16,
                 color=GOLD,
-            ).move_to(RIGHT * 2.15 + DOWN * 0.05)
+            ).move_to(RIGHT * 3.45 + DOWN * 0.05)
 
             if index <= 6:
                 new_dot = Text(
