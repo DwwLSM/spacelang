@@ -11,6 +11,8 @@
  * its full width until the assistant is asked for.
  */
 
+import { llmHeaders } from "./llm-settings.js";
+
 const HISTORY_LIMIT = 40;
 const SEND_HISTORY = 12;
 
@@ -195,7 +197,7 @@ export function initChatPanel({ root, page, drawer = false }) {
     try {
       const response = await fetch("api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...llmHeaders() },
         body: JSON.stringify({ page, messages: messages.slice(-SEND_HISTORY) }),
       });
       const raw = await response.text();

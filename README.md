@@ -162,12 +162,12 @@ derived by rule; it is marked `stale` after such an edit and must be rewritten
 by a model. That is the only AI-assisted step in the tool: it is opt-in, it runs
 against an OpenAI-compatible endpoint you configure, and its answer is only
 accepted when `compile_py(answer)` reproduces the assembly instruction for
-instruction. See `docs/studio/README.md` for setup and the design notes in
-`docs/studio/PLAN.md`.
+instruction. See the [Studio guide](docs/studio/README.md), [design plan](docs/studio/PLAN.md),
+and [implementation prompt](docs/studio/PROMPT.md).
 
 ```bash
 spacelang-opt-sp --port 8000 --llm-api-key-file ~/.config/spacelang/llm-key
-# then open http://127.0.0.1:8000/studio
+# open http://127.0.0.1:8000/ for the home page, or /studio for the workspace
 ```
 The interface assets and requests use paths relative to the app, so the
 debugger also works when served behind a URL path prefix (such as a hosted

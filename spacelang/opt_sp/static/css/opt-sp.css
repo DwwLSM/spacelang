@@ -958,6 +958,39 @@ button:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
 }
 .app-dialog-error[hidden] { display: none; }
 
+.llm-field {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .5rem;
+  font-size: .78rem;
+  color: var(--muted);
+}
+
+.llm-modes {
+  margin: .9rem 0 .5rem;
+  padding: .5rem .7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.llm-modes legend { padding: 0 .3rem; font-size: .7rem; color: var(--muted); }
+.llm-modes label { margin-right: .9rem; font-size: .78rem; }
+
+.llm-hint {
+  margin: .35rem 0 0;
+  font-size: .68rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.llm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: .9rem;
+}
+
 .new-file-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

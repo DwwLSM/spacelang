@@ -42,6 +42,34 @@ python tools/build_static.py
 spacelang-opt-sp --port 8000
 ```
 
+Open the home page at `http://127.0.0.1:8000/`, or open the Studio directly at
+`http://127.0.0.1:8000/studio`.
+
+You can also start the server from Python:
+
+```python
+from spacelang import opt_sp
+
+opt_sp.server()
+```
+
+This uses port `8000`, opens the home page in your browser, and runs until you
+press **Ctrl+C**. Pass a different port with `opt_sp.server(port=8001)`. When
+using a source checkout, run `python tools/build_static.py` first. The Python
+server uses the same environment variables and `.env.local` defaults described
+below. To pass a server-wide API key directly in Python, provide it in the
+`llm` mapping:
+
+```python
+from spacelang import opt_sp
+
+opt_sp.server(llm={"api_key": "YOUR_API_KEY"})
+```
+
+Replace the placeholder locally and do not commit a real key. You can also add
+`"base_url"` and `"model"` to the mapping to select another endpoint. Browser
+LLM settings override this server configuration for requests from that browser.
+
 If the page loads but nothing runs, `http://127.0.0.1:8000/__opt_sp/health`
 answers with a per-asset check, and the page shows a banner naming what is
 missing. The usual cause is a checkout where `tools/build_static.py` has not run
@@ -103,9 +131,17 @@ LITELLM_MODEL=ModelName
 LITELLM_API_KEY=...
 ```
 
-Precedence: settings dialog > command line > environment/.env.local > defaults.
-A key typed into the dialog lives in this browser's `localStorage`, so use it for
-local work only.
+Set `LITELLM_API_KEY` in the environment or in `.env.local` in the directory
+where you start the server to provide its default key. Alternatively, pass
+`--llm-api-key-file PATH` when starting the server; the first non-empty line in
+that file is used. Keep key files and `.env.local` out of source control.
+
+Precedence for browser requests: this browser's settings dialog > Python
+`llm=` argument or command-line options > environment or `.env.local` >
+built-in defaults. The dialog's key is stored in this browser's `localStorage`;
+it overrides the server default only for requests from that browser. Use it
+and the server only for local work unless you have configured appropriate
+access controls.
 
 ### Modes
 
