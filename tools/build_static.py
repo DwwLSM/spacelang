@@ -138,7 +138,7 @@ def _copy_spacelang_modules() -> None:
     manifest = []
     for source in sorted(PACKAGE.glob("*.py")):
         if source.name == "__init__.py":
-            contents = "__version__ = '0.2.4'\n"
+            contents = "__version__ = '0.2.5'\n"
         else:
             contents = source.read_text(encoding="utf-8")
         target = destination / source.name
