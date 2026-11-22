@@ -35,14 +35,16 @@ export const Terminal: React.FC<{
     <div
       style={{
         alignItems: "center",
-        backgroundColor: "#172A30",
-        borderBottom: `1px solid ${colors.edge}88`,
+        background:
+          "linear-gradient(110deg, #1a3037 0%, #172a30 52%, #14252b 100%)",
+        borderBottom: `1px solid ${colors.edge}AA`,
         boxSizing: "border-box",
         display: "flex",
         flexShrink: 0,
-        gap: 10,
-        height: 46,
-        padding: "0 16px",
+        gap: 9,
+        height: 48,
+        padding: "0 18px",
+        boxShadow: "inset 0 1px #ffffff08",
       }}
     >
       <span style={{ backgroundColor: "#FF7180", borderRadius: 99, height: 10, width: 10 }} />
@@ -52,7 +54,7 @@ export const Terminal: React.FC<{
         style={{
           color: colors.text,
           fontFamily: MONO_FAMILY,
-          fontSize: 15,
+          fontSize: 14,
           fontWeight: 700,
           letterSpacing: 0.5,
           marginLeft: 10,
@@ -68,7 +70,7 @@ export const Terminal: React.FC<{
           style={{
             color: colors.muted,
             fontFamily: MONO_FAMILY,
-            fontSize: 14,
+            fontSize: 13,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -83,6 +85,7 @@ export const Terminal: React.FC<{
     <div
       style={{
         backgroundColor: colors.panelDark,
+        boxShadow: "inset 0 1px 0 #ffffff04",
         flex: 1,
         minHeight: 0,
         overflow: "hidden",

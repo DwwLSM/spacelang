@@ -1,8 +1,12 @@
 import type { FC } from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
-import { CAPTIONS, FADE_FRAMES, VIDEO, type RelativeCaptionCue } from "./script";
-import { ramp } from "./theme";
-import { Scene00Handoff } from "./scenes/Scene00Handoff";
+import {
+  CAPTIONS,
+  TRANSITION_FRAMES,
+  VIDEO,
+  type RelativeCaptionCue,
+} from "./script";
+import { Scene00Hook } from "./scenes/Scene00Hook";
 import { Scene01Source } from "./scenes/Scene01Source";
 import { Scene02Pipeline } from "./scenes/Scene02Pipeline";
 import { Scene03Studio } from "./scenes/Scene03Studio";
@@ -21,34 +25,36 @@ import type { SceneProps } from "./scenes/types";
 export type SceneSpec = {
   /** Stable name, used by the status notes. */
   name: string;
-  /** 0 for the reserved handoff, 1-13 for the storyboard scenes. */
+  /** 0 for the hook, 1-13 for the remaining storyboard scenes. */
   index: number;
   start: number;
   duration: number;
-  /** 00 -> 01 and 10 -> 11 fade in instead of hard-cutting. */
-  fadeIn: boolean;
   component: FC<SceneProps>;
   captions: readonly RelativeCaptionCue[];
 };
 
-const sceneStart = (index: number): number => index * VIDEO.sceneFrames;
+const sceneDuration = (index: number): number =>
+  VIDEO.sceneDurations[index] ?? VIDEO.sceneFrames;
+
+const sceneStart = (index: number): number =>
+  VIDEO.sceneDurations
+    .slice(0, index)
+    .reduce((total, duration) => total + duration, 0);
 
 export const SCENES: readonly SceneSpec[] = [
   {
-    name: "handoff",
+    name: "hook",
     index: 0,
     start: sceneStart(0),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
-    component: Scene00Handoff,
-    captions: [],
+    duration: sceneDuration(0),
+    component: Scene00Hook,
+    captions: CAPTIONS[0],
   },
   {
     name: "source",
     index: 1,
     start: sceneStart(1),
-    duration: VIDEO.sceneFrames,
-    fadeIn: true,
+    duration: sceneDuration(1),
     component: Scene01Source,
     captions: CAPTIONS[1],
   },
@@ -56,8 +62,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "pipeline",
     index: 2,
     start: sceneStart(2),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(2),
     component: Scene02Pipeline,
     captions: CAPTIONS[2],
   },
@@ -65,8 +70,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "studio",
     index: 3,
     start: sceneStart(3),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(3),
     component: Scene03Studio,
     captions: CAPTIONS[3],
   },
@@ -74,8 +78,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "run",
     index: 4,
     start: sceneStart(4),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(4),
     component: Scene04Run,
     captions: CAPTIONS[4],
   },
@@ -83,8 +86,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "stale",
     index: 5,
     start: sceneStart(5),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(5),
     component: Scene05Stale,
     captions: CAPTIONS[5],
   },
@@ -92,8 +94,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "sync",
     index: 6,
     start: sceneStart(6),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(6),
     component: Scene06Sync,
     captions: CAPTIONS[6],
   },
@@ -101,8 +102,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "verify",
     index: 7,
     start: sceneStart(7),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(7),
     component: Scene07Verify,
     captions: CAPTIONS[7],
   },
@@ -110,8 +110,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "engines",
     index: 8,
     start: sceneStart(8),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(8),
     component: Scene08Engines,
     captions: CAPTIONS[8],
   },
@@ -119,8 +118,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "health",
     index: 9,
     start: sceneStart(9),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(9),
     component: Scene09Health,
     captions: CAPTIONS[9],
   },
@@ -128,8 +126,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "install",
     index: 10,
     start: sceneStart(10),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(10),
     component: Scene10Install,
     captions: CAPTIONS[10],
   },
@@ -137,8 +134,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "bootstrap",
     index: 11,
     start: sceneStart(11),
-    duration: VIDEO.sceneFrames,
-    fadeIn: true,
+    duration: sceneDuration(11),
     component: Scene11Bootstrap,
     captions: CAPTIONS[11],
   },
@@ -146,8 +142,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "tests",
     index: 12,
     start: sceneStart(12),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(12),
     component: Scene12Tests,
     captions: CAPTIONS[12],
   },
@@ -155,8 +150,7 @@ export const SCENES: readonly SceneSpec[] = [
     name: "close",
     index: 13,
     start: sceneStart(13),
-    duration: VIDEO.sceneFrames,
-    fadeIn: false,
+    duration: sceneDuration(13),
     component: Scene13Close,
     captions: CAPTIONS[13] ?? [],
   },
@@ -166,12 +160,15 @@ export const TOTAL_FRAMES = VIDEO.frames;
 
 /** Absolute caption cues for the burned-in subtitle band. */
 export const CAPTION_CUES = SCENES.flatMap((scene) =>
-  scene.captions.map((cue) => ({
-    from: scene.start + cue.from,
-    to: scene.start + cue.to,
-    lines: cue.lines,
-    small: cue.small,
-  })),
+  scene.captions.map((cue) => {
+    const scale = scene.duration / VIDEO.sceneFrames;
+    return {
+      from: scene.start + cue.from * scale,
+      to: scene.start + cue.to * scale,
+      lines: cue.lines,
+      small: cue.small,
+    };
+  }),
 );
 
 export const sceneIndexAt = (frame: number): number => {
@@ -184,30 +181,92 @@ export const sceneIndexAt = (frame: number): number => {
   return index;
 };
 
-/**
- * Scene assembly: one full-frame layer per scene. Frames 0-119 render the
- * black handoff placeholder; 120-1680 walk the 13 storyboard scenes.
- *
- * Scenes 01 and 11 fade in over FADE_FRAMES. The fade starts at
- * FADE_FLOOR (not 0) so the incoming scene is already readable on its first
- * frame -- frame 120 and frame 1320 stay useful review stills -- while
- * frames 0-119 remain pure black.
- */
-const FADE_FLOOR = 0.8;
+const smoothstep = (value: number): number => value * value * (3 - 2 * value);
 
+export const sceneLayerOpacity = (frame: number): number => {
+  const index = sceneIndexAt(frame);
+  const scene = SCENES[index];
+  const fadeFrames = TRANSITION_FRAMES / 2;
+  const elapsed = frame - scene.start;
+
+  if (index > 0 && elapsed < fadeFrames) {
+    return smoothstep(Math.max(0, elapsed / fadeFrames));
+  }
+
+  const next = SCENES[index + 1];
+  if (next && frame >= next.start - fadeFrames) {
+    const progress = (frame - (next.start - fadeFrames)) / fadeFrames;
+    return 1 - smoothstep(Math.max(0, Math.min(1, progress)));
+  }
+
+  return 1;
+};
+
+/**
+ * Dissolve adjacent scenes with a gentle scale settle rather than moving the
+ * entire composition like a slide.
+ */
 export const TourSceneLayer: React.FC = () => {
   const frame = useCurrentFrame();
   const index = sceneIndexAt(frame);
   const scene = SCENES[index];
   const rel = frame - scene.start;
-  const fade = scene.fadeIn
-    ? FADE_FLOOR + (1 - FADE_FLOOR) * ramp(rel, 0, FADE_FRAMES)
-    : 1;
+  const sceneFrame = (rel * VIDEO.sceneFrames) / scene.duration;
   const Current = scene.component;
+  const currentFrame = Math.max(0, Math.min(VIDEO.sceneFrames - 1, sceneFrame));
+
+  const halfTransition = TRANSITION_FRAMES / 2;
+  const incoming =
+    index > 0 && rel < halfTransition ? scene : SCENES[index + 1];
+  const transitionStart = incoming
+    ? incoming.start - halfTransition
+    : Number.POSITIVE_INFINITY;
+  const transitionEnd = incoming
+    ? incoming.start + halfTransition
+    : Number.NEGATIVE_INFINITY;
+
+  if (incoming && frame >= transitionStart && frame < transitionEnd) {
+    const linearProgress = Math.max(
+      0,
+      Math.min(1, (frame - transitionStart) / TRANSITION_FRAMES),
+    );
+    const progress = smoothstep(linearProgress);
+    const Incoming = incoming.component;
+    const incomingFrame = Math.max(
+      0,
+      Math.min(
+        VIDEO.sceneFrames - 1,
+        ((frame - incoming.start) * VIDEO.sceneFrames) / incoming.duration,
+      ),
+    );
+    const Previous = SCENES[incoming.index - 1].component;
+    const previousFrame = VIDEO.sceneFrames - 1;
+
+    return (
+      <AbsoluteFill>
+        <AbsoluteFill
+          style={{
+            opacity: 1 - progress,
+            transform: `scale(${1 + progress * 0.008})`,
+          }}
+        >
+          <Previous frame={previousFrame} />
+        </AbsoluteFill>
+        <AbsoluteFill
+          style={{
+            opacity: progress,
+            transform: `scale(${1.012 - progress * 0.012})`,
+          }}
+        >
+          <Incoming frame={incomingFrame} />
+        </AbsoluteFill>
+      </AbsoluteFill>
+    );
+  }
 
   return (
-    <AbsoluteFill style={{ opacity: fade }}>
-      <Current frame={Math.max(0, Math.min(scene.duration - 1, rel))} />
+    <AbsoluteFill style={{ opacity: sceneLayerOpacity(frame) }}>
+      <Current frame={currentFrame} />
     </AbsoluteFill>
   );
 };

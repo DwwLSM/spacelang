@@ -7,11 +7,17 @@
  * subtitle band never wraps past `MAX_CAPTION_CHARS`.
  */
 
+const SCENE_DURATIONS = [
+  90, 120, 180, 120, 120, 120, 120, 150, 120, 90, 90, 120, 120, 120,
+] as const;
+
 export const VIDEO = {
   width: 1920,
   height: 1080,
   fps: 30,
-  frames: 1680,
+  frames: SCENE_DURATIONS.reduce((total, duration) => total + duration, 0),
+  sceneDurations: SCENE_DURATIONS,
+  /** Scene components animate against this normalized frame count. */
   sceneFrames: 120,
   sceneCount: 13,
 } as const;
@@ -19,8 +25,8 @@ export const VIDEO = {
 /** Hard limit for one burned-in caption line at 1920x1080. */
 export const MAX_CAPTION_CHARS = 42;
 
-/** Frames the incoming scene fades in for 00 -> 01 and 10 -> 11. */
-export const FADE_FRAMES = 6;
+/** Duration of each eased dissolve transition at 30 fps. */
+export const TRANSITION_FRAMES = 16;
 
 export type RelativeCaptionCue = {
   /** First frame of the cue, relative to the scene start. */
@@ -52,17 +58,17 @@ type BootstrapCopy = {
 
 export const BOOTSTRAP_COPY: Record<BootstrapStatus, BootstrapCopy> = {
   "fixed-point": {
-    main: ["compiler.exe compiles its own source.", "No Python at runtime."],
-    small: "stage2 == stage3",
+    main: ["compiler.exe compiles itself. Verified fixed point. No Python."],
+    small: "verified fixed point · experimental",
     tone: "green",
   },
   "self-hosting": {
-    main: ["compiler.exe compiles its own source.", "No Python at runtime."],
+    main: ["compiler.exe compiles itself. Fixed point pending. No Python."],
     small: "not yet fixed point",
     tone: "gold",
   },
   none: {
-    main: ["compiler.exe compiles a Python subset.", "No Python at runtime."],
+    main: ["compiler.exe compiles a Python subset. Not yet self-compiling."],
     small: "not yet self-compiling",
     tone: "red",
   },
@@ -83,35 +89,91 @@ export const PROGRAM = {
     "print(double(22))",
   ],
   spasm: [
-    "DEF 10000 1",
-    "LOAD_LOCAL 0",
-    "PUSH_INT 2",
-    "OP 3",
-    "RET",
-    "PUSH_INT 22",
-    "STORE_GLOBAL __spacelang_temp_0",
-    "LOAD_GLOBAL __spacelang_temp_0",
-    "CALL 10000 1",
-    "CALL 0 1",
-    "STACK 3",
-    "HALT",
+    ".name __spacelang_temp_0=0",
+    "DEF 10000 1 ; line=1 spaces=17,10000,1",
+    "LOAD_LOCAL 0 ; line=2 spaces=20,0",
+    "PUSH_INT 2 ; line=2 spaces=7,4",
+    "OP 3 ; line=2 spaces=5,3",
+    "RET ; line=2 spaces=18",
+    "PUSH_INT 0 ; line=1 spaces=7,0",
+    "RET ; line=1 spaces=18",
+    "PUSH_INT 22 ; line=4 spaces=7,44",
+    "STORE_GLOBAL __spacelang_temp_0 ; line=4 spaces=10,0",
+    "LOAD_GLOBAL __spacelang_temp_0 ; line=4 spaces=9,0",
+    "CALL 10000 1 ; line=4 spaces=1,10000,1",
+    "CALL 0 1 ; line=4 spaces=1,0,1",
+    "STACK 3 ; line=4 spaces=6,3",
+    "HALT ; line=0 spaces=29",
   ],
   /** Printed output of `print(double(22))`. */
   output: "44",
 } as const;
 
-/** One trace step of the program above, as the studio panels show it. */
+/** State snapshots from tracing PROGRAM.py with the in-browser VM. */
 export const TRACE = [
-  { ip: "PUSH_INT 22", stack: ["22"], call: [], printed: [] },
-  { ip: "STORE_GLOBAL __spacelang_temp_0", stack: [], call: [], printed: [] },
-  { ip: "LOAD_GLOBAL __spacelang_temp_0", stack: ["22"], call: [], printed: [] },
-  { ip: "CALL 10000 1", stack: [], call: ["double(value=22)"], printed: [] },
-  { ip: "LOAD_LOCAL 0", stack: ["22"], call: ["double(value=22)"], printed: [] },
-  { ip: "PUSH_INT 2", stack: ["22", "2"], call: ["double(value=22)"], printed: [] },
-  { ip: "OP 3", stack: ["44"], call: ["double(value=22)"], printed: [] },
-  { ip: "RET", stack: ["44"], call: [], printed: [] },
-  { ip: "CALL 0 1", stack: [], call: [], printed: ["44"] },
-  { ip: "HALT", stack: [], call: [], printed: ["44"] },
+  { instruction: "DEF 10000", sourceLine: 1, stack: [], call: [], output: "" },
+  {
+    instruction: "PUSH_INT 22",
+    sourceLine: 4,
+    stack: [{ type: "int", repr: "22" }],
+    call: [],
+    output: "",
+  },
+  { instruction: "STORE_GLOBAL 0", sourceLine: 4, stack: [], call: [], output: "" },
+  {
+    instruction: "LOAD_GLOBAL 0",
+    sourceLine: 4,
+    stack: [{ type: "int", repr: "22" }],
+    call: [],
+    output: "",
+  },
+  {
+    instruction: "CALL 10000",
+    sourceLine: 4,
+    stack: [],
+    call: [{ func: "func_10000", locals: [{ name: "local_0", repr: "22" }] }],
+    output: "",
+  },
+  {
+    instruction: "LOAD_LOCAL 0",
+    sourceLine: 2,
+    stack: [{ type: "int", repr: "22" }],
+    call: [{ func: "func_10000", locals: [{ name: "local_0", repr: "22" }] }],
+    output: "",
+  },
+  {
+    instruction: "PUSH_INT 2",
+    sourceLine: 2,
+    stack: [
+      { type: "int", repr: "22" },
+      { type: "int", repr: "2" },
+    ],
+    call: [{ func: "func_10000", locals: [{ name: "local_0", repr: "22" }] }],
+    output: "",
+  },
+  {
+    instruction: "OP 3",
+    sourceLine: 2,
+    stack: [{ type: "int", repr: "44" }],
+    call: [{ func: "func_10000", locals: [{ name: "local_0", repr: "22" }] }],
+    output: "",
+  },
+  {
+    instruction: "RET",
+    sourceLine: 2,
+    stack: [{ type: "int", repr: "44" }],
+    call: [],
+    output: "",
+  },
+  {
+    instruction: "CALL 0",
+    sourceLine: 4,
+    stack: [{ type: "NoneType", repr: "None" }],
+    call: [],
+    output: "44\n",
+  },
+  { instruction: "STACK 3", sourceLine: 4, stack: [], call: [], output: "44\n" },
+  { instruction: "HALT", sourceLine: null, stack: [], call: [], output: "44\n" },
 ] as const;
 
 /** Decoded token stream of the `.sp` format, from the worked example. */
@@ -188,15 +250,6 @@ export const STUDIO = {
   stepLabel: (step: number, total: number) => `Step ${step} / ${total}`,
 } as const;
 
-/** `spasm` pane lines annotated the way the studio prints them. */
-export const SPASM_ANNOTATED = [
-  "DEF 10000 1  line=1 spaces=17,10000,1",
-  "LOAD_LOCAL 0  line=2 spaces=20,0",
-  "PUSH_INT 2  line=2 spaces=7,4",
-  "OP 3  line=2 spaces=5,3",
-  "RET  line=2 spaces=18",
-] as const;
-
 /* ------------------------------------------------------------------ */
 /* Scenes 05-07: stale mirror, AI rewrite, compiler verification        */
 /* ------------------------------------------------------------------ */
@@ -225,16 +278,15 @@ export const STALE = {
 } as const;
 
 export const SYNC = {
-  model: "DeepSeek",
+  model: "Socrates · default",
   title: "Sync with AI",
-  sent: ["py", "spasm"],
+  sent: ["Python mirror", "edited assembly"],
   kept: ".sp never leaves the machine",
-  latency: "0.4 s",
-  verified: "mirror verified · 20 output tokens",
-  rejected: "Mirror rejected at instruction 7",
+  verified: "verified locally",
+  rejected: "Mirror rejected: instruction mismatch",
   needs: 'needs "OP 2"',
   got: 'got "OP 3"',
-  formula: "compile_py(answer) == decode(sp)",
+  formula: "compile_py(answer) == assemble(spasm)",
   accepted: "accepted",
   refused: "refused",
 } as const;
@@ -247,37 +299,33 @@ export const ENGINES = [
   {
     name: "spacelang.vm_py.VM",
     kind: "Python reference VM",
-    tag: "CPython",
-    figure: "1×",
-    figureNote: "baseline",
-    detail: "reference semantics",
+    tag: "CPython · reference",
+    role: "Reference",
+    detail: "readable Python implementation",
     tone: "cyan",
   },
   {
     name: "native/spvm.exe",
     kind: "Native runner",
-    tag: "C++17 · no Python",
-    figure: "32×",
-    figureNote: "vs Python VM",
-    detail: "runs .sp directly",
+    tag: "C++17 · experimental",
+    role: "Native",
+    detail: "Python-free .sp runner",
     tone: "green",
   },
   {
     name: "bootstrap/sp_vm.sp",
     kind: "Self-hosted VM",
-    tag: "SpaceLang",
-    figure: "depth 2",
-    figureNote: "2.8 MB of spaces",
-    detail: "a VM written in .sp",
+    tag: "SpaceLang · experimental",
+    role: "Self-hosted",
+    detail: "VM written in .sp",
     tone: "purple",
   },
   {
     name: "csrc/vm.cpp",
-    kind: "C++ engine",
-    tag: "pybind11",
-    figure: "8×",
-    figureNote: "on call-heavy code",
-    detail: "CPython C-API dispatch",
+    kind: "C++ extension",
+    tag: "pybind11 · experimental",
+    role: "Extension",
+    detail: "native engine exposed to CPython",
     tone: "gold",
   },
 ] as const;
@@ -289,25 +337,15 @@ export const ENGINES = [
 export const HEALTH = {
   url: "127.0.0.1:8000/__opt_sp/health",
   endpoint: "GET /__opt_sp/health",
-  checks: ["ok: true", "assets: 4 / 4"],
-  panels: [
-    {
-      title: "Pyodide runtime",
-      files: ["pyodide/pyodide.js", "pyodide/python_stdlib.zip"],
-      meta: "loaded once, then cached by the browser",
-    },
-    {
-      title: "SpaceLang package",
-      files: ["spacelang_pkg/manifest.json"],
-      meta: "pinned to the installed package",
-    },
-    {
-      title: "Studio page",
-      files: ["studio.html"],
-      meta: "the three-pane debugger page",
-    },
+  checks: [
+    ["pyodide_js", true],
+    ["python_stdlib", true],
+    ["spacelang_pkg", true],
+    ["studio_page", true],
   ],
-  note: "static files only · execution happens in the browser",
+  hint: null,
+  policy: "loopback clients only",
+  note: "static-file checks only · Python executes in the browser via Pyodide",
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -315,20 +353,20 @@ export const HEALTH = {
 /* ------------------------------------------------------------------ */
 
 export const INSTALL = {
-  pip: "pip install spacelanguage",
-  pipOutput: [
-    "Collecting spacelanguage",
-    "Downloading spacelanguage-0.2.3-cp313-cp313-win_amd64.whl",
-    "Installing collected packages: spacelanguage",
-    "Successfully installed spacelanguage-0.2.3",
-  ],
-  serve: "spacelang-opt-sp --port 8000",
-  serveOutput: [
-    "OPT_SP running at http://127.0.0.1:8000",
-    "health ok · all browser assets present",
-    "Stop with Ctrl+Alt+Q",
-  ],
+  pip: "python -m pip install spacelanguage",
   python: "Python 3.10+",
+  serve: "spacelang-opt-sp --port 8000",
+  host: "127.0.0.1:8000",
+  server: "ThreadingHTTPServer",
+  launch: "opens http://127.0.0.1:8000/",
+  studio: "GET /studio → studio.html",
+  files: ["css/opt-sp.css?v=10", "css/studio.css?v=10", "js/app.js?v=10"],
+  kernel: [
+    "js/spacelang-kernel.js",
+    "pyodide/pyodide.js",
+    "spacelang_pkg/manifest.json",
+  ],
+  behavior: "Python executes in the browser via Pyodide",
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -371,13 +409,11 @@ export const BOOTSTRAP = {
 /* ------------------------------------------------------------------ */
 
 export const CI = {
-  tests: 297,
-  testsLabel: "tests on CI",
   os: ["Linux", "macOS", "Windows"],
   runners: ["ubuntu-latest", "macos-latest", "windows-latest"],
   pythons: ["3.10", "3.11", "3.12", "3.13", "3.14"],
   matrix: "3 OS × 5 Python",
-  differential: "differential: py vs cpp",
+  differential: "Python VM ↔ C++ VM",
   command: "python -m pytest -q",
 } as const;
 
@@ -414,19 +450,27 @@ export const REPO = {
 /* ------------------------------------------------------------------ */
 
 export const CAPTIONS: Readonly<Record<number, readonly RelativeCaptionCue[]>> = {
+  0: [{ from: 0, to: 118, lines: ["A program encoded as spaces."] }],
   1: [
-    { from: 0, to: 62, lines: ["This is the source code."] },
-    { from: 62, to: 118, lines: ["Every token is a run of spaces."] },
+    { from: 0, to: 62, lines: ["Every token is stored as spaces."] },
+    { from: 62, to: 118, lines: ["Space counts encode integer tokens."] },
   ],
-  2: [{ from: 0, to: 118, lines: ["Python → IR → assembly → .sp"] }],
+  2: [{ from: 0, to: 118, lines: ["Source becomes executable instructions."] }],
   3: [{ from: 0, to: 118, lines: ["One program. Three views."] }],
-  4: [{ from: 0, to: 118, lines: ["It runs in your browser."] }],
-  5: [{ from: 0, to: 118, lines: ["Python cannot follow by rule."] }],
-  6: [{ from: 0, to: 118, lines: ["A model rewrites the mirror."] }],
-  7: [{ from: 0, to: 118, lines: ["The compiler checks it."] }],
-  8: [{ from: 0, to: 118, lines: ["Four runtimes."] }],
-  9: [{ from: 0, to: 118, lines: ["Nothing executes on the server."] }],
-  10: [{ from: 0, to: 118, lines: ["pip install spacelanguage"] }],
-  11: [{ from: 0, to: 118, lines: bootstrap.main, small: bootstrap.small }],
-  12: [{ from: 0, to: 118, lines: ["Tested by running every program twice."] }],
+  4: [{ from: 0, to: 118, lines: ["Step through execution in your browser."] }],
+  5: [{ from: 0, to: 118, lines: ["An assembly edit makes the mirror stale."] }],
+  6: [{ from: 0, to: 118, lines: ["A model proposes; local code verifies."] }],
+  7: [{ from: 0, to: 118, lines: ["Only matching instructions are accepted."] }],
+  8: [{ from: 0, to: 118, lines: ["Four runtimes. One language."] }],
+  9: [{ from: 0, to: 118, lines: ["Browser executes; server serves files."] }],
+  10: [{ from: 0, to: 118, lines: ["Install the CLI and run locally."] }],
+  11: [{ from: 0, to: 118, lines: bootstrap.main }],
+  12: [
+    {
+      from: 0,
+      to: 118,
+      lines: ["CI spans Linux, macOS, Windows; Python 3.10–3.14."],
+    },
+  ],
+  13: [{ from: 0, to: 118, lines: ["Read the code. Try SpaceLang."] }],
 };

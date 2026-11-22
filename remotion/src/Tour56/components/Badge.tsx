@@ -27,18 +27,20 @@ export const Badge: React.FC<{
     <span
       style={{
         alignItems: "center",
-        backgroundColor: solid ? color : `${color}1A`,
-        border: `1px solid ${color}99`,
-        borderRadius: 8,
+        background: solid
+          ? `linear-gradient(135deg, ${color}, ${color}D9)`
+          : `linear-gradient(135deg, ${color}1C, ${color}0C)`,
+        border: `1px solid ${color}88`,
+        borderRadius: 7,
         boxSizing: "border-box",
         color: solid ? colors.background : color,
         display: "inline-flex",
         fontFamily: MONO_FAMILY,
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: 700,
-        letterSpacing: 1,
+        letterSpacing: 0.8,
         lineHeight: 1,
-        padding: "7px 11px",
+        padding: "6px 10px",
         textTransform: "uppercase",
         whiteSpace: "nowrap",
         ...style,

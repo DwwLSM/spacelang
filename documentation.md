@@ -1070,13 +1070,14 @@ manim -ql scene.py SpacelangIntroEnglishWithSubtitle
 The output is written under Manim's `media/` directory, which is ignored by
 Git. Refer to the official Manim installation guide for system dependencies.
 
-The separate `remotion/` project provides a 60-second English introduction
-with burned-in subtitles and an SRT sidecar, while preserving the Manim scenes.
-Its visual beats move from source and compiler to one stack execution, an exact
-`.sp` token walkthrough, the OPT_SP trace, and a one-pass comparison of both
-VMs. From that directory, run `npm ci` and `npm run dev` to preview, or
-`npm run render` to render an MP4 under `remotion/out/`. See
-`remotion/README.md` for Node.js requirements and details.
+The separate `remotion/` project preserves the Manim scenes and provides both
+a 60-second English introduction and a 56-second engineering tour. The tour
+opens on whitespace-encoded source, then covers the compiler, debugger,
+verified mirror sync, runtime implementations, self-hosting, and CI. From that
+directory, run `npm ci` and `npm run dev` to preview; use `npm run render` for
+the introduction or `npm run render:tour` for the tour. Both MP4s are written
+under `remotion/out/`. See `remotion/README.md` for Node.js requirements and
+details.
 
 ### Suggested course-project walkthrough
 

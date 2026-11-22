@@ -1,6 +1,5 @@
 import { AbsoluteFill } from "remotion";
 import { Badge, type BadgeTone } from "../components/Badge";
-import { NumberPop } from "../components/NumberPop";
 import {
   colors,
   easeOut,
@@ -13,23 +12,9 @@ import {
 import { ENGINES } from "../script";
 import type { SceneProps } from "./types";
 
-const barShare = (figure: string): number => {
-  if (figure === "32×") {
-    return 100;
-  }
-  if (figure === "8×") {
-    return 34;
-  }
-  if (figure === "1×") {
-    return 8;
-  }
-  return 3;
-};
-
-/** Scene 08 (960-1080): four engines side by side. */
+/** Four runtime implementations, with their roles instead of ungrounded speedups. */
 export const Scene08Engines: React.FC<SceneProps> = ({ frame }) => {
-  const bars = ramp(frame, 34, 78);
-  const footer = ramp(frame, 88, 100);
+  const footer = ramp(frame, 36, 48);
 
   return (
     <AbsoluteFill
@@ -38,7 +23,7 @@ export const Scene08Engines: React.FC<SceneProps> = ({ frame }) => {
         display: "flex",
         flexDirection: "column",
         gap: 22,
-        padding: `${GUTTER - 4}px ${GUTTER}px 224px`,
+        padding: `${GUTTER - 4}px ${GUTTER}px 96px`,
       }}
     >
       <div
@@ -57,7 +42,7 @@ export const Scene08Engines: React.FC<SceneProps> = ({ frame }) => {
             fontWeight: 650,
           }}
         >
-          Four runtimes execute .sp artifacts.
+          Four runtime paths. One language.
         </span>
         <span
           style={{
@@ -66,13 +51,34 @@ export const Scene08Engines: React.FC<SceneProps> = ({ frame }) => {
             fontSize: 19,
           }}
         >
-          one instruction stream, independent implementations
+          shared instruction set · experimental native implementations
         </span>
       </div>
 
       <div style={{ display: "flex", flex: 1, gap: 20, minHeight: 0 }}>
         {ENGINES.map((engine, index) => {
           const appear = ramp(frame, 4 + index * 5, 18 + index * 5);
+          const roleReveal = ramp(frame, 34 + index * 8, 48 + index * 8);
+          const roleEase = easeOut(roleReveal);
+          const popFrame = frame - (34 + index * 8);
+          const popProgress = Math.min(1, Math.max(0, popFrame / 14));
+          const popEase = popProgress * popProgress * (3 - 2 * popProgress);
+          const settleProgress = Math.min(
+            1,
+            Math.max(0, (popFrame - 14) / 14),
+          );
+          const settleEase =
+            settleProgress * settleProgress * (3 - 2 * settleProgress);
+          const popScale =
+            popFrame < 0
+              ? 0.58
+              : popFrame <= 14
+                ? lerp(0.58, 1.22, popEase)
+                : lerp(1.22, 1, settleEase);
+          const popFlash =
+            popFrame >= 0 && popFrame <= 14
+              ? Math.sin((popFrame / 14) * Math.PI)
+              : 0;
           const tone = engine.tone as BadgeTone;
           const color = colors[tone];
           return (
@@ -110,7 +116,7 @@ export const Scene08Engines: React.FC<SceneProps> = ({ frame }) => {
                   fontWeight: 700,
                   lineHeight: 1.3,
                   minHeight: 58,
-                  wordBreak: "break-all",
+                  overflowWrap: "anywhere",
                 }}
               >
                 {engine.name}
@@ -127,30 +133,32 @@ export const Scene08Engines: React.FC<SceneProps> = ({ frame }) => {
               <Badge tone="muted" style={{ alignSelf: "flex-start" }}>
                 {engine.tag}
               </Badge>
-              <NumberPop
-                color={color}
-                enterAt={34 + index * 8}
-                frame={frame}
-                size={engine.figure.length > 3 ? 62 : 96}
-                sub={engine.figureNote}
-                value={engine.figure}
-              />
               <div
                 style={{
-                  backgroundColor: "#183139",
-                  borderRadius: 99,
-                  height: 8,
-                  overflow: "hidden",
+                  alignItems: "center",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 7,
+                  opacity: roleReveal,
+                  transform: `scale(${popScale}) translateY(${lerp(18, 0, roleEase)}px)`,
+                  width: "100%",
                 }}
               >
                 <div
                   style={{
-                    backgroundColor: color,
-                    borderRadius: 99,
-                    height: "100%",
-                    width: `${barShare(engine.figure) * bars}%`,
+                    color,
+                    fontFamily: FONT_FAMILY,
+                    fontSize: engine.role.length > 8 ? 42 : 50,
+                    fontWeight: 750,
+                    letterSpacing: 0,
+                    lineHeight: 1,
+                    textAlign: "center",
+                    filter: `brightness(${1 + popFlash * 1.8})`,
+                    textShadow: `0 0 ${24 * roleEase + 32 * popFlash}px ${color}ff, 0 0 ${70 * popFlash}px ${color}99, 0 5px 22px #000b`,
                   }}
-                />
+                >
+                  {engine.role}
+                </div>
               </div>
               <div
                 style={{
@@ -187,7 +195,7 @@ export const Scene08Engines: React.FC<SceneProps> = ({ frame }) => {
             fontSize: 18,
           }}
         >
-          every runtime executes the same deterministic instruction stream
+          one instruction set · independent runtime implementations
         </span>
         <span style={{ flex: 1 }} />
         <span

@@ -1,23 +1,30 @@
 import { AbsoluteFill } from "remotion";
 import { Badge } from "../components/Badge";
 import { Terminal } from "../components/Terminal";
-import {
-  colors,
-  easeOut,
-  FONT_FAMILY,
-  GUTTER,
-  lerp,
-  MONO_FAMILY,
-  ramp,
-} from "../theme";
+import { colors, easeOut, FONT_FAMILY, GUTTER, MONO_FAMILY, ramp } from "../theme";
 import { HEALTH } from "../script";
 import type { SceneProps } from "./types";
 
-/** Scene 09 (1080-1200): the static-asset health check, three green panels. */
+const jsonLines = [
+  "{",
+  '  "ok": true,',
+  '  "checks": {',
+  ...HEALTH.checks.map(
+    ([name, value], index) =>
+      `    "${name}": ${value}${index < HEALTH.checks.length - 1 ? "," : ""}`,
+  ),
+  "  },",
+  '  "hint": null',
+  "}",
+];
+
+/** Show the actual loopback-only static-file health response shape. */
 export const Scene09Health: React.FC<SceneProps> = ({ frame }) => {
   const typed = Math.floor(ramp(frame, 2, 22) * HEALTH.url.length);
-  const jsonReveal = ramp(frame, 28, 40);
-  const noteReveal = ramp(frame, 88, 100);
+  const responseReveal = ramp(frame, 14, 28);
+  const noteReveal = ramp(frame, 58, 70);
+  const healthReveal = ramp(frame, 28, 48);
+  const healthEase = easeOut(healthReveal);
 
   return (
     <AbsoluteFill
@@ -25,19 +32,18 @@ export const Scene09Health: React.FC<SceneProps> = ({ frame }) => {
         alignItems: "center",
         boxSizing: "border-box",
         display: "flex",
-        padding: `${GUTTER + 6}px ${GUTTER}px 224px`,
+        padding: `${GUTTER + 6}px ${GUTTER}px 112px`,
       }}
     >
       <Terminal
-        title="OPT_SP — static assets"
-        subtitle="GET /__opt_sp/health"
-        right={
-          <>
-            <Badge tone="green">loopback only</Badge>
-            <Badge tone="muted">assets 4 / 4</Badge>
-          </>
-        }
-        style={{ height: "100%", width: "100%" }}
+        title="OPT_SP — health endpoint"
+        subtitle={HEALTH.endpoint}
+        right={<Badge tone="green">{HEALTH.policy}</Badge>}
+        style={{
+          height: "100%",
+          width: "100%",
+          boxShadow: `0 24px 80px rgba(0, 0, 0, 0.45), 0 0 ${32 * healthEase}px ${colors.green}18`,
+        }}
         bodyStyle={{
           display: "flex",
           flexDirection: "column",
@@ -49,7 +55,7 @@ export const Scene09Health: React.FC<SceneProps> = ({ frame }) => {
           style={{
             alignItems: "center",
             backgroundColor: colors.panel,
-            border: `1px solid ${colors.edge}`,
+            border: `1px solid ${colors.green}${Math.round(60 + healthEase * 90).toString(16).padStart(2, "0")}`,
             borderRadius: 12,
             display: "flex",
             gap: 14,
@@ -70,104 +76,44 @@ export const Scene09Health: React.FC<SceneProps> = ({ frame }) => {
               <span style={{ color: colors.text }}>▌</span>
             ) : null}
           </span>
-          <span style={{ flex: 1 }} />
-          <span
-            style={{
-              color: colors.green,
-              fontFamily: MONO_FAMILY,
-              fontSize: 20,
-              opacity: jsonReveal,
-            }}
-          >
-            {"{ "}ok: true{" }"}
-          </span>
         </div>
 
-        <div style={{ display: "flex", flex: 1, gap: 18, minHeight: 0 }}>
-          {HEALTH.panels.map((panel, index) => {
-            const pending = ramp(frame, 8 + index * 4, 18 + index * 4);
-            const green = frame >= 36 + index * 16;
-            return (
-              <div
-                key={panel.title}
-                style={{
-                  backgroundColor: green ? `${colors.green}0E` : colors.panel,
-                  border: `1px solid ${green ? `${colors.green}AA` : colors.edge}`,
-                  borderRadius: 18,
-                  boxSizing: "border-box",
-                  display: "flex",
-                  flex: 1,
-                  flexDirection: "column",
-                  gap: 14,
-                  opacity: pending,
-                  padding: "22px 22px",
-                  transform: `translateY(${lerp(14, 0, easeOut(pending))}px)`,
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "flex",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span
-                    style={{
-                      color: colors.text,
-                      fontFamily: MONO_FAMILY,
-                      fontSize: 22,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {panel.title}
-                  </span>
-                  <Badge tone={green ? "green" : "gold"}>
-                    {green ? "present" : "checking"}
-                  </Badge>
-                </div>
-                <div style={{ flex: 1 }}>
-                  {panel.files.map((file) => (
-                    <div
-                      key={file}
-                      style={{
-                        color: green ? colors.green : colors.muted,
-                        fontFamily: MONO_FAMILY,
-                        fontSize: 17,
-                        lineHeight: 1.7,
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-all",
-                      }}
-                    >
-                      {green ? "✓ " : "· "}
-                      {file}
-                    </div>
-                  ))}
-                  <div
-                    style={{
-                      color: colors.muted,
-                      fontFamily: FONT_FAMILY,
-                      fontSize: 18,
-                      marginTop: 12,
-                    }}
-                  >
-                    {panel.meta}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    borderTop: `1px solid ${colors.edge}55`,
-                    color: colors.muted,
-                    fontFamily: MONO_FAMILY,
-                    fontSize: 15,
-                    paddingTop: 12,
-                  }}
-                >
-                  {green ? "served as a plain static file" : "asset self-check"}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <pre
+          style={{
+            backgroundColor: colors.panelDark,
+            border: `1px solid ${colors.edge}`,
+            borderRadius: 12,
+            boxSizing: "border-box",
+            color: colors.text,
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            fontFamily: MONO_FAMILY,
+            fontSize: 23,
+            justifyContent: "center",
+            lineHeight: 1.55,
+            margin: 0,
+            opacity: responseReveal,
+            overflow: "hidden",
+            padding: "22px 28px",
+          }}
+        >
+          {jsonLines.map((line, index) => (
+            <div
+              key={`${index}-${line}`}
+              style={{
+                color: line.includes("true")
+                  ? colors.green
+                  : line.includes("null")
+                    ? colors.muted
+                    : colors.text,
+                opacity: ramp(frame, 18 + index * 1.5, 25 + index * 1.5),
+              }}
+            >
+              {line}
+            </div>
+          ))}
+        </pre>
 
         <div
           style={{
@@ -186,16 +132,6 @@ export const Scene09Health: React.FC<SceneProps> = ({ frame }) => {
             }}
           >
             {HEALTH.note}
-          </span>
-          <span style={{ flex: 1 }} />
-          <span
-            style={{
-              color: colors.muted,
-              fontFamily: MONO_FAMILY,
-              fontSize: 17,
-            }}
-          >
-            python tools/build_static.py
           </span>
         </div>
       </Terminal>

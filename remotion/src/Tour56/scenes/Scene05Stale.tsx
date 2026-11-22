@@ -14,20 +14,23 @@ import {
 import { STALE, STUDIO } from "../script";
 import type { SceneProps } from "./types";
 
-/** Scene 05 (600-720): an assembly edit turns the Python mirror stale. */
+/** An assembly edit makes the Python mirror stale. */
 export const Scene05Stale: React.FC<SceneProps> = ({ frame }) => {
   const edited = frame >= 26;
   const stale = frame >= 44;
   const note = ramp(frame, 58, 72);
   const syncButton = ramp(frame, 92, 102);
   const flash = frame >= 26 && frame < 44 ? 1 - ramp(frame, 26, 44) : 0;
+  const editReveal = ramp(frame, 26, 38);
+  const staleReveal = ramp(frame, 44, 58);
+  const staleEase = easeOut(staleReveal);
   const pulse = 0.65 + 0.35 * Math.sin(frame / 5);
 
   return (
     <AbsoluteFill
       style={{
         boxSizing: "border-box",
-        padding: `${GUTTER - 8}px ${GUTTER}px 224px`,
+        padding: `${GUTTER - 8}px ${GUTTER}px 112px`,
       }}
     >
       <Terminal
@@ -43,7 +46,9 @@ export const Scene05Stale: React.FC<SceneProps> = ({ frame }) => {
         }
         style={{ height: "100%" }}
         bodyStyle={{
-          backgroundColor: colors.background,
+          backgroundColor: stale
+            ? `rgba(244, 198, 106, ${0.018 + staleEase * 0.018})`
+            : colors.background,
           display: "flex",
           gap: 16,
           padding: 16,
@@ -68,6 +73,27 @@ export const Scene05Stale: React.FC<SceneProps> = ({ frame }) => {
           >
             instruction 4 · edited by hand
           </div>
+          {edited ? (
+            <div
+              style={{
+                alignItems: "center",
+                backgroundColor: `${colors.gold}${Math.round(10 + editReveal * 18).toString(16).padStart(2, "0")}`,
+                border: `1px solid ${colors.gold}${Math.round(80 + editReveal * 120).toString(16).padStart(2, "0")}`,
+                borderRadius: 8,
+                display: "flex",
+                gap: 8,
+                marginBottom: 8,
+                opacity: editReveal,
+                padding: "6px 10px",
+                transform: `translateX(${lerp(12, 0, editReveal)}px)`,
+              }}
+            >
+              <Badge tone="gold">changed</Badge>
+              <span style={{ color: colors.gold, fontFamily: MONO_FAMILY, fontSize: 14 }}>
+                OP 1 → OP 2
+              </span>
+            </div>
+          ) : null}
           {STALE.asmBefore.map((line, index) => {
             const isEditLine = index === 3;
             const text = isEditLine && edited ? "OP 2" : line;
@@ -131,7 +157,11 @@ export const Scene05Stale: React.FC<SceneProps> = ({ frame }) => {
             }
             actions={<PaneButton active={!stale}>Run</PaneButton>}
             label="py"
-            style={{ flex: 1, opacity: stale ? 0.42 : 1 }}
+            style={{
+              flex: 1,
+              opacity: lerp(1, 0.42, staleEase),
+              transform: `scale(${lerp(1, 0.985, staleEase)})`,
+            }}
           >
             {STALE.mirror.map((line) => (
               <div

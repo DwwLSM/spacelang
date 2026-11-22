@@ -14,23 +14,25 @@ import {
 import { STALE, SYNC, STUDIO } from "../script";
 import type { SceneProps } from "./types";
 
-/** Scene 06 (720-840): the model rewrites the stale mirror, then it verifies. */
+/** The model proposes a mirror; local verification decides whether to accept it. */
 export const Scene06Sync: React.FC<SceneProps> = ({ frame }) => {
   const request = ramp(frame, -10, 2);
   const waiting = frame >= 26 && frame < 48;
   const verified = frame >= 70;
   const syncBadge = frame >= 78;
   const typed = Math.floor(ramp(frame, 48, 70) * STALE.modelMirror[1].length);
+  const verifiedReveal = ramp(frame, 70, 82);
+  const successEase = easeOut(verifiedReveal);
 
   return (
     <AbsoluteFill
       style={{
         boxSizing: "border-box",
-        padding: `${GUTTER - 8}px ${GUTTER}px 224px`,
+        padding: `${GUTTER - 8}px ${GUTTER}px 112px`,
       }}
     >
       <Terminal
-        title={`${SYNC.title} · ${SYNC.model}`}
+        title={SYNC.title}
         subtitle={STUDIO.url}
         accent={colors.purple}
         right={
@@ -38,7 +40,7 @@ export const Scene06Sync: React.FC<SceneProps> = ({ frame }) => {
             <Badge tone={syncBadge ? "green" : "muted"}>
               {syncBadge ? STUDIO.badgeSynced : "manual mode"}
             </Badge>
-            <Badge tone="purple">deepseek</Badge>
+            <Badge tone="purple">{SYNC.model}</Badge>
           </>
         }
         style={{ height: "100%" }}
@@ -68,7 +70,12 @@ export const Scene06Sync: React.FC<SceneProps> = ({ frame }) => {
               </Badge>
             }
             label="py"
-            style={{ flex: 1, opacity: syncBadge ? 0.9 : 0.42 }}
+            style={{
+              flex: 1,
+              opacity: lerp(0.42, 1, syncBadge ? successEase : 0),
+              transform: `translateY(${lerp(8, 0, successEase)}px)`,
+              boxShadow: syncBadge ? `0 0 ${24 * successEase}px ${colors.green}22` : "none",
+            }}
           >
             {(syncBadge ? STALE.modelMirror : STALE.mirror).map((line) => (
               <div
@@ -118,12 +125,11 @@ export const Scene06Sync: React.FC<SceneProps> = ({ frame }) => {
               request payload
             </div>
             <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
-              {SYNC.sent.map((item) => (
-                <Badge key={item} tone={item === "py" ? "cyan" : "purple"}>
+              {SYNC.sent.map((item, index) => (
+                <Badge key={item} tone={index === 0 ? "cyan" : "purple"}>
                   {item}
                 </Badge>
               ))}
-              <span style={{ color: colors.muted, fontSize: 18 }}>+ assembly diff</span>
             </div>
             <div
               style={{
@@ -191,7 +197,7 @@ export const Scene06Sync: React.FC<SceneProps> = ({ frame }) => {
                     fontSize: 18,
                   }}
                 >
-                  {SYNC.latency} · thinking off
+                  request sent · waiting for response
                 </span>
               </>
             ) : null}
@@ -286,10 +292,10 @@ export const Scene06Sync: React.FC<SceneProps> = ({ frame }) => {
                 fontWeight: 650,
                 opacity: verified ? 1 : 0.45,
                 padding: "12px 20px",
-                transform: `scale(${verified ? 1 : 0.94})`,
+                transform: `scale(${verified ? lerp(0.82, 1, successEase) : 0.94})`,
               }}
             >
-              {SYNC.verified}
+              {verified ? `✓ ${SYNC.verified}` : SYNC.verified}
             </span>
           </div>
         </div>

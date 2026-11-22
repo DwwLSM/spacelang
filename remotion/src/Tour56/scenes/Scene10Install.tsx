@@ -13,53 +13,57 @@ import {
 import { INSTALL } from "../script";
 import type { SceneProps } from "./types";
 
-const Prompt: React.FC<{ command: string; chars: number; suffix?: string }> = ({
-  command,
-  chars,
-  suffix,
-}) => (
-  <div
-    style={{
-      color: colors.text,
-      fontFamily: MONO_FAMILY,
-      fontSize: 30,
-      lineHeight: 1.5,
-      whiteSpace: "pre",
-    }}
-  >
-    <span style={{ color: colors.green }}>$ </span>
-    {command.slice(0, chars)}
-    {chars < command.length ? <span style={{ color: colors.cyan }}>▌</span> : null}
-    {suffix ? <span style={{ color: colors.muted }}>{suffix}</span> : null}
-  </div>
-);
+const InfoRow: React.FC<{
+  label: string;
+  value: string;
+  delay: number;
+  frame: number;
+}> = ({ label, value, delay, frame }) => {
+  const reveal = ramp(frame, delay, delay + 12);
+  return (
+    <div
+      style={{
+        alignItems: "baseline",
+        borderBottom: `1px solid ${colors.edge}88`,
+        display: "flex",
+        gap: 16,
+        opacity: reveal,
+        padding: "9px 0",
+        transform: `translateY(${lerp(8, 0, easeOut(reveal))}px)`,
+      }}
+    >
+      <span
+        style={{
+          color: colors.muted,
+          flex: "0 0 118px",
+          fontFamily: FONT_FAMILY,
+          fontSize: 17,
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          color: colors.text,
+          fontFamily: MONO_FAMILY,
+          fontSize: 18,
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+};
 
-const OutputLine: React.FC<{ text: string; tone?: string; style?: React.CSSProperties }> = ({
-  text,
-  tone = colors.muted,
-  style,
-}) => (
-  <div
-    style={{
-      color: tone,
-      fontFamily: MONO_FAMILY,
-      fontSize: 22,
-      lineHeight: 1.55,
-      whiteSpace: "pre",
-      ...style,
-    }}
-  >
-    {text}
-  </div>
-);
-
-/** Scene 10 (1200-1320): pip install, then start the local studio server. */
+/** Show the real server command, page route, and browser-side execution path. */
 export const Scene10Install: React.FC<SceneProps> = ({ frame }) => {
-  const pipChars = Math.floor(ramp(frame, 2, 26) * INSTALL.pip.length);
-  const pipOutput = ramp(frame, 26, 40);
-  const serveChars = Math.floor(ramp(frame, 46, 68) * INSTALL.serve.length);
-  const serveOutput = ramp(frame, 68, 82);
-  const urlReveal = ramp(frame, 88, 100);
+  const chars = Math.floor(ramp(frame, 0, 16) * INSTALL.serve.length);
+  const commandReveal = ramp(frame, 0, 16);
+  const routeReveal = ramp(frame, 12, 26);
+  const filesReveal = ramp(frame, 24, 38);
+  const executionReveal = ramp(frame, 48, 60);
+  const flowProgress = ramp(frame, 18, 68);
+  const flowEase = easeOut(flowProgress);
 
   return (
     <AbsoluteFill
@@ -67,105 +71,182 @@ export const Scene10Install: React.FC<SceneProps> = ({ frame }) => {
         alignItems: "center",
         boxSizing: "border-box",
         display: "flex",
-        padding: `${GUTTER + 4}px ${GUTTER}px 224px`,
+        padding: `${GUTTER + 4}px ${GUTTER}px 112px`,
       }}
     >
       <Terminal
-        title="spacelang-opt-sp"
-        subtitle="pip · install and serve"
-        right={<Badge tone="green">Python 3.10+</Badge>}
+        title="OPT_SP — local debugger"
+        subtitle="server and browser request flow"
+        right={<Badge tone="green">{INSTALL.host}</Badge>}
         style={{ height: "100%", width: "100%" }}
         bodyStyle={{
           display: "flex",
           flexDirection: "column",
-          gap: 10,
-          padding: 26,
+          gap: 18,
+          padding: 24,
         }}
       >
-        <Prompt chars={pipChars} command={INSTALL.pip} />
         <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 2,
-            marginBottom: 16,
-            opacity: pipOutput,
-            transform: `translateY(${lerp(10, 0, easeOut(pipOutput))}px)`,
-          }}
-        >
-          {INSTALL.pipOutput.map((line, index) => (
-            <OutputLine
-              key={line}
-              style={{ opacity: ramp(frame, 26 + index * 4, 34 + index * 4) }}
-              text={line}
-              tone={line.startsWith("Successfully") ? colors.green : colors.muted}
-            />
-          ))}
-        </div>
-
-        <Prompt chars={serveChars} command={INSTALL.serve} />
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 2,
-            opacity: serveOutput,
-            transform: `translateY(${lerp(10, 0, easeOut(serveOutput))}px)`,
-          }}
-        >
-          {INSTALL.serveOutput.map((line, index) => (
-            <OutputLine
-              key={line}
-              style={{ opacity: ramp(frame, 68 + index * 4, 76 + index * 4) }}
-              text={line}
-              tone={
-                index === 0
-                  ? colors.cyan
-                  : index === 1
-                    ? colors.green
-                    : colors.muted
-              }
-            />
-          ))}
-        </div>
-
-        <div style={{ flex: 1 }} />
-
-        <div
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.panel,
-            border: `1px solid ${colors.green}88`,
-            borderRadius: 14,
-            boxSizing: "border-box",
-            display: "flex",
-            gap: 16,
-            opacity: urlReveal,
+            background: colors.panelDark,
+            border: `1px solid ${colors.edge}`,
+            borderRadius: 12,
+            opacity: commandReveal,
             padding: "16px 20px",
-            transform: `translateY(${lerp(12, 0, easeOut(urlReveal))}px)`,
           }}
         >
-          <Badge tone="green">serving</Badge>
-          <span
+          <div
             style={{
-              color: colors.green,
+              color: colors.text,
               fontFamily: MONO_FAMILY,
-              fontSize: 28,
-              fontWeight: 700,
+              fontSize: 26,
+              lineHeight: 1.5,
+              whiteSpace: "pre",
             }}
           >
-            http://127.0.0.1:8000
-          </span>
-          <span style={{ flex: 1 }} />
-          <span
+            <span style={{ color: colors.green }}>$ </span>
+            {INSTALL.serve.slice(0, chars)}
+            {chars < INSTALL.serve.length ? (
+              <span style={{ color: colors.cyan }}>▌</span>
+            ) : null}
+          </div>
+          <div
             style={{
               color: colors.muted,
               fontFamily: FONT_FAMILY,
-              fontSize: 20,
+              fontSize: 17,
+              marginTop: 7,
             }}
           >
-            a local server, a browser, no accounts
-          </span>
+            {INSTALL.server} · {INSTALL.host} · {INSTALL.launch}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            gap: 20,
+            minHeight: 0,
+            position: "relative",
+          }}
+        >
+          <div
+            style={{
+              background: `linear-gradient(180deg, transparent, ${colors.cyan}, transparent)`,
+              borderRadius: 99,
+              height: `${flowEase * 100}%`,
+              left: "calc(42% - 10px)",
+              opacity: flowProgress,
+              position: "absolute",
+              top: `${(1 - flowEase) * 18}%`,
+              width: 3,
+            }}
+          />
+          <section
+            style={{
+              background: colors.panel,
+              border: `1px solid ${colors.edge}`,
+              borderRadius: 14,
+              boxSizing: "border-box",
+              flex: "0 0 42%",
+              opacity: routeReveal,
+              padding: "18px 22px",
+              transform: `translateY(${lerp(10, 0, easeOut(routeReveal))}px)`,
+            }}
+          >
+            <div
+              style={{
+                color: colors.cyan,
+                fontFamily: MONO_FAMILY,
+                fontSize: 19,
+                fontWeight: 700,
+                marginBottom: 8,
+              }}
+            >
+              HTTP routes
+            </div>
+            <InfoRow frame={frame} delay={22} label="Browser" value={INSTALL.launch} />
+            <InfoRow frame={frame} delay={26} label="Studio" value={INSTALL.studio} />
+            <div
+              style={{
+                color: colors.muted,
+                fontFamily: FONT_FAMILY,
+                fontSize: 16,
+                marginTop: 12,
+              }}
+            >
+              The studio page includes its HTML partials.
+            </div>
+          </section>
+
+          <section
+            style={{
+              background: colors.panel,
+              border: `1px solid ${colors.edge}`,
+              borderRadius: 14,
+              boxSizing: "border-box",
+              display: "flex",
+              flex: 1,
+              flexDirection: "column",
+              minWidth: 0,
+              opacity: filesReveal,
+              padding: "18px 22px",
+              transform: `translateY(${lerp(10, 0, easeOut(filesReveal))}px)`,
+            }}
+          >
+            <div
+              style={{
+                color: colors.cyan,
+                fontFamily: MONO_FAMILY,
+                fontSize: 19,
+                fontWeight: 700,
+                marginBottom: 8,
+              }}
+            >
+              Browser loads
+            </div>
+            {INSTALL.files.map((file, index) => (
+              <InfoRow
+                key={file}
+                delay={30 + index * 2}
+                frame={frame}
+                label={index === 0 ? "CSS" : index === 1 ? "CSS" : "JavaScript"}
+                value={file}
+              />
+            ))}
+            {INSTALL.kernel.map((file) => (
+              <InfoRow
+                key={file}
+                delay={38}
+                frame={frame}
+                label="Runtime"
+                value={file}
+              />
+            ))}
+            <div
+              style={{
+                alignItems: "center",
+                borderTop: `1px solid ${colors.edge}88`,
+                display: "flex",
+                gap: 12,
+                marginTop: "auto",
+                opacity: executionReveal,
+                paddingTop: 14,
+              }}
+            >
+              <Badge tone="green">in browser</Badge>
+              <span
+                style={{
+                  color: colors.text,
+                  fontFamily: FONT_FAMILY,
+                  fontSize: 18,
+                }}
+              >
+                {INSTALL.behavior}
+              </span>
+            </div>
+          </section>
         </div>
       </Terminal>
     </AbsoluteFill>
