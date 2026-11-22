@@ -25,11 +25,15 @@ const runWidth = (spaces: number): number => {
   );
 };
 
-/** Scene 01 (120-240): blank-looking source, then tokens as runs of spaces. */
+/** Show whitespace-encoded tokens in the source artifact. */
 export const Scene01Source: React.FC<SceneProps> = ({ frame }) => {
   const scroll = lerp(44, -6, easeOut(ramp(frame, 0, 46)));
   const tokenPanel = enter(frame, 30);
   const highlightReveal = ramp(frame, 74, 88);
+  const activeToken = Math.min(
+    TOKEN_RUNS.length - 1,
+    Math.floor(ramp(frame, 12, 72) * TOKEN_RUNS.length),
+  );
 
   return (
     <AbsoluteFill
@@ -38,7 +42,7 @@ export const Scene01Source: React.FC<SceneProps> = ({ frame }) => {
         display: "flex",
         flexDirection: "row",
         gap: 30,
-        padding: "96px 96px 232px",
+        padding: "96px 96px 112px",
       }}
     >
       <Terminal
@@ -56,14 +60,22 @@ export const Scene01Source: React.FC<SceneProps> = ({ frame }) => {
               transform: `translateY(${scroll}px)`,
             }}
           >
-            {TOKEN_RUNS.map((run, index) => (
+            {TOKEN_RUNS.map((run, index) => {
+              const rowReveal = easeOut(ramp(frame, 4 + index * 3, 17 + index * 3));
+              const barReveal = easeOut(ramp(frame, 8 + index * 4, 25 + index * 4));
+              const isActive = index === activeToken && frame < 78;
+              return (
               <div
                 key={run.token}
                 style={{
                   alignItems: "center",
+                  background: isActive ? `${colors.cyan}0A` : "transparent",
+                  borderRadius: 6,
                   display: "flex",
                   gap: 18,
+                  opacity: rowReveal,
                   padding: "7px 0",
+                  transform: `translateX(${lerp(-8, 0, rowReveal)}px)`,
                 }}
               >
                 <span
@@ -90,7 +102,8 @@ export const Scene01Source: React.FC<SceneProps> = ({ frame }) => {
                       borderRadius: 4,
                       boxSizing: "border-box",
                       height: 14,
-                      width: `${runWidth(run.spaces)}%`,
+                      width: `${runWidth(run.spaces) * barReveal}%`,
+                      boxShadow: isActive ? `0 0 12px ${colors.cyan}44` : "none",
                     }}
                   />
                 </div>
@@ -116,7 +129,8 @@ export const Scene01Source: React.FC<SceneProps> = ({ frame }) => {
                   {run.token}
                 </span>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         <div

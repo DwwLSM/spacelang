@@ -225,6 +225,7 @@ cd remotion
 npm ci
 npm run dev
 npm run render
+npm run render:tour
 ```
 
 See [the Remotion project guide](remotion/README.md) for requirements, subtitle

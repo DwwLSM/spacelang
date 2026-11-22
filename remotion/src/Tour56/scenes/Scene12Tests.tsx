@@ -13,22 +13,8 @@ import {
 import { CI } from "../script";
 import type { SceneProps } from "./types";
 
-const SUITES = [
-  "assembler",
-  "compiler",
-  "vm py",
-  "vm cpp",
-  "optimizer",
-  "cli",
-  "quines",
-  "trace api",
-  "differential",
-  "native",
-] as const;
-
-/** Scene 12 (1440-1560): 297 tests, the OS/Python matrix, py vs cpp. */
+/** Show the checked-in CI matrix without implying every cell has passed. */
 export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
-  const count = Math.round(CI.tests * ramp(frame, 2, 52));
   const matrixReveal = ramp(frame, 18, 32);
   const differential = ramp(frame, 46, 60);
 
@@ -39,7 +25,7 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
         display: "flex",
         flexDirection: "row",
         gap: 22,
-        padding: `${GUTTER - 2}px ${GUTTER}px 224px`,
+        padding: `${GUTTER - 2}px ${GUTTER}px 112px`,
       }}
     >
       <div
@@ -52,17 +38,18 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
           flex: 0.82,
           flexDirection: "column",
           gap: 14,
+          justifyContent: "center",
           padding: "24px 26px",
         }}
       >
         <NumberPop
-          color={colors.green}
+          color={colors.cyan}
           enterAt={2}
           frame={frame}
-          label={CI.testsLabel}
-          size={168}
-          sub="python -m pytest"
-          value={String(count)}
+          label="differential checks"
+          size={60}
+          sub="same output and result required"
+          value="py ↔ C++"
         />
         <div
           style={{
@@ -73,46 +60,7 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
             paddingTop: 12,
           }}
         >
-          {CI.command}
-        </div>
-        <div
-          style={{
-            color: colors.muted,
-            fontFamily: MONO_FAMILY,
-            fontSize: 15,
-            letterSpacing: 2,
-            marginTop: 6,
-            opacity: differential,
-            textTransform: "uppercase",
-          }}
-        >
-          what the suite covers
-        </div>
-        <div
-          style={{
-            alignContent: "flex-start",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-          }}
-        >
-          {SUITES.map((suite, index) => (
-            <span
-              key={suite}
-              style={{
-                backgroundColor: `${colors.cyan}10`,
-                border: `1px solid ${colors.edge}`,
-                borderRadius: 6,
-                color: colors.muted,
-                fontFamily: MONO_FAMILY,
-                fontSize: 15,
-                opacity: ramp(frame, 22 + index * 3, 30 + index * 3),
-                padding: "5px 9px",
-              }}
-            >
-              {suite}
-            </span>
-          ))}
+          tests/test_differential.py
         </div>
         <div style={{ flex: 1 }} />
         <div
@@ -136,7 +84,7 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
               fontSize: 19,
             }}
           >
-            {CI.differential}
+            selected programs compared
           </span>
         </div>
       </div>
@@ -173,12 +121,14 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
           >
             {CI.matrix}
           </span>
-          <Badge tone="green">ci matrix</Badge>
+          <Badge tone="cyan">checked-in workflow</Badge>
         </div>
 
         <div
           style={{
+            alignContent: "center",
             display: "grid",
+            flex: 1,
             gap: 8,
             gridTemplateColumns: `150px repeat(${CI.pythons.length}, 1fr)`,
           }}
@@ -216,21 +166,22 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
                   20 + (row * CI.pythons.length + column) * 1.4,
                   26 + (row * CI.pythons.length + column) * 1.4,
                 );
+                const complete = cell >= 0.92;
                 return (
                   <div
                     key={`${osName}-${version}`}
                     style={{
                       alignItems: "center",
-                      backgroundColor: `${colors.green}${Math.round(cell * 28)
+                      backgroundColor: `${colors.cyan}${Math.round(cell * 18)
                         .toString(16)
                         .padStart(2, "0")}`,
-                      border: `1px solid ${colors.green}${Math.round(
-                        cell * 120,
+                      border: `1px solid ${colors.cyan}${Math.round(
+                        cell * 90,
                       )
                         .toString(16)
                         .padStart(2, "0")}`,
                       borderRadius: 8,
-                      color: colors.green,
+                      color: colors.cyan,
                       display: "flex",
                       fontFamily: MONO_FAMILY,
                       fontSize: 18,
@@ -239,7 +190,7 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
                       opacity: 0.35 + 0.65 * cell,
                     }}
                   >
-                    ✓
+                    {complete ? "✓" : "•"}
                   </div>
                 );
               })}
@@ -270,7 +221,7 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
               fontSize: 20,
             }}
           >
-            15 / 15 green
+            configured for pushes and pull requests
           </span>
           <span style={{ flex: 1 }} />
           <span
@@ -293,8 +244,8 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
             opacity: differential,
           }}
         >
-          {CI.differential} — the same programs run on both engines and their
-          output must match.
+          CI runs the test suite across every configured operating-system and
+          Python-version combination.
         </div>
 
         <div style={{ flex: 1 }} />
@@ -310,7 +261,7 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
             padding: "12px 16px",
           }}
         >
-          <Badge tone="green">repeatable</Badge>
+          <Badge tone="cyan">configured</Badge>
           <span
             style={{
               color: colors.muted,
@@ -318,7 +269,7 @@ export const Scene12Tests: React.FC<SceneProps> = ({ frame }) => {
               fontSize: 17,
             }}
           >
-            python -m pytest -q · 3 OS × 5 Python
+            {CI.command} · {CI.matrix}
           </span>
         </div>
       </div>

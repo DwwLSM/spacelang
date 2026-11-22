@@ -22,11 +22,13 @@ const toneColor = (): string => {
   return colors.red;
 };
 
-/** Scene 11 (1320-1440): the native compiler bootstrap chain. */
+/** Show the native compiler bootstrap chain and fixed-point check. */
 export const Scene11Bootstrap: React.FC<SceneProps> = ({ frame }) => {
   const chainReveal = ramp(frame, -8, 4);
   const equationReveal = ramp(frame, 2, 16);
   const statusReveal = ramp(frame, 44, 58);
+  const fixedReveal = ramp(frame, 74, 102);
+  const fixedEase = easeOut(fixedReveal);
   const accent = toneColor();
 
   return (
@@ -36,7 +38,7 @@ export const Scene11Bootstrap: React.FC<SceneProps> = ({ frame }) => {
         display: "flex",
         flexDirection: "column",
         gap: 20,
-        padding: `${GUTTER - 12}px ${GUTTER}px 224px`,
+        padding: `${GUTTER - 12}px ${GUTTER}px 112px`,
       }}
     >
       <div
@@ -187,7 +189,10 @@ export const Scene11Bootstrap: React.FC<SceneProps> = ({ frame }) => {
           gap: 22,
           opacity: equationReveal,
           padding: "16px 26px",
-          transform: `translateY(${lerp(12, 0, easeOut(equationReveal))}px)`,
+          transform: `translateY(${lerp(12, 0, easeOut(equationReveal))}px) scale(${lerp(0.985, 1, fixedEase)})`,
+          boxShadow: fixedEase > 0
+            ? `0 0 ${38 * fixedEase}px ${accent}28`
+            : "none",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -216,7 +221,7 @@ export const Scene11Bootstrap: React.FC<SceneProps> = ({ frame }) => {
         >
           <Badge solid tone={bootstrap.tone}>
             {bootstrap.tone === "green"
-              ? "fixed point"
+              ? "fixed point · experimental"
               : bootstrap.tone === "gold"
                 ? "self-hosting"
                 : "partial"}

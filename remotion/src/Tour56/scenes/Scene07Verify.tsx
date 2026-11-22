@@ -64,14 +64,7 @@ const CodeCard: React.FC<{
   </div>
 );
 
-const flashAt = (frame: number, start: number): number => {
-  if (frame < start || frame > start + 5) {
-    return 0;
-  }
-  return 1 - ramp(frame, start, start + 5);
-};
-
-/** Scene 07 (840-960): the compiler rejects the answer, flash frames included. */
+/** Reject a mirror that fails instruction-by-instruction verification. */
 export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
   const left = ramp(frame, -12, 2);
   const right = ramp(frame, -10, 6);
@@ -79,21 +72,18 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
   const firstVerdict = frame >= 40;
   const secondAnswer = ramp(frame, 62, 74);
   const accepted = frame >= 82;
-  const flash = Math.max(
-    flashAt(frame, 8),
-    flashAt(frame, 28),
-    flashAt(frame, 50),
-  );
-
+  const resultReveal = ramp(frame, 82, 94);
+  const resultEase = easeOut(resultReveal);
+  const answerSize = accepted ? lerp(54, 68, resultEase) : 54;
+  const answerScale = accepted ? lerp(0.72, 1, resultEase) : 1;
   return (
-    <>
-      <AbsoluteFill
+    <AbsoluteFill
         style={{
           boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
           gap: 20,
-          padding: `${GUTTER - 4}px ${GUTTER}px 224px`,
+          padding: `${GUTTER - 4}px ${GUTTER}px 112px`,
         }}
       >
         <div style={{ display: "flex", gap: 20 }}>
@@ -106,20 +96,28 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
           />
           <CodeCard
             appear={right}
-            highlight="OP 3"
-            lines={STALE.asmBefore.map((line) =>
-              line === "OP 1" ? "OP 3" : line,
-            )}
-            title="answer compiles to"
-            tone={colors.red}
+            highlight={accepted ? "OP 2" : "OP 3"}
+            lines={
+              accepted
+                ? STALE.asmAfter
+                : STALE.asmBefore.map((line) =>
+                    line === "OP 1" ? "OP 3" : line,
+                  )
+            }
+            title={accepted ? "answer now compiles to" : "answer compiles to"}
+            tone={accepted ? colors.green : colors.red}
           />
         </div>
 
         <div
           style={{
             alignItems: "center",
-            backgroundColor: colors.panel,
-            border: `1px solid ${colors.red}77`,
+            backgroundColor: accepted
+              ? `${colors.green}12`
+              : colors.panel,
+            border: `1px solid ${
+              accepted ? colors.green : colors.red
+            }77`,
             borderRadius: 16,
             boxSizing: "border-box",
             display: "flex",
@@ -129,8 +127,8 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
             transform: `translateY(${lerp(12, 0, easeOut(banner))}px)`,
           }}
         >
-          <Badge solid tone="red">
-            rejected
+          <Badge solid tone={accepted ? "green" : "red"}>
+            {accepted ? "accepted" : "rejected"}
           </Badge>
           <span
             style={{
@@ -140,20 +138,28 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
               fontWeight: 600,
             }}
           >
-            {SYNC.rejected}
+            {accepted ? "Mirror accepted: instructions match" : SYNC.rejected}
           </span>
           <span style={{ flex: 1 }} />
-          <Badge tone="gold">{SYNC.needs}</Badge>
-          <Badge tone="red">{SYNC.got}</Badge>
+          {accepted ? (
+            <Badge tone="green">OP 2 matched</Badge>
+          ) : (
+            <>
+              <Badge tone="gold">{SYNC.needs}</Badge>
+              <Badge tone="red">{SYNC.got}</Badge>
+            </>
+          )}
         </div>
 
         <div
           style={{
             alignItems: "center",
-            backgroundColor: colors.panelDark,
+            backgroundColor: accepted
+              ? `rgba(117, 224, 162, ${0.12 * resultEase + 0.06})`
+              : colors.panelDark,
             border: `1px solid ${
               accepted ? colors.green : firstVerdict ? colors.red : colors.edge
-            }88`,
+            }${accepted ? "dd" : "88"}`,
             borderRadius: 18,
             boxSizing: "border-box",
             display: "flex",
@@ -161,6 +167,9 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
             gap: 24,
             opacity: ramp(frame, -8, 6),
             padding: "22px 28px",
+            boxShadow: accepted
+              ? `0 0 ${28 * resultEase}px ${colors.green}33, inset 0 0 ${18 * resultEase}px ${colors.green}12`
+              : "none",
           }}
         >
           <div style={{ flex: 1 }}>
@@ -174,7 +183,7 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
                 textTransform: "uppercase",
               }}
             >
-              verification · run in the browser, microseconds
+              verification · compile and compare locally
             </div>
             <div
               style={{
@@ -201,12 +210,45 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
           <div
             style={{
               alignItems: "center",
+              backgroundColor: accepted
+                ? `${colors.green}${Math.round(18 + resultEase * 24).toString(16).padStart(2, "0")}`
+                : "transparent",
+              border: accepted
+                ? `2px solid ${colors.green}`
+                : "2px solid transparent",
+              borderRadius: 18,
               display: "flex",
               flexDirection: "column",
               gap: 8,
-              minWidth: 230,
+              minWidth: 260,
+              minHeight: 150,
+              justifyContent: "center",
+              opacity: accepted ? lerp(0.82, 1, resultEase) : 1,
+              padding: "14px 18px",
+              transform: `scale(${answerScale})`,
             }}
           >
+            {accepted ? (
+              <div
+                style={{
+                  alignItems: "center",
+                  backgroundColor: colors.green,
+                  borderRadius: 999,
+                  color: colors.panelDark,
+                  display: "flex",
+                  fontFamily: MONO_FAMILY,
+                  fontSize: 22,
+                  fontWeight: 900,
+                  height: 34,
+                  justifyContent: "center",
+                  opacity: resultEase,
+                  transform: `scale(${lerp(0.5, 1, resultEase)})`,
+                  width: 34,
+                }}
+              >
+                ✓
+              </div>
+            ) : null}
             <div
               style={{
                 color: accepted
@@ -215,9 +257,10 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
                     ? colors.red
                     : colors.muted,
                 fontFamily: MONO_FAMILY,
-                fontSize: 54,
+                fontSize: answerSize,
                 fontWeight: 700,
                 letterSpacing: 1,
+                lineHeight: 1,
               }}
             >
               {accepted ? "true" : firstVerdict ? "false" : "…"}
@@ -240,14 +283,6 @@ export const Scene07Verify: React.FC<SceneProps> = ({ frame }) => {
             </div>
           </div>
         </div>
-      </AbsoluteFill>
-      <AbsoluteFill
-        style={{
-          backgroundColor: `rgba(255, 113, 128, ${0.2 * flash})`,
-          pointerEvents: "none",
-          zIndex: 10,
-        }}
-      />
-    </>
+    </AbsoluteFill>
   );
 };

@@ -1,15 +1,18 @@
 import { AbsoluteFill } from "remotion";
 import { Badge } from "../components/Badge";
 import { Terminal } from "../components/Terminal";
-import { colors, FONT_FAMILY, GUTTER, MONO_FAMILY, ramp } from "../theme";
+import { colors, easeOut, FONT_FAMILY, GUTTER, lerp, MONO_FAMILY, ramp } from "../theme";
 import { INSTALL, REPO } from "../script";
 import type { SceneProps } from "./types";
 
-/** Scene 13 (1560-1680): the repository, then the install command. */
+/** Close on the repository and a direct install command. */
 export const Scene13Close: React.FC<SceneProps> = ({ frame }) => {
   const typed = INSTALL.pip.length;
   const hints = ramp(frame, 24, 38);
   const caretOn = Math.floor(frame / 8) % 2 === 0;
+  const repoReveal = ramp(frame, 8, 30);
+  const commandReveal = ramp(frame, 18, 42);
+  const handoffReveal = ramp(frame, 54, 78);
 
   return (
     <AbsoluteFill
@@ -18,7 +21,7 @@ export const Scene13Close: React.FC<SceneProps> = ({ frame }) => {
         display: "flex",
         flexDirection: "row",
         gap: 22,
-        padding: `${GUTTER - 2}px ${GUTTER}px 224px`,
+        padding: `${GUTTER - 2}px ${GUTTER}px 112px`,
       }}
     >
       <div
@@ -32,6 +35,8 @@ export const Scene13Close: React.FC<SceneProps> = ({ frame }) => {
           flexDirection: "column",
           gap: 12,
           padding: "24px 26px",
+          opacity: repoReveal,
+          transform: `translateY(${lerp(12, 0, easeOut(repoReveal))}px)`,
         }}
       >
         <div style={{ alignItems: "center", display: "flex", gap: 10 }}>
@@ -56,6 +61,7 @@ export const Scene13Close: React.FC<SceneProps> = ({ frame }) => {
           </span>
           <Badge tone="muted">public</Badge>
           <span style={{ flex: 1 }} />
+          <Badge tone="gold">experimental</Badge>
           <Badge tone="cyan">{REPO.branch}</Badge>
         </div>
 
@@ -113,7 +119,7 @@ export const Scene13Close: React.FC<SceneProps> = ({ frame }) => {
             opacity: ramp(frame, 46, 60),
           }}
         >
-          Python 3.10 or later · prebuilt wheels for Windows, Linux and macOS
+          Python 3.10+ · prebuilt wheels · native builds require C++17 and CMake
         </div>
       </div>
 
@@ -122,7 +128,11 @@ export const Scene13Close: React.FC<SceneProps> = ({ frame }) => {
         subtitle="one command"
         accent={colors.green}
         right={<Badge tone="green">PyPI</Badge>}
-        style={{ flex: 0.92 }}
+        style={{
+          flex: 0.92,
+          opacity: commandReveal,
+          transform: `translateY(${lerp(12, 0, easeOut(commandReveal))}px)`,
+        }}
         bodyStyle={{
           display: "flex",
           flexDirection: "column",
@@ -134,7 +144,7 @@ export const Scene13Close: React.FC<SceneProps> = ({ frame }) => {
           style={{
             color: colors.text,
             fontFamily: MONO_FAMILY,
-            fontSize: 34,
+            fontSize: 28,
             lineHeight: 1.5,
             whiteSpace: "pre",
           }}
@@ -179,7 +189,13 @@ export const Scene13Close: React.FC<SceneProps> = ({ frame }) => {
         >
           <span>{INSTALL.python}</span>
           <span style={{ flex: 1 }} />
-          <span style={{ color: colors.muted }}>
+          <span
+            style={{
+              color: colors.muted,
+              opacity: handoffReveal,
+              transform: `translateX(${lerp(12, 0, easeOut(handoffReveal))}px)`,
+            }}
+          >
             {REPO.owner}/{REPO.name}
           </span>
         </div>

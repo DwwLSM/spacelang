@@ -10,6 +10,7 @@ export const NumberPop: React.FC<{
   enterAt: number;
   color?: string;
   size?: number;
+  letterSpacing?: number;
   style?: CSSProperties;
 }> = ({
   value,
@@ -19,6 +20,7 @@ export const NumberPop: React.FC<{
   enterAt,
   color = colors.cyan,
   size = 116,
+  letterSpacing = -3,
   style,
 }) => {
   const t = ramp(frame, enterAt, enterAt + 14);
@@ -57,7 +59,7 @@ export const NumberPop: React.FC<{
           fontFamily: FONT_FAMILY,
           fontSize: size,
           fontWeight: 750,
-          letterSpacing: -3,
+          letterSpacing,
           lineHeight: 1,
         }}
       >

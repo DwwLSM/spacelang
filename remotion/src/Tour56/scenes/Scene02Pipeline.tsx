@@ -1,17 +1,60 @@
 import { AbsoluteFill } from "remotion";
 import { Badge } from "../components/Badge";
 import { Terminal } from "../components/Terminal";
-import { colors, easeOut, GUTTER, lerp, MONO_FAMILY, ramp } from "../theme";
+import { colors, GUTTER, lerp, MONO_FAMILY, ramp } from "../theme";
 import { PIPELINE } from "../script";
 import type { SceneProps } from "./types";
 
-/** Scene 02 (240-360): the compiler pipeline, one stage at a time. */
+const smoothstep = (value: number): number => value * value * (3 - 2 * value);
+
+/** Follow source through the compiler pipeline with deliberate stage crossfades. */
 export const Scene02Pipeline: React.FC<SceneProps> = ({ frame }) => {
-  const stageProgress = ramp(frame, 10, 104);
-  const rawStage = Math.floor(stageProgress * PIPELINE.length);
-  const stageIndex = Math.min(PIPELINE.length - 1, Math.max(0, rawStage));
-  const active = PIPELINE[stageIndex];
-  const codeReveal = ramp(frame, 12, 24);
+  const stagePosition = ramp(frame, 8, 112) * (PIPELINE.length - 1);
+  const lowerIndex = Math.min(
+    PIPELINE.length - 2,
+    Math.floor(stagePosition),
+  );
+  const stageFraction = stagePosition - lowerIndex;
+  const transitionProgress = Math.max(
+    0,
+    Math.min(1, (stageFraction - 0.25) / 0.5),
+  );
+  const easedTransition = smoothstep(transitionProgress);
+  const stageFocus = PIPELINE.map((_, index) => {
+    if (stagePosition <= 0) return index === 0 ? 1 : 0;
+    if (stagePosition >= PIPELINE.length - 1) {
+      return index === PIPELINE.length - 1 ? 1 : 0;
+    }
+    if (index === lowerIndex) {
+      if (stageFraction <= 0.25) return 1;
+      if (stageFraction >= 0.75) return 0;
+      return 1 - easedTransition;
+    }
+    if (index === lowerIndex + 1) {
+      if (stageFraction <= 0.25) return 0;
+      if (stageFraction >= 0.75) return 1;
+      return easedTransition;
+    }
+    return 0;
+  });
+  const detailFocus = PIPELINE.map((_, index) => {
+    if (stagePosition <= 0) return index === 0 ? 1 : 0;
+    if (stagePosition >= PIPELINE.length - 1) {
+      return index === PIPELINE.length - 1 ? 1 : 0;
+    }
+    if (index === lowerIndex) {
+      if (stageFraction <= 0.25) return 1;
+      if (stageFraction >= 0.5) return 0;
+      return 1 - smoothstep((stageFraction - 0.25) / 0.25);
+    }
+    if (index === lowerIndex + 1) {
+      if (stageFraction <= 0.5) return 0;
+      if (stageFraction >= 0.75) return 1;
+      return smoothstep((stageFraction - 0.5) / 0.25);
+    }
+    return 0;
+  });
+  const codeReveal = ramp(frame, 8, 18);
 
   return (
     <AbsoluteFill
@@ -20,17 +63,26 @@ export const Scene02Pipeline: React.FC<SceneProps> = ({ frame }) => {
         display: "flex",
         flexDirection: "column",
         gap: 26,
-        padding: `${GUTTER}px ${GUTTER}px 232px`,
+        padding: `${GUTTER}px ${GUTTER}px 112px`,
       }}
     >
       <div style={{ display: "flex", alignItems: "stretch", gap: 10 }}>
         {PIPELINE.map((stage, index) => {
-          const isActive = index === stageIndex;
+          const activeAmount = stageFocus[index];
           const appear = ramp(frame, 2 + index * 4, 14 + index * 4);
+          const activeAlpha = Math.round(activeAmount * 170)
+            .toString(16)
+            .padStart(2, "0");
           return (
             <div
               key={stage.name}
-              style={{ alignItems: "center", display: "flex", flex: 1, gap: 10, minWidth: 0 }}
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flex: 1,
+                gap: 10,
+                minWidth: 0,
+              }}
             >
               {index > 0 ? (
                 <span
@@ -46,21 +98,35 @@ export const Scene02Pipeline: React.FC<SceneProps> = ({ frame }) => {
               ) : null}
               <div
                 style={{
-                  backgroundColor: isActive ? `${colors.cyan}16` : colors.panel,
-                  border: `1px solid ${isActive ? `${colors.cyan}AA` : colors.edge}`,
+                  background: `linear-gradient(135deg, ${colors.panel}, ${colors.cyan}${Math.round(activeAmount * 22).toString(16).padStart(2, "0")})`,
+                  border: `1px solid ${colors.cyan}${activeAlpha}`,
                   borderRadius: 16,
-                  boxShadow: isActive ? `0 0 42px ${colors.cyan}22` : "none",
+                  boxShadow: `0 8px 26px #0004, 0 0 ${Math.round(activeAmount * 42)}px ${colors.cyan}${Math.round(activeAmount * 34).toString(16).padStart(2, "0")}`,
                   boxSizing: "border-box",
                   flex: 1,
                   minWidth: 0,
-                  opacity: appear * (isActive ? 1 : 0.62),
+                  opacity: appear * (0.56 + activeAmount * 0.44),
                   padding: "18px 18px 16px",
-                  transform: isActive ? "translateY(-4px)" : "none",
+                  position: "relative",
+                  transform: `translateY(${-4 * activeAmount}px) scale(${1 + activeAmount * 0.018})`,
                 }}
               >
                 <div
                   style={{
-                    color: isActive ? colors.cyan : colors.muted,
+                    background: `linear-gradient(90deg, ${colors.cyan}, ${colors.green})`,
+                    borderRadius: 99,
+                    height: 2,
+                    left: "12%",
+                    opacity: activeAmount,
+                    position: "absolute",
+                    right: "12%",
+                    top: 0,
+                    transform: `scaleX(${activeAmount})`,
+                  }}
+                />
+                <div
+                  style={{
+                    color: activeAmount > 0 ? colors.cyan : colors.muted,
                     fontFamily: MONO_FAMILY,
                     fontSize: 15,
                     fontWeight: 700,
@@ -89,41 +155,60 @@ export const Scene02Pipeline: React.FC<SceneProps> = ({ frame }) => {
       </div>
 
       <Terminal
-        title={active.name}
-        subtitle={`stage ${stageIndex + 1} / ${PIPELINE.length} · ${active.step}`}
-        right={
-          <Badge tone={active.name === ".sp" ? "green" : "cyan"}>
-            {active.name === ".sp" ? "spaces" : "deterministic"}
-          </Badge>
-        }
+        title="compiler pipeline"
+        subtitle="bounded optional .py frontend → AST → IR → .sp"
+        right={<Badge tone="cyan">illustrative .py example</Badge>}
         style={{ flex: 1, minHeight: 0 }}
-        accent={active.name === ".sp" ? colors.green : colors.cyan}
-        bodyStyle={{ display: "flex", flexDirection: "column", justifyContent: "center" }}
+        bodyStyle={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+        }}
       >
         <div
           style={{
-            opacity: codeReveal,
-            transform: `translateY(${lerp(14, 0, easeOut(codeReveal))}px)`,
+            height: 230,
+            position: "relative",
           }}
         >
-          {active.detail.map((line, index) => (
-            <div
-              key={`${active.name}-${line}`}
-              style={{
-                color:
-                  index === 0 && active.name === "peephole"
-                    ? colors.green
-                    : colors.text,
-                fontFamily: MONO_FAMILY,
-                fontSize: 30,
-                lineHeight: 1.55,
-                opacity: ramp(frame, 8 + index * 2, 18 + index * 2),
-                whiteSpace: "pre",
-              }}
-            >
-              {line}
-            </div>
-          ))}
+          {PIPELINE.map((stage, stageIndex) => {
+            const focus = detailFocus[stageIndex];
+            return (
+              <div
+                key={stage.name}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  height: "100%",
+                  justifyContent: "center",
+                  left: 0,
+                  opacity: codeReveal * focus,
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                  transform: `translateY(${lerp(8, 0, focus)}px)`,
+                }}
+              >
+                {stage.detail.map((line, lineIndex) => (
+                  <div
+                    key={`${stage.name}-${line}`}
+                    style={{
+                      color:
+                        lineIndex === 0 && stage.name === "peephole"
+                          ? colors.green
+                          : colors.text,
+                      fontFamily: MONO_FAMILY,
+                      fontSize: 30,
+                      lineHeight: 1.55,
+                      whiteSpace: "pre",
+                    }}
+                  >
+                    {line}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
         <div
           style={{
@@ -132,11 +217,11 @@ export const Scene02Pipeline: React.FC<SceneProps> = ({ frame }) => {
             display: "flex",
             gap: 14,
             marginTop: 22,
-            opacity: ramp(frame, 88, 100),
+            opacity: detailFocus[3],
             paddingTop: 16,
           }}
         >
-          <Badge tone="gold">print(20 + 22)</Badge>
+          <Badge tone="gold">illustrative example</Badge>
           <span
             style={{
               color: colors.muted,
