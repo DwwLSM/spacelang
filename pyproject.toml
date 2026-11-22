@@ -4,11 +4,14 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "spacelanguage"
-version = "0.2.3"
+version = "0.2.4"
 description = "SpaceLang core package"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/DwwLSM/spacelang"
 
 [project.scripts]
 spacelang = "spacelang.main:main"
